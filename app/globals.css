@@ -554,3 +554,18 @@
 .word-editor-content .column-resize-handle { position: absolute; top: 0; bottom: -2px; inset-inline-end: -2px; width: 4px; background: var(--ring); pointer-events: none; }
 .word-editor-content .tableWrapper { overflow-x: auto; }
 .word-editor-content p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: inline-start; height: 0; pointer-events: none; color: var(--muted-foreground); }
+
+/* Recite (التسميع) writing sheet */
+.recite-prose {
+  font-size: 1.125rem;
+  line-height: 1.9;
+  caret-color: var(--primary);
+}
+.recite-prose p { margin: 0 0 0.35em; }
+.recite-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: oklch(0.7 0 0);
+  float: inline-start;
+  height: 0;
+  pointer-events: none;
+}

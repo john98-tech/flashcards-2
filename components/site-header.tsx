@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { LogOut, ShieldCheck } from 'lucide-react'
+import { LogOut, PenLine, ShieldCheck } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { SettingsMenu } from '@/components/settings-menu'
 import { getSession } from '@/lib/auth'
@@ -17,6 +17,12 @@ export async function SiteHeader({ children }: { children?: React.ReactNode }) {
         </Link>
         <div className="flex items-center gap-2 md:gap-3">
           {children}
+          <Link
+            href="/recite"
+            className="flex items-center gap-1.5 rounded-full border bg-card/70 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-accent sm:text-sm"
+          >
+            <PenLine className="size-3.5" aria-hidden /> تسميع
+          </Link>
           {session?.isAdmin && (
             <Link
               href="/admin"
