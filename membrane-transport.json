@@ -1,0 +1,52 @@
+{
+  "id": "membrane-transport",
+  "title": "Transport through the Cell Membrane",
+  "subject": "Physiology",
+  "description": "Transport through the cell membrane: passive transport, simple diffusion, and protein channels.",
+  "cards": [
+    {
+      "id": "mt-1",
+      "cloze": "Transport through the cell membrane occurs by {{passive}} or {{active}} transport."
+    },
+    {
+      "id": "mt-2",
+      "cloze": "Membrane Transport — Passive: {{Simple Diffusion}} (through {{Lipid Bilayer}} or {{Protein Channels}}: {{Leak}} or {{Gated}} → {{Voltage Gated}} / {{Ligand Gated}}) and {{Facilitated Diffusion}}."
+    },
+    {
+      "id": "mt-3",
+      "cloze": "Membrane Transport — Active: {{Primary Active}} and {{Secondary Active}} ({{Co-Transport}} and {{Counter Transport}})."
+    },
+    {
+      "id": "mt-4",
+      "cloze": "I- Passive Transport: Definition: It is the transport of molecules through the cell membrane from areas of {{high concentration}} to areas of {{low concentration}} (i.e., {{down concentration gradient}} or {{downhill}}) by the aid of the {{kinetic energy}} of the molecules."
+    },
+    {
+      "id": "mt-5",
+      "cloze": "Types of Passive transport: • {{Simple diffusion}} • {{Facilitated diffusion}}"
+    },
+    {
+      "id": "mt-6",
+      "cloze": "1. Simple diffusion: Definition: It is the transport of substances either through: a- the {{lipid bilayer}} or b- through the {{channel proteins}} of the cell membrane."
+    },
+    {
+      "id": "mt-7",
+      "cloze": "a- Simple diffusion through the lipid bilayer: • {{Non-polar}} and {{lipid-soluble}} molecules e.g. {{oxygen}}, {{carbon dioxide}}, and {{fat-soluble vitamins}}."
+    },
+    {
+      "id": "mt-8",
+      "cloze": "i- oxygen diffuses from the {{blood}} into the {{cells}}. ii- carbon dioxide diffuses in the {{opposite direction}}."
+    },
+    {
+      "id": "mt-9",
+      "cloze": "b- Simple diffusion through protein channels: • Diffusion of {{small water soluble}} molecules e.g. {{electrolytes}} • The channels are {{highly selective}}: the {{sodium channel}} is specifically selective for passage of sodium ions. the {{potassium channel}} is selective for potassium transport."
+    },
+    {
+      "id": "mt-10",
+      "cloze": "Types of the channel according to presence or absence of a {{gate}}: 1- {{leak channels}}: {{continuously opened}}. 2- {{Gated channels}}: Controlled by {{gates}}."
+    },
+    {
+      "id": "mt-11",
+      "cloze": "a- {{Voltage gated}} ion channel: These channels open or close according to changes in {{membrane voltage (potential)}}. b- {{Chemical (ligand) gated}} ion channels: These channels open or close by binding to a {{ligand}}."
+    }
+  ]
+}

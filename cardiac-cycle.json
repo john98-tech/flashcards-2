@@ -1,0 +1,44 @@
+{
+  "id": "cardiac-cycle",
+  "title": "The Cardiac Cycle",
+  "subject": "Physiology",
+  "description": "Example: the cardiac cycle, heart sounds, and the ECG.",
+  "cards": [
+    {
+      "id": "cc-1",
+      "cloze": "The cardiac cycle lasts about {{0.8 seconds}} at a heart rate of {{75 beats}} per minute. {{Systole}} occupies about {{0.3 seconds}}, while {{diastole}} occupies about {{0.5 seconds}}."
+    },
+    {
+      "id": "cc-2",
+      "cloze": "The normal cardiac impulse originates in the {{sinoatrial (SA) node}}, located in the wall of the {{right atrium}}."
+    },
+    {
+      "id": "cc-3",
+      "cloze": "The impulse is delayed at the {{atrioventricular (AV) node}} by about {{0.1 seconds}}, allowing the {{atria}} to empty blood into the ventricles before ventricular contraction begins."
+    },
+    {
+      "id": "cc-4",
+      "cloze": "During the period of {{isovolumetric contraction}}, {{all four valves}} are closed and ventricular pressure rises without any change in {{volume}}."
+    },
+    {
+      "id": "cc-5",
+      "cloze": "The {{end-diastolic volume}} is normally about {{120 mL}}, and the {{end-systolic volume}} is about {{50 mL}}. The {{stroke volume}}, which is the difference between them, is therefore about {{70 mL}}."
+    },
+    {
+      "id": "cc-6",
+      "cloze": "The {{ejection fraction}} is normally about {{60%}}."
+    },
+    {
+      "id": "cc-7",
+      "cloze": "The first heart sound is caused by closure of the {{atrioventricular valves}}, and the second heart sound is caused by closure of the {{semilunar valves}}."
+    },
+    {
+      "id": "cc-8",
+      "cloze": "{{Cardiac output}} equals {{stroke volume}} multiplied by {{heart rate}}, and in a resting adult it is about {{5 L/min}}."
+    },
+    {
+      "id": "cc-9",
+      "cloze": "The {{P wave}} represents {{atrial depolarization}}, the {{QRS complex}} represents {{ventricular depolarization}}, and the {{T wave}} represents {{ventricular repolarization}}."
+    }
+  ]
+}
