@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
-import { getDeck, getDeckMeta } from '@/lib/decks'
+import { getDeck, getDeckMeta, getReciteSource } from '@/lib/decks'
 import { canOpen, getAccess } from '@/lib/access'
 import { deckToReferenceText } from '@/lib/recite'
 import { ReciteWorkspace } from '@/components/recite/recite-workspace'
@@ -15,13 +15,13 @@ export default async function ReciteLessonPage({ params }: PageProps<'/recite/[i
   const [meta, access] = await Promise.all([getDeckMeta(id), getAccess()])
   if (!meta) notFound()
   if (!canOpen(meta, access)) redirect(`/decks/${id}`)
-  const deck = await getDeck(id)
+  const [deck, savedReference] = await Promise.all([getDeck(id), getReciteSource(id)])
   if (!deck) notFound()
 
   return (
     <ReciteWorkspace
       lesson={{ id: deck.id, title: deck.title, subject: deck.subject }}
-      reference={deckToReferenceText(deck.cards)}
+      reference={savedReference.trim() || deckToReferenceText(deck.cards)}
     />
   )
 }
