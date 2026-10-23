@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { KeyRound, Layers } from 'lucide-react'
+import { BookOpenText, KeyRound, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
 import { DeckEditor } from './deck-editor'
 import { CodesPanel } from './codes-panel'
+import { RecitationEditor } from './recitation-editor'
 
-type Tab = 'decks' | 'codes'
+type Tab = 'decks' | 'recitation' | 'codes'
 
 export function AdminTabs({ decks, groups }: { decks: DeckSummary[]; groups: DeckGroup[] }) {
   const [tab, setTab] = useState<Tab>('decks')
@@ -18,12 +19,18 @@ export function AdminTabs({ decks, groups }: { decks: DeckSummary[]; groups: Dec
         <TabButton active={tab === 'decks'} onClick={() => setTab('decks')}>
           <Layers className="size-4" aria-hidden /> Decks
         </TabButton>
+        <TabButton active={tab === 'recitation'} onClick={() => setTab('recitation')}>
+          <BookOpenText className="size-4" aria-hidden /> التسميع بالكتابة
+        </TabButton>
         <TabButton active={tab === 'codes'} onClick={() => setTab('codes')} data-tour="admin-codes-tab" data-tour-action="open-admin-codes">
           <KeyRound className="size-4" aria-hidden /> Access codes
         </TabButton>
       </div>
       <div hidden={tab !== 'decks'}>
         <DeckEditor existingDecks={decks} existingGroups={groups} />
+      </div>
+      <div hidden={tab !== 'recitation'}>
+        <RecitationEditor decks={decks} />
       </div>
       <div hidden={tab !== 'codes'}>
         <CodesPanel decks={decks} />
