@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { ArrowLeft, Bold, CheckCheck, Italic, KeyRound, Loader2, Redo2, Sparkles, Underline, Undo2 } from 'lucide-react'
+import { ArrowLeft, Bold, CheckCheck, Heading1, Heading2, Italic, KeyRound, Loader2, Redo2, Sparkles, Underline, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { generate, useGeminiConfig } from '@/lib/gemini'
 import { ApiKeyDialog } from '@/components/recite/api-key-dialog'
@@ -88,6 +88,8 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
       bold: editor?.isActive('bold') ?? false,
       italic: editor?.isActive('italic') ?? false,
       underline: editor?.isActive('underline') ?? false,
+      heading1: editor?.isActive('heading', { level: 1 }) ?? false,
+      heading2: editor?.isActive('heading', { level: 2 }) ?? false,
       canUndo: editor?.can().undo() ?? false,
       canRedo: editor?.can().redo() ?? false,
       words: editor?.getText().trim().split(/\s+/).filter(Boolean).length ?? 0,
@@ -144,6 +146,9 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
         <ToolButton label="عريض" active={s?.bold} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold className="size-4" aria-hidden /></ToolButton>
         <ToolButton label="مائل" active={s?.italic} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic className="size-4" aria-hidden /></ToolButton>
         <ToolButton label="تحته خط" active={s?.underline} onClick={() => editor?.chain().focus().toggleUnderline().run()}><Underline className="size-4" aria-hidden /></ToolButton>
+        <span className="mx-1 h-5 w-px bg-neutral-200" aria-hidden />
+        <ToolButton label="عنوان رئيسي" active={s?.heading1} onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}><Heading1 className="size-4" aria-hidden /></ToolButton>
+        <ToolButton label="عنوان فرعي" active={s?.heading2} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 className="size-4" aria-hidden /></ToolButton>
         <span className="ms-auto shrink-0 ps-3 text-xs text-neutral-500">{s?.words ?? 0} كلمة</span>
       </div>
 
