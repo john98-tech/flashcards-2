@@ -161,3 +161,25 @@ export async function deleteCode(code: string) {
   if (error) throw new Error(error.message)
   revalidatePath('/', 'layout')
 }
+
+
+export async function saveReciteSource(deckId: string, sourceText: string) {
+  await requireAdmin()
+  if (!DECK_ID_RE.test(deckId)) throw new Error('Invalid lesson.')
+  if (sourceText.length > 2_000_000) throw new Error('Source text is too large.')
+  const { error } = await db().from('recite_sources').upsert({
+    deck_id: deckId,
+    source_text: sourceText,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'deck_id' })
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin')
+  revalidatePath('/recite', 'layout')
+}
+
+export async function loadReciteSource(deckId: string): Promise<string> {
+  await requireAdmin()
+  const { data, error } = await db().from('recite_sources').select('source_text').eq('deck_id', deckId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.source_text ?? ''
+}
