@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, BookOpenCheck, Check, CheckCircle2, Copy, SpellCheck, X } from 'lucide-react'
+import { AlertTriangle, BookOpenCheck, Check, CheckCircle2, Copy, SpellCheck, X, MoveUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { reportToText, type Report } from '@/lib/grade'
 
@@ -38,6 +38,17 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
                 <p dir="auto"><span className="text-muted-foreground">كتبت: </span><span className="line-through decoration-destructive/60">{w.written}</span></p>
                 <p dir="auto" className="mt-1 font-medium"><span className="text-muted-foreground font-normal">الصح: </span>{w.correct}</p>
                 <p dir="auto" className="mt-1 text-xs text-muted-foreground">{w.why}</p>
+              </li>
+            ))}
+          </Section>
+
+          <Section icon={<MoveUpDown className="size-4" />} title="معلومات تحت عنوان غير مناسب" color="text-orange-600" empty="كل معلومة تحت عنوان مناسب." count={report.misplaced?.length ?? 0}>
+            {(report.misplaced ?? []).map((m, i) => (
+              <li key={i} className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-3 text-sm" dir="auto">
+                <p className="font-medium">{m.written}</p>
+                <p className="mt-1"><span className="text-muted-foreground">العنوان الحالي: </span>{m.actualHeading}</p>
+                <p><span className="text-muted-foreground">العنوان الصحيح: </span>{m.expectedHeading}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{m.why}</p>
               </li>
             ))}
           </Section>
