@@ -7,7 +7,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { ArrowLeft, Bold, CheckCheck, Italic, KeyRound, Loader2, Redo2, Sparkles, Underline, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useGeminiConfig } from '@/lib/gemini'
+import { generate, useGeminiConfig } from '@/lib/gemini'
 import { ApiKeyDialog } from '@/components/recite/api-key-dialog'
 
 type Lesson = { id: string; title: string; subject: string }
@@ -40,6 +40,8 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
   const [keyOpen, setKeyOpen] = useState(false)
   const [save, setSave] = useState<SaveState>('idle')
   const [notice, setNotice] = useState('')
+  const [grading, setGrading] = useState(false)
+  const [report, setReport] = useState<any>(null)
   const { config, ready } = useGeminiConfig()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -92,11 +94,19 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
     }),
   })
 
-  const finish = () => {
+  const finish = async () => {
     if (!config) return setKeyOpen(true)
-    if (!s?.words) return setNotice('اكتب حاجة الأول قبل التصحيح.')
-    // Grading is wired up in part 4; `reference` is already the lesson text it will compare against.
-    setNotice(`التصحيح بـ ${config.model} هيتفعل في الجزء الرابع (النص المرجعي جاهز: ${reference.length} حرف).`)
+    const answer = editor?.getText().trim() ?? ''
+    if (!answer) return setNotice('اكتب حاجة الأول قبل التصحيح.')
+    if (!reference.trim()) return setNotice('مفيش نص مرجعي محفوظ للدرس ده؛ اطلب من المسؤول إضافته.')
+    setGrading(true); setReport(null); setNotice('')
+    try {
+      const prompt = 'صحح تسميع الطالب مقارنة حصريًا بالنص المرجعي. اعتبر النص المرجعي المصدر المعتمد ولا تخترع معلومات. اقبل الصياغات المكافئة، وراجع الحقائق والعناوين والتفاصيل. افصل المعلومات الخاطئة والناقصة والمعلومات الموضوعة تحت عنوان غير مناسب والأخطاء الإملائية. أرجع JSON فقط بالشكل: {"summary":{"score":0},"wrongFacts":[{"studentText":"","correction":"","reason":""}],"missingFacts":[{"expected":"","section":""}],"misplacedFacts":[{"studentText":"","correctSection":"","reason":""}],"spelling":[{"written":"","correct":"","context":""}],"strengths":[],"nextSteps":[]}. الدرجة من 100 ولا تخصم مرتين عن نفس الخطأ. النص المرجعي:\n' + reference + '\nإجابة الطالب:\n' + answer
+      const raw = await generate(config, prompt, { temperature: 0.1 })
+      const parsed = JSON.parse(raw.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, ''))
+      setReport(parsed); setNotice('تم التصحيح. التقرير التفصيلي جاهز.')
+    } catch (err) { setNotice(err instanceof Error ? err.message : 'تعذر تصحيح التسميع. جرّب مرة أخرى.') }
+    finally { setGrading(false) }
   }
 
   return (
@@ -122,8 +132,8 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
         >
           <KeyRound className="size-5" aria-hidden />
         </button>
-        <button type="button" onClick={finish} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">
-          <Sparkles className="size-4" aria-hidden /> خلصت، صحّح
+        <button type="button" onClick={finish} disabled={grading} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+          {grading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />} {grading ? 'بيصحح...' : 'خلصت، صحّح'}
         </button>
       </header>
 
@@ -149,7 +159,11 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
         </div>
       </main>
 
+      {report && <section className="fixed inset-0 z-40 overflow-y-auto bg-neutral-100 p-3 sm:p-8" dir="rtl"><div className="mx-auto max-w-4xl space-y-4"><header className="flex items-center justify-between rounded-2xl bg-white p-5"><div><p className="text-sm text-primary">تقرير التسميع الذكي</p><h2 className="text-2xl font-bold">نتيجة {lesson.title}</h2></div><button onClick={() => setReport(null)} className="rounded-lg border px-4 py-2">العودة للكتابة</button></header><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><ScoreTile title="الدرجة" value={report.summary?.score ?? 0} suffix="/100"/><ScoreTile title="معلومات خاطئة" value={report.wrongFacts?.length ?? 0}/><ScoreTile title="معلومات ناقصة" value={report.missingFacts?.length ?? 0}/><ScoreTile title="أخطاء إملائية" value={report.spelling?.length ?? 0}/></div><ReportSection title="المعلومات الخاطئة" items={report.wrongFacts} render={(x: any) => <><p className="font-semibold">{x.studentText}</p><p className="text-success">الصحيح: {x.correction}</p><p className="text-sm text-neutral-600">{x.reason}</p></>}/><ReportSection title="المعلومات الناقصة" items={report.missingFacts} render={(x: any) => <><p>{x.expected}</p><p className="text-sm text-neutral-500">العنوان: {x.section}</p></>}/><ReportSection title="معلومات في غير مكانها" items={report.misplacedFacts} render={(x: any) => <><p>{x.studentText}</p><p className="text-success">مكانها: {x.correctSection}</p><p className="text-sm text-neutral-600">{x.reason}</p></>}/><ReportSection title="الأخطاء الإملائية" items={report.spelling} render={(x: any) => <p>{x.written} ← <strong className="text-success">{x.correct}</strong><span className="block text-sm text-neutral-500">{x.context}</span></p>}/><ReportSection title="نقاط القوة" items={(report.strengths ?? []).map((x: string) => ({text:x}))} render={(x: any) => <p>{x.text}</p>}/><ReportSection title="خطوات للمراجعة" items={(report.nextSteps ?? []).map((x: string) => ({text:x}))} render={(x: any) => <p>{x.text}</p>}/><button onClick={() => {setReport(null); editor?.commands.focus()}} className="w-full rounded-xl bg-primary p-3 font-semibold text-primary-foreground">الرجوع للتسميع</button></div></section>}
       <ApiKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} />
     </div>
   )
 }
+
+function ScoreTile({title,value,suffix=''}:{title:string;value:unknown;suffix?:string}) { return <div className="rounded-xl border bg-white p-4"><p className="text-sm text-neutral-500">{title}</p><p className="mt-1 text-2xl font-bold">{String(value)}{suffix}</p></div> }
+function ReportSection({title,items,render}:{title:string;items:any[];render:(item:any)=>React.ReactNode}) { return <section className="rounded-2xl border bg-white p-5"><h3 className="mb-3 text-lg font-bold">{title} <span className="text-sm font-normal text-neutral-500">({items?.length ?? 0})</span></h3>{!items?.length?<p className="text-sm text-neutral-500">مفيش ملاحظات في القسم ده.</p>:<ul className="space-y-3">{items.map((item,i)=><li key={i} className="rounded-xl bg-neutral-50 p-3 leading-relaxed">{render(item)}</li>)}</ul>}</section> }
