@@ -194,7 +194,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   onPointerLeave={handlePointerLeave}
                   onContextMenu={handleContextMenu}
                   className={`absolute inset-0 h-full w-full touch-none select-none ${tool === 'eraser' ? 'cursor-none' : 'cursor-crosshair'}`}
-                  style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+                  style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                   aria-label="مساحة كتابة الإجابة"
                 />
                 <div

@@ -99,6 +99,8 @@ export function useDrawingEngine(
   const animationRef = useRef<number | null>(null)
   const switchingRef = useRef(false)
   const canvasDisposedRef = useRef(false)
+  const fallbackPointerIdRef = useRef<number | null>(null)
+  const fallbackListenersRef = useRef<(() => void) | null>(null)
   const colorRef = useRef(COLORS[0])
   const penSizeRef = useRef(5)
   const eraserSizeRef = useRef(34)
@@ -272,6 +274,9 @@ export function useDrawingEngine(
     strokeRef.current = null
     pendingPointsRef.current.length = 0
     penActiveRef.current = false
+    fallbackPointerIdRef.current = null
+    fallbackListenersRef.current?.()
+    fallbackListenersRef.current = null
     setIsDrawing(false)
   }, [drawPendingPoints, initializeCanvases, reportError, setHistoryEntry, updateContentState])
 
@@ -310,12 +315,36 @@ export function useDrawingEngine(
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
     } catch {
-      reportError(new Error('تعذر تثبيت القلم على مساحة الكتابة.'))
-      finishStroke(event.pointerId)
+      const pointerId = event.pointerId
+      const canvas = event.currentTarget
+      fallbackPointerIdRef.current = pointerId
+      const onMove = (nativeEvent: PointerEvent) => {
+        if (nativeEvent.pointerId !== pointerId) return
+        const coalesced = typeof nativeEvent.getCoalescedEvents === 'function'
+          ? nativeEvent.getCoalescedEvents()
+          : [nativeEvent]
+        schedulePoints(coalesced.map((item) => pointFromEvent(item, canvas)))
+      }
+      const onEnd = (nativeEvent: PointerEvent) => {
+        if (nativeEvent.pointerId !== pointerId) return
+        if (nativeEvent.type === 'pointerup') {
+          schedulePoints([pointFromEvent(nativeEvent, canvas)])
+        }
+        finishStroke(pointerId)
+      }
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onEnd)
+      window.addEventListener('pointercancel', onEnd)
+      fallbackListenersRef.current = () => {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onEnd)
+        window.removeEventListener('pointercancel', onEnd)
+      }
     }
-  }, [eraserSizeRef, finishStroke, initializeCanvases, reportError, tool])
+  }, [eraserSizeRef, finishStroke, initializeCanvases, schedulePoints, tool])
 
   const pointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (fallbackPointerIdRef.current === event.pointerId) return
     const rect = event.currentTarget.getBoundingClientRect()
     if (cursorRef.current && tool === 'eraser' && event.pointerType !== 'touch') {
       const scale = rect.width / CANVAS_WIDTH
@@ -336,6 +365,7 @@ export function useDrawingEngine(
   }, [eraserSizeRef, schedulePoints, tool])
 
   const pointerUp = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (fallbackPointerIdRef.current === event.pointerId) return
     if (strokeRef.current?.pointerId === event.pointerId) {
       schedulePoints([pointFromEvent(event.nativeEvent, event.currentTarget)])
     }
@@ -523,6 +553,9 @@ export function useDrawingEngine(
     animationRef.current = null
     strokeRef.current = null
     pendingPointsRef.current.length = 0
+    fallbackPointerIdRef.current = null
+    fallbackListenersRef.current?.()
+    fallbackListenersRef.current = null
     penActiveRef.current = false
     setIsDrawing(false)
     setIsSwitching(false)

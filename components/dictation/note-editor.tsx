@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { ArrowRight, KeyRound, Loader2, Sparkles } from 'lucide-react'
@@ -115,14 +115,7 @@ export function NoteEditor({
   const [notice, setNotice] = useState('')
   const [report, setReport] = useState<GradingReport | null>(null)
   const [rawReply, setRawReply] = useState('')
-  const [editorHasContent, setEditorHasContent] = useState(false)
-  const [answerRevealed, setAnswerRevealed] = useState(false)
   const { config } = useGeminiConfig()
-
-  const handleEditorChange = useCallback(({ hasContent }: { pageCount: number; hasContent: boolean }) => {
-    setEditorHasContent(hasContent)
-    if (!hasContent) setAnswerRevealed(false)
-  }, [])
 
   const gradeAnswer = async () => {
     if (!config) {
@@ -241,26 +234,7 @@ export function NoteEditor({
         )}
 
         <section aria-label="مساحة التسميع">
-          <HandwritingEditor ref={boardRef} onChange={handleEditorChange} />
-          {editorHasContent && referenceText.trim() && (
-            answerRevealed ? (
-              <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950 sm:p-6" aria-label="الإجابة الصحيحة">
-                <h2 className="mb-3 text-lg font-bold">الإجابة الصحيحة</h2>
-                <LessonText text={referenceText} />
-                <button type="button" onClick={() => setAnswerRevealed(false)} className="mt-4 min-h-11 rounded-xl border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-900 hover:bg-amber-100">
-                  إخفاء الإجابة
-                </button>
-              </section>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setAnswerRevealed(true)}
-                className="mt-3 min-h-11 w-full rounded-xl border border-teal-200 bg-teal-50 px-4 text-sm font-semibold text-teal-900 transition-colors hover:bg-teal-100"
-              >
-                اعرض الإجابة الصحيحة
-              </button>
-            )
-          )}
+          <HandwritingEditor ref={boardRef} />
         </section>
       </main>
 
