@@ -290,6 +290,38 @@ export function useDrawingEngine(
     setIsDrawing(false)
   }, [drawPendingPoints, initializeCanvases, reportError, setHistoryEntry, updateContentState])
 
+  // Aborts the stroke in progress without saving it (a second finger landed, so the gesture is
+  // a pinch / pan, not writing). The shadow canvas still holds the pre-stroke pixels.
+  const cancelStroke = useCallback(() => {
+    const stroke = strokeRef.current
+    if (!stroke) return
+    if (animationRef.current !== null) {
+      cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
+    }
+    pendingPointsRef.current.length = 0
+    try {
+      const { canvas, shadow, context } = initializeCanvases()
+      const left = Math.max(0, Math.floor(stroke.bounds.left) - 2)
+      const top = Math.max(0, Math.floor(stroke.bounds.top) - 2)
+      const right = Math.min(canvas.width, Math.ceil(stroke.bounds.right) + 2)
+      const bottom = Math.min(canvas.height, Math.ceil(stroke.bounds.bottom) + 2)
+      if (right > left && bottom > top) {
+        context.globalCompositeOperation = 'source-over'
+        context.clearRect(left, top, right - left, bottom - top)
+        context.drawImage(shadow, left, top, right - left, bottom - top, left, top, right - left, bottom - top)
+      }
+    } catch (error) {
+      reportError(error)
+    }
+    strokeRef.current = null
+    penActiveRef.current = false
+    fallbackPointerIdRef.current = null
+    fallbackListenersRef.current?.()
+    fallbackListenersRef.current = null
+    setIsDrawing(false)
+  }, [initializeCanvases, reportError])
+
   const pointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || switchingRef.current) return
     if (event.pointerType === 'touch' && penActiveRef.current && strokeRef.current) return
@@ -372,7 +404,9 @@ export function useDrawingEngine(
       const diameter = eraserSizeRef.current * scale
       cursorRef.current.style.width = `${diameter}px`
       cursorRef.current.style.height = `${diameter}px`
-      cursorRef.current.style.transform = `translate(${event.clientX - rect.left - diameter / 2}px, ${event.clientY - rect.top - diameter / 2}px)`
+      // The cursor ring lives outside the zoomed paper layer, so position it against its own host.
+      const host = (cursorRef.current.parentElement ?? event.currentTarget).getBoundingClientRect()
+      cursorRef.current.style.transform = `translate(${event.clientX - host.left - diameter / 2}px, ${event.clientY - host.top - diameter / 2}px)`
       cursorRef.current.style.opacity = '1'
     }
     const stroke = strokeRef.current
@@ -707,6 +741,7 @@ export function useDrawingEngine(
     pointerMove,
     pointerUp,
     finishStroke,
+    cancelStroke,
     handleContextMenu,
     handlePointerLeave,
     setTool: setCurrentTool,
