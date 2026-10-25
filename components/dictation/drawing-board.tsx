@@ -24,9 +24,10 @@ const Excalidraw = dynamic(
 type PageElements = ReturnType<ExcalidrawImperativeAPI['getSceneElementsIncludingDeleted']>
 type ChangeHandler = NonNullable<ExcalidrawProps['onChange']>
 
+// لقطة التراجع بتحتفظ بالصورة كـ Blob (بره الـ JS heap) بدل نص base64 تقيل.
 type PageSnapshot = {
   elements: PageElements
-  files: BinaryFileData[]
+  image: Blob | null
 }
 
 type Page = {
@@ -48,10 +49,51 @@ export type DrawingBoardHandle = {
 }
 
 const EMPTY_ELEMENTS: PageElements = []
-const EMPTY_SNAPSHOT: PageSnapshot = { elements: EMPTY_ELEMENTS, files: [] }
+const EMPTY_SNAPSHOT: PageSnapshot = { elements: EMPTY_ELEMENTS, image: null }
 const MAX_UNDO_STEPS = 10
 const MAX_HISTORY_SNAPSHOTS = MAX_UNDO_STEPS + 1
 const FLATTEN_DEBOUNCE_MS = 900
+// هامش حوالين الرسم عشان سمك الخط ما يتقصش عند الأطراف.
+const FLATTEN_PADDING = 24
+// حدود دقة الصورة المدمجة: دقة أعلى = خط أنضف مع الزوم، بس بتاخد رام أكتر.
+const MAX_BITMAP_SCALE = 3
+const MAX_BITMAP_PIXELS = 8_000_000
+const MAX_BITMAP_SIDE = 8192
+
+const flatFileId = (pageId: number) => `dictation-page-${pageId}` as FileId
+
+const visibleKey = (elements: PageElements) => elements
+  .filter((element) => !element.isDeleted)
+  .map((element) => `${element.id}:${element.version}`)
+  .join('|')
+
+const snapshotFileId = (elements: PageElements) => {
+  for (const element of elements) {
+    if (!element.isDeleted && element.type === 'image' && element.fileId) return element.fileId
+  }
+  return null
+}
+
+// بنختار أعلى دقة (أرقام صحيحة) تدخل في حد الرام، عشان البكسلات تفضل متطابقة مع كل دمج
+// ومفيش تشويش بيتراكم.
+const pickBitmapScale = (width: number, height: number) => {
+  const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
+  let scale = Math.min(MAX_BITMAP_SCALE, Math.max(2, Math.ceil(dpr)))
+  const fits = (s: number) =>
+    width * s * height * s <= MAX_BITMAP_PIXELS && Math.max(width, height) * s <= MAX_BITMAP_SIDE
+  while (scale > 1 && !fits(scale)) scale -= 1
+  if (fits(scale)) return scale
+  return Math.min(1, Math.sqrt(MAX_BITMAP_PIXELS / (width * height)), MAX_BITMAP_SIDE / Math.max(width, height))
+}
+
+// Excalidraw مبيسمحش بتحديث ملف موجود بنفس الـ id، ومبيمسحش الكاش القديم أبدًا.
+// فبنمسح الملف القديم من الـ store ونضيفه تاني، وده بيفرّغ الصورة القديمة من الكاش.
+const replaceFiles = (api: ExcalidrawImperativeAPI, files: BinaryFileData[]) => {
+  if (!files.length) return
+  const store = api.getFiles()
+  for (const file of files) delete store[file.id]
+  api.addFiles(files)
+}
 const UI_OPTIONS = {
   canvasActions: {
     changeViewBackgroundColor: false,
@@ -79,6 +121,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
   const isSwitchingRef = useRef(false)
   const flattenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flatteningRef = useRef(false)
+  const historyQueueRef = useRef<Promise<void>>(Promise.resolve())
   const sceneRevisionRef = useRef(0)
   const flattenedSignatureRef = useRef('')
   const [pages, setPages] = useState([{ id: 0, hasContent: false }])
@@ -140,6 +183,17 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     const signature = sceneSignature(elements)
     if (signature === flattenedSignatureRef.current) return
 
+    // لو اللي ظاهر هو نفس لقطة التراجع الحالية (مثلًا لمسة زوم بصباعين بتعمل عنصر متمسوح)،
+    // أو مفيش غير الصورة المدمجة، يبقى مفيش رسم جديد: منعيدش الدمج عشان الجودة ما تقلش
+    // وخطوات التراجع الـ10 ما تتاكلش على الفاضي.
+    if (
+      visibleKey(elements) === visibleKey(page.history[page.historyIndex].elements) ||
+      (visibleElements.length > 0 && visibleElements.every((element) => element.type === 'image'))
+    ) {
+      flattenedSignatureRef.current = signature
+      return
+    }
+
     flatteningRef.current = true
     const revision = sceneRevisionRef.current
     try {
@@ -158,10 +212,26 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
 
       const appState = api.getAppState()
       const bounds = getCommonBounds(visibleElements)
-      const width = Math.max(1, bounds[2] - bounds[0])
-      const height = Math.max(1, bounds[3] - bounds[1])
+      // منطقة بأرقام صحيحة + هامش: بتخلّي حواف الحروف ما تتقصش، وبتخلّي الصورة القديمة
+      // تتنسخ داخل الجديدة بنفس البكسلات بالظبط (من غير تغبيش).
+      const x = Math.floor(bounds[0]) - FLATTEN_PADDING
+      const y = Math.floor(bounds[1]) - FLATTEN_PADDING
+      const width = Math.ceil(bounds[2]) + FLATTEN_PADDING - x
+      const height = Math.ceil(bounds[3]) + FLATTEN_PADDING - y
+      const scale = pickBitmapScale(width, height)
+      // مستطيل شفاف بيثبّت حجم التصدير على المنطقة دي بالظبط.
+      const [frame] = convertToExcalidrawElements([{
+        type: 'rectangle',
+        x,
+        y,
+        width,
+        height,
+        strokeColor: 'transparent',
+        backgroundColor: 'transparent',
+        roughness: 0,
+      }])
       const blob = await exportToBlob({
-        elements: visibleElements,
+        elements: [...visibleElements, frame] as typeof visibleElements,
         appState: {
           ...appState,
           exportBackground: true,
@@ -169,8 +239,12 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
         },
         files: api.getFiles(),
         mimeType: 'image/png',
-        maxWidthOrHeight: 4096,
         exportPadding: 0,
+        getDimensions: (w: number, h: number) => ({
+          width: Math.max(1, Math.round(w * scale)),
+          height: Math.max(1, Math.round(h * scale)),
+          scale,
+        }),
       })
 
       if (
@@ -179,17 +253,18 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
         sceneSignature(api.getSceneElementsIncludingDeleted()) !== signature
       ) return
 
-      const fileId = crypto.randomUUID() as FileId
+      // id ثابت للصفحة: عشان نقدر نبدّل بيانات الصورة ونفرّغ نسختها القديمة من ذاكرة Excalidraw.
+      const fileId = flatFileId(page.id)
       const fileData: BinaryFileData = {
         id: fileId,
         dataURL: await getDataURL(blob),
-        mimeType: 'image/jpeg',
+        mimeType: 'image/png',
         created: Date.now(),
       }
       const imageElements = convertToExcalidrawElements([{
         type: 'image',
-        x: bounds[0],
-        y: bounds[1],
+        x,
+        y,
         width,
         height,
         fileId,
@@ -201,15 +276,16 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
         sceneSignature(api.getSceneElementsIncludingDeleted()) !== signature
       ) return
       const history = page.history.slice(0, page.historyIndex + 1)
-      history.push({ elements: imageElements, files: [fileData] })
+      history.push({ elements: imageElements, image: blob })
       if (history.length > MAX_HISTORY_SNAPSHOTS) history.shift()
       page.history = history
       page.historyIndex = history.length - 1
+
+      // الترتيب مهم: نحدّث المشهد الأول عشان الكاش القديم يتمسح لما نبدّل الملف.
+      api.updateScene({ elements: imageElements, appState: { currentItemRoughness: 0 } })
+      replaceFiles(api, [fileData])
       page.elements = imageElements
       page.files = [fileData]
-
-      api.addFiles([fileData])
-      api.updateScene({ elements: imageElements, appState: { currentItemRoughness: 0 } })
       api.history.clear()
       api.setActiveTool({ type: 'freedraw', locked: true })
       flattenedSignatureRef.current = sceneSignature(imageElements)
@@ -266,39 +342,50 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     }, FLATTEN_DEBOUNCE_MS)
   }, [flattenCurrentPage])
 
-  const undo = useCallback(async () => {
+  const stepHistory = useCallback(async (direction: -1 | 1) => {
     if (!(await flushFlatten())) return
-    const page = pagesRef.current[currentPageRef.current]
+    const pageIndex = currentPageRef.current
+    const page = pagesRef.current[pageIndex]
     const api = apiRef.current
-    if (!page || !api || page.historyIndex <= 0) return
-    page.historyIndex -= 1
-    const snapshot = page.history[page.historyIndex]
-    page.elements = snapshot.elements
-    page.files = snapshot.files
-    if (snapshot.files.length) api.addFiles(snapshot.files)
+    if (!page || !api) return
+    const nextIndex = page.historyIndex + direction
+    if (nextIndex < 0 || nextIndex >= page.history.length) return
+
+    const snapshot = page.history[nextIndex]
+    const fileId = snapshotFileId(snapshot.elements)
+    const files: BinaryFileData[] = snapshot.image && fileId
+      ? [{ id: fileId, dataURL: await getDataURL(snapshot.image), mimeType: 'image/png', created: Date.now() }]
+      : []
+    // لو الطالب غيّر الصفحة أو رسم حاجة جديدة أثناء التجهيز، منطبقش اللقطة القديمة.
+    if (
+      pageIndex !== currentPageRef.current ||
+      isSwitchingRef.current ||
+      page.historyIndex + direction !== nextIndex
+    ) return
+
+    page.historyIndex = nextIndex
     api.updateScene({ elements: snapshot.elements })
+    replaceFiles(api, files)
+    page.elements = snapshot.elements
+    page.files = files
     api.history.clear()
     api.setActiveTool({ type: 'freedraw', locked: true })
     flattenedSignatureRef.current = sceneSignature(snapshot.elements)
     updateHistoryState(page)
   }, [flushFlatten, updateHistoryState])
 
-  const redo = useCallback(async () => {
-    if (!(await flushFlatten())) return
-    const page = pagesRef.current[currentPageRef.current]
-    const api = apiRef.current
-    if (!page || !api || page.historyIndex >= page.history.length - 1) return
-    page.historyIndex += 1
-    const snapshot = page.history[page.historyIndex]
-    page.elements = snapshot.elements
-    page.files = snapshot.files
-    if (snapshot.files.length) api.addFiles(snapshot.files)
-    api.updateScene({ elements: snapshot.elements })
-    api.history.clear()
-    api.setActiveTool({ type: 'freedraw', locked: true })
-    flattenedSignatureRef.current = sceneSignature(snapshot.elements)
-    updateHistoryState(page)
-  }, [flushFlatten, updateHistoryState])
+  // نسلسل الضغطات: لو الطالب داس تراجع كذا مرة ورا بعض، كل واحدة تتنفذ بدورها.
+  const queueHistoryStep = useCallback((direction: -1 | 1) => {
+    historyQueueRef.current = historyQueueRef.current
+      .then(() => stepHistory(direction))
+      .catch((error: unknown) => {
+        console.error('Unable to change dictation history.', error)
+      })
+    return historyQueueRef.current
+  }, [stepHistory])
+
+  const undo = useCallback(() => queueHistoryStep(-1), [queueHistoryStep])
+  const redo = useCallback(() => queueHistoryStep(1), [queueHistoryStep])
 
   const switchPage = useCallback(async (nextIndex: number) => {
     const api = apiRef.current
