@@ -1,9 +1,23 @@
 'use client'
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { PageBar } from './PageBar'
 import { Toolbar } from './Toolbar'
 import { CANVAS_HEIGHT, CANVAS_WIDTH, useDrawingEngine, type PageInfo } from './useDrawingEngine'
+
+// Native cursor is hidden site-wide by CursorFx, and its custom ring lives outside the
+// fullscreen element (so it is not rendered). Give the cursor back inside the editor.
+const FULLSCREEN_CURSOR_CSS = `
+html.cursor-fx-on [data-hw-fs='true'],
+html.cursor-fx-on [data-hw-fs='true'] * { cursor: default !important; }
+html.cursor-fx-on [data-hw-fs='true'] button,
+html.cursor-fx-on [data-hw-fs='true'] input[type='range'],
+html.cursor-fx-on [data-hw-fs='true'] label { cursor: pointer !important; }
+html.cursor-fx-on [data-hw-fs='true'] canvas[data-tool='pen'] { cursor: crosshair !important; }
+html.cursor-fx-on [data-hw-fs='true'] canvas[data-tool='eraser'] { cursor: none !important; }
+html:has([data-hw-fs='true']) .cursor-ring,
+html:has([data-hw-fs='true']) .cursor-dot { display: none !important; }
+`
 
 export type HandwritingEditorHandle = {
   exportPages: () => Promise<Blob[]>
@@ -27,6 +41,40 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fallbackFullscreen, setFallbackFullscreen] = useState(false)
   const fullscreenActive = isFullscreen || fallbackFullscreen
+  const [stageSize, setStageSize] = useState<{ w: number; h: number } | null>(null)
+
+  // Fullscreen page size is measured in real pixels (no container-query units / aspect-ratio),
+  // so the canvas box - and therefore pointer-to-canvas mapping - is always well defined.
+  useLayoutEffect(() => {
+    if (!fullscreenActive) {
+      setStageSize(null)
+      return
+    }
+    const stage = editorRef.current?.querySelector<HTMLElement>('.hw-stage')
+    if (!stage) return
+    const measure = () => {
+      const style = getComputedStyle(stage)
+      const availW = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      const availH = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      if (!(availW > 0) || !(availH > 0)) return
+      const ratio = CANVAS_WIDTH / CANVAS_HEIGHT
+      const w = Math.floor(Math.min(availW, availH * ratio))
+      const h = Math.floor(w / ratio)
+      setStageSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }))
+    }
+    measure()
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    observer?.observe(stage)
+    window.addEventListener('resize', measure)
+    window.addEventListener('orientationchange', measure)
+    document.addEventListener('fullscreenchange', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('orientationchange', measure)
+      document.removeEventListener('fullscreenchange', measure)
+    }
+  }, [fullscreenActive])
   const [errorMessage, setErrorMessage] = useState('')
   const [confirmAction, setConfirmAction] = useState<'clear' | 'delete' | null>(null)
   const handleEngineError = useCallback((message: string) => {
@@ -147,7 +195,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     : 'space-y-3'
 
   return (
-    <div ref={editorRef} className={editorClass} dir="rtl">
+    <div ref={editorRef} className={editorClass} dir="rtl" data-hw-fs={fullscreenActive ? 'true' : 'false'}>
       <div className={fullscreenContentClass}>
         <Toolbar
           tool={tool}
@@ -193,16 +241,16 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
               </span>
             </div>
             <div className={fullscreenActive
-              ? 'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-slate-100 p-2 [container-type:size]'
+              ? 'hw-stage relative min-h-0 flex-1 overflow-hidden bg-slate-100 p-2'
               : 'relative aspect-[5/7] w-full overscroll-contain overflow-hidden bg-white'
             }>
               <div
                 className={fullscreenActive
-                  ? 'relative flex-none overflow-hidden bg-white shadow-[0_12px_40px_-16px_rgba(15,23,42,0.3)]'
+                  ? 'absolute inset-0 m-auto overflow-hidden bg-white shadow-[0_12px_40px_-16px_rgba(15,23,42,0.3)]'
                   : 'absolute inset-0 overflow-hidden'
                 }
                 style={{
-                  ...(fullscreenActive ? { aspectRatio: CANVAS_WIDTH + ' / ' + CANVAS_HEIGHT, width: 'min(100cqw, calc(100cqh * ' + CANVAS_WIDTH + ' / ' + CANVAS_HEIGHT + '))' } : {}),
+                  ...(fullscreenActive ? { width: stageSize ? stageSize.w : 0, height: stageSize ? stageSize.h : 0 } : {}),
                   backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent calc(100% - 1px), #e2eaf2 calc(100% - 1px), #e2eaf2 100%)',
                   backgroundSize: `100% ${(40 / CANVAS_HEIGHT) * 100}%`,
                 }}
@@ -222,6 +270,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   className={`absolute inset-0 h-full w-full touch-none select-none ${tool === 'eraser' ? 'cursor-none' : 'cursor-crosshair'}`}
                   style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                   aria-label="مساحة كتابة الإجابة"
+                  data-tool={tool}
                 />
                 <div
                   ref={cursorRef}
@@ -253,6 +302,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           </div>
         </div>
       )}
+      <style>{FULLSCREEN_CURSOR_CSS}</style>
       <canvas ref={shadowRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" aria-hidden />
     </div>
   )

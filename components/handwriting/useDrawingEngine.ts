@@ -65,8 +65,8 @@ function pointFromEvent(event: PointerEvent, canvas: HTMLCanvasElement): Point {
     ? Math.max(0.75, Math.min(1.25, 0.85 + event.pressure * 0.3))
     : 1
   return {
-    x: ((event.clientX - rect.left) / rect.width) * canvas.width,
-    y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    x: ((event.clientX - rect.left) / Math.max(rect.width, 1)) * canvas.width,
+    y: ((event.clientY - rect.top) / Math.max(rect.height, 1)) * canvas.height,
     pressure,
   }
 }
