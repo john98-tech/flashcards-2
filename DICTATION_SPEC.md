@@ -63,13 +63,13 @@ supabase/migrations/        migrations SQL
 1. كل جداول التسميع الجديدة بادئتها `dictation_`. مفيش foreign key من أو إلى `decks`, `cards`, `deck_groups`, `access_codes`, `recite_sources`, `recite_refs`.
 2. كل كود التسميع الجديد في `lib/dictation/` و `app/admin/dictation-actions.ts` وملفات جديدة بس. **ممنوع** استيراد `lib/decks.ts`, `lib/cloze.ts`, `lib/recite*.ts` أو `app/admin/actions.ts` من كود التسميع الجديد.
 3. ملفات الفلاش كاردس الموجودة ما اتعدلتش في الجزء 1. أي تعديل مطلوب لاحقًا على ملف موجود (زي إضافة تاب في `admin-tabs.tsx`) يتعمل في جزء الواجهة بتعديل صغير ومعلن.
-4. ملفات PDF المرجعية في Storage bucket مستقل: `dictation-references` (خاص).
+4. ملفات PDF المرجعية وصور المحتوى الظاهر للطالب في Storage bucket مستقل: `dictation-references` (خاص).
 
 ---
 
 ## 3. مخطط البيانات
 
-الـ migration: `supabase/migrations/20261024000000_dictation.sql` (**لازم يتشغّل على Supabase قبل ما أي كود تسميع جديد يشتغل**). كل الجداول: RLS مفعّل، من غير policies، service role بس.
+الـ migrations: `supabase/migrations/20261024000000_dictation.sql` و`supabase/migrations/20261026000000_dictation_student_material.sql` (**لازم يتشغّلوا على Supabase قبل استخدام ميزة التسميع**). كل الجداول: RLS مفعّل، من غير policies، service role بس.
 
 ### `dictation_subjects` — المادة
 
@@ -89,6 +89,8 @@ supabase/migrations/        migrations SQL
 | `title` | text | حتى 200 حرف |
 | `description` | text | حتى 500 حرف، افتراضي `''` |
 | `position` | integer | ترتيب الدروس جوه المادة |
+| `student_material` | text | عناوين ومحتوى ظاهر للطالب، منفصل عن مرجع Gemini |
+| `student_images` | jsonb | صور ظاهرة للطالب: `{ path, name }[]` داخل الـ bucket الخاص |
 | `created_at`, `updated_at` | timestamptz | |
 
 ### `dictation_headings` — المحتوى (العناوين)
@@ -119,7 +121,7 @@ supabase/migrations/        migrations SQL
 | `pdf_path`, `pdf_name`, `pdf_size` | text / text / integer | لما `kind='pdf'`، المسار جوه الـ bucket (`<lessonId>/<uuid>.pdf`)، الحجم حتى 20MB |
 | `updated_at` | timestamptz | |
 
-مرجع واحد لكل درس: نص **أو** PDF (تغيير النوع بيمسح القديم).
+مرجع واحد لكل درس: نص **أو** PDF (تغيير النوع بيمسح القديم). المرجع مخصص للتصحيح ولا يظهر في صفحة الطالب؛ المحتوى الظاهر له محفوظ في `dictation_lessons.student_material` وصوره في `student_images`.
 
 ### شكل العنوان في TypeScript (`lib/dictation/types.ts`)
 
@@ -244,13 +246,16 @@ type DictationReport = {
 **المرجع**
 - `getReference(lessonId)`
 - `setReferenceText(lessonId, text)` (نص فاضي بيمسح المرجع)
+- البرومبت الافتراضي للتصحيح في `DEFAULT_DICTATION_GRADING_PROMPT`؛ يمكن تخصيصه لكل درس من لوحة الإدارة.
 - `createReferencePdfUpload(lessonId)` ← `{ path, token }` لرفع مباشر من المتصفح لـ Storage (الـ server actions حجمها محدود فالـ PDF مش بيعدي عليها)
 - `attachReferencePdf(lessonId, { path, name })` ← بيتأكد إن الملف اترفع وحجمه في الحد، ويخليه مرجع الدرس
 - `clearReference(lessonId)`
 - `getReferencePdfUrl(lessonId, expiresInSeconds?)` ← رابط تحميل مؤقت
+- `createStudentImageUpload(lessonId, { name, contentType, size })` ← رابط رفع مؤقت لصورة الطالب
+- `setStudentMaterial(lessonId, text, images)` ← حفظ العناوين والصور الظاهرة للطالب
 
 **قراءة مجمّعة**
-- `getLessonFull(lessonId)` ← `{ lesson, headings, tree, reference }`
+- `getLessonFull(lessonId)` ← `{ lesson, headings, tree, reference, studentMaterial }`
 
 ### قواعد التحقق (`normalizeHeadings`)
 - العنوان لازم نص غير فاضي (بعد trim)، والحدود في `DICTATION_LIMITS`.

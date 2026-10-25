@@ -27,15 +27,14 @@ export default async function DictationLessonPage({ params }: PageProps<'/dictat
   if (!data) notFound()
   const { full, subject } = data
 
-  // The page shows exactly what the admin wrote in the dictation editor for this lesson.
-  const text = full.reference.kind === 'text' ? full.reference.text : ''
-
   return (
     <NoteEditor
       lessonTitle={full.lesson.title}
       subjectName={subject?.name ?? ''}
-      text={text}
+      referenceText={full.reference.kind === 'text' ? full.reference.text : ''}
       gradingPrompt={full.reference.prompt}
+      studentText={full.studentMaterial.text}
+      studentImages={full.studentMaterial.images}
     />
   )
 }

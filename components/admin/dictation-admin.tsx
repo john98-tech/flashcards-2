@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRightLeft, CloudUpload, Eraser, Loader2, TriangleAlert } from 'lucide-react'
+import { ArrowRightLeft, CloudUpload, Eraser, ImagePlus, Loader2, Trash2, TriangleAlert } from 'lucide-react'
+import { createClient } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { WordEditor } from '@/components/admin/word-editor'
 import {
@@ -10,11 +11,21 @@ import {
   adminCreateDictationSubject,
   adminDeleteDictationLesson,
   adminLoadDictationLesson,
+  adminCreateDictationStudentImageUpload,
   adminSaveDictationGradingPrompt,
   adminSaveDictationReferenceText,
+  adminSaveDictationStudentMaterial,
   adminUpdateDictationLesson,
 } from '@/app/admin/dictation-actions'
-import { DICTATION_LIMITS, type DictationLesson, type DictationSubjectSummary, type ReferenceKind } from '@/lib/dictation/types'
+import {
+  DEFAULT_DICTATION_GRADING_PROMPT,
+  DICTATION_LIMITS,
+  DICTATION_PDF_BUCKET,
+  type DictationLesson,
+  type DictationStudentImage,
+  type DictationSubjectSummary,
+  type ReferenceKind,
+} from '@/lib/dictation/types'
 
 /**
  * Admin section for written dictation ("التسميع بالكتابة").
@@ -42,6 +53,11 @@ const inputClass =
   'rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring disabled:opacity-50'
 
 const byOrder = <T extends { order: number }>(a: T, b: T) => a.order - b.order
+const promptForEditor = (saved: string) => {
+  if (!saved.trim()) return DEFAULT_DICTATION_GRADING_PROMPT
+  if (saved.startsWith(DEFAULT_DICTATION_GRADING_PROMPT)) return saved
+  return `${DEFAULT_DICTATION_GRADING_PROMPT}\n\nتعليمات إضافية لهذا الدرس:\n${saved}`
+}
 
 export function DictationAdmin({ subjects: initialSubjects, lessons: initialLessons, loadError }: DictationAdminData) {
   const router = useRouter()
@@ -66,6 +82,12 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
   const [initialContent, setInitialContent] = useState('')
   const [prompt, setPrompt] = useState('')
   const [savedPrompt, setSavedPrompt] = useState('')
+  const [studentText, setStudentText] = useState('')
+  const [savedStudentText, setSavedStudentText] = useState('')
+  const [studentImages, setStudentImages] = useState<DictationStudentImage[]>([])
+  const [savedStudentImages, setSavedStudentImages] = useState('')
+  const [imageUploading, setImageUploading] = useState(false)
+  const [imageError, setImageError] = useState('')
   const [refKind, setRefKind] = useState<ReferenceKind>('none')
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState('')
@@ -78,10 +100,15 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
 
   const saving = save.status === 'busy'
   const moving = move.status === 'busy'
-  const busy = saving || moving || removing
+  const busy = saving || moving || removing || imageUploading
   const contentDirty = content !== savedContent
   const promptDirty = prompt !== savedPrompt
-  const dirty = active && (!savedDraft || JSON.stringify(savedDraft) !== JSON.stringify(draft) || contentDirty || promptDirty)
+  const studentDirty =
+    studentText !== savedStudentText ||
+    JSON.stringify(studentImages.map(({ path, name }) => ({ path, name }))) !== savedStudentImages
+  const dirty =
+    active &&
+    (!savedDraft || JSON.stringify(savedDraft) !== JSON.stringify(draft) || contentDirty || promptDirty || studentDirty)
   const lessonsOf = (subjectId: string) => lessons.filter((l) => l.subjectId === subjectId).sort(byOrder)
   const subjectName = (id: string) => subjects.find((s) => s.id === id)?.name ?? '—'
 
@@ -106,6 +133,11 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setRefKind('none')
     setPrompt('')
     setSavedPrompt('')
+    setStudentText('')
+    setSavedStudentText('')
+    setStudentImages([])
+    setSavedStudentImages('[]')
+    setImageError('')
     setContentError('')
     setContentLoading(true)
     setEditorSession((n) => n + 1)
@@ -123,8 +155,14 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
         setInitialContent(text)
         setContent(text)
         setSavedContent(text)
-        setPrompt(full?.reference.prompt ?? '')
-        setSavedPrompt(full?.reference.prompt ?? '')
+        const savedPrompt = promptForEditor(full?.reference.prompt ?? '')
+        setPrompt(savedPrompt)
+        setSavedPrompt(savedPrompt)
+        const material = full?.studentMaterial
+        setStudentText(material?.text ?? '')
+        setSavedStudentText(material?.text ?? '')
+        setStudentImages(material?.images ?? [])
+        setSavedStudentImages(JSON.stringify((material?.images ?? []).map(({ path, name }) => ({ path, name }))))
       })
       .catch((err) => {
         if (seq === loadSeq.current) setContentError(err instanceof Error ? err.message : 'تعذر تحميل محتوى الدرس.')
@@ -139,8 +177,13 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setContent('')
     setSavedContent('')
     setInitialContent('')
-    setPrompt('')
+    setPrompt(DEFAULT_DICTATION_GRADING_PROMPT)
     setSavedPrompt('')
+    setStudentText('')
+    setSavedStudentText('')
+    setStudentImages([])
+    setSavedStudentImages('[]')
+    setImageError('')
     setRefKind('none')
     setContentError('')
     setContentLoading(false)
@@ -258,10 +301,53 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
         setPrompt(reference.prompt)
         setSavedPrompt(reference.prompt)
       }
+      if (studentDirty) {
+        const result = await adminSaveDictationStudentMaterial(
+          lesson.id,
+          studentText,
+          studentImages.map(({ path, name }) => ({ path, name })),
+        )
+        if (!result.ok) throw new Error(result.error)
+        setSavedStudentText(studentText)
+        setSavedStudentImages(JSON.stringify(studentImages.map(({ path, name }) => ({ path, name }))))
+      }
       setSave({ status: 'done', message: 'اتحفظ الدرس.' })
       router.refresh()
     } catch (err) {
       setSave({ status: 'error', message: err instanceof Error ? err.message : 'تعذر الحفظ.' })
+    }
+  }
+
+  const uploadStudentImages = async (files: FileList | null) => {
+    if (!files?.length || !draft.id) return
+    const selected = Array.from(files)
+    if (studentImages.length + selected.length > DICTATION_LIMITS.studentImagesPerLesson) {
+      setImageError(`الحد الأقصى ${DICTATION_LIMITS.studentImagesPerLesson} صورة للدرس.`)
+      return
+    }
+    setImageUploading(true)
+    setImageError('')
+    try {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      )
+      for (const file of selected) {
+        const signed = await adminCreateDictationStudentImageUpload(draft.id, {
+          name: file.name,
+          contentType: file.type,
+          size: file.size,
+        })
+        const { error } = await supabase.storage
+          .from(DICTATION_PDF_BUCKET)
+          .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type, upsert: false })
+        if (error) throw new Error(`تعذر رفع ${file.name}: ${error.message}`)
+        setStudentImages((current) => [...current, { path: signed.path, name: file.name, url: '' }])
+      }
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'تعذر رفع الصور.')
+    } finally {
+      setImageUploading(false)
     }
   }
 
@@ -491,19 +577,83 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
                 </p>
               )}
               {!contentLoading && !contentError && (
-                <WordEditor
-                  key={editorSession}
-                  initialText={initialContent}
-                  onTextChange={setContent}
-                  placeholder="اكتب هنا…"
-                />
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <h2 className="text-sm font-semibold">النص المرجعي للتصحيح</h2>
+                    <p className="text-xs text-muted-foreground">ده النص اللي Gemini هيعتمد عليه، ومش بيظهر للطالب.</p>
+                  </div>
+                  <WordEditor
+                    key={editorSession}
+                    initialText={initialContent}
+                    onTextChange={setContent}
+                    placeholder="اكتب النص المرجعي هنا…"
+                  />
+                </div>
               )}
             </section>
-            <aside data-testid="dictation-side-slot" className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-4 lg:sticky lg:top-4">
+            <aside data-testid="dictation-side-slot" className="flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-4 lg:sticky lg:top-4">
+              <section className="flex flex-col gap-2">
+                <label htmlFor="dictation-student-material" className="flex flex-col gap-1 text-sm font-semibold">
+                  العناوين والمحتوى الظاهر للطالب
+                  <span className="text-xs font-normal text-muted-foreground">
+                    اكتب العناوين الثابتة أو التعليمات التي تظهر في صفحة التسميع. هذا المحتوى منفصل عن مرجع Gemini.
+                  </span>
+                </label>
+                <textarea
+                  id="dictation-student-material"
+                  className={`${inputClass} min-h-48 resize-y leading-7`}
+                  value={studentText}
+                  maxLength={DICTATION_LIMITS.referenceText}
+                  disabled={contentLoading || !!contentError || busy}
+                  onChange={(e) => setStudentText(e.target.value)}
+                  placeholder="اكتب العناوين أو المحتوى الذي تريد إظهاره للطالب…"
+                  dir="auto"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-accent">
+                    <ImagePlus className="size-4" aria-hidden />
+                    {imageUploading ? 'بيرفع الصور…' : 'إضافة صور للطالب'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      multiple
+                      disabled={!draft.id || imageUploading || busy}
+                      onChange={(e) => {
+                        void uploadStudentImages(e.target.files)
+                        e.currentTarget.value = ''
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
+                  {!draft.id && <span className="text-xs text-muted-foreground">احفظ الدرس أولًا لإضافة الصور.</span>}
+                  <span className="text-xs text-muted-foreground">{studentImages.length} صورة</span>
+                </div>
+                {studentImages.length > 0 && (
+                  <ul className="space-y-1">
+                    {studentImages.map((image) => (
+                      <li key={image.path} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-2 py-1 text-xs">
+                        <span className="truncate" dir="auto">{image.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`حذف صورة ${image.name}`}
+                          title="إزالة الصورة"
+                          disabled={busy || imageUploading}
+                          onClick={() => setStudentImages((current) => current.filter((item) => item.path !== image.path))}
+                          className="shrink-0 rounded p-1 text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {imageError && <p role="alert" className="text-xs text-destructive">{imageError}</p>}
+              </section>
+              <section className="flex flex-col gap-2 border-t pt-3">
               <label htmlFor="dictation-grading-prompt" className="flex flex-col gap-2 text-sm font-semibold">
-                تعليمات التصحيح لهذا الدرس
+                برومبت Gemini للتصحيح
                 <span className="text-xs font-normal text-muted-foreground">
-                  اكتب القواعد التي ينبغي مراعاتها عند تصحيح إجابة الطالب.
+                  يبدأ بالبرومبت الافتراضي. عدّل النص هنا لتغيير تعليمات Gemini لهذا الدرس؛ اتركه كما هو لاستخدام الإعداد الافتراضي.
                 </span>
               </label>
               <textarea
@@ -513,11 +663,12 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
                 maxLength={DICTATION_LIMITS.gradingPrompt}
                 disabled={contentLoading || !!contentError || busy}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="مثال: اقبل الصياغات المكافئة، وركّز على الحقائق الأساسية..."
+                placeholder={DEFAULT_DICTATION_GRADING_PROMPT}
                 dir="auto"
               />
               <p className="text-xs text-muted-foreground">{prompt.length.toLocaleString()} حرف</p>
-              <Button onClick={saveLesson} disabled={!draft.title.trim() || busy || contentLoading || !!contentError}>
+              <p className="text-xs font-semibold">مرجع Gemini: النص المرجعي المكتوب في الخانة المقابلة.</p>
+              <Button onClick={saveLesson} disabled={!draft.title.trim() || busy || imageUploading || contentLoading || !!contentError}>
                 {saving ? <Loader2 className="animate-spin" aria-hidden /> : <CloudUpload aria-hidden />} حفظ
               </Button>
               <p className="text-xs" role="status" aria-live="polite">
@@ -527,6 +678,7 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
                   <span className="text-muted-foreground">فيه تعديلات لسه ما اتحفظتش.</span>
                 )}
               </p>
+              </section>
             </aside>
           </div>
         </>

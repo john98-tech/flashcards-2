@@ -11,6 +11,7 @@ import {
   type DictationReference,
   type DictationSubject,
   type DictationSubjectSummary,
+  type DictationStudentImage,
   type HeadingInput,
   type ReferenceKind,
 } from './types'
@@ -200,7 +201,7 @@ export async function updateSubject(id: string, patch: { name?: string; order?: 
 
 /** Deletes the subject together with its lessons, headings and references (cascade). */
 export async function deleteSubject(id: string): Promise<void> {
-  // Reference PDFs live in storage, which the database cascade cannot reach.
+  // Uploaded files live in storage, which the database cascade cannot reach.
   const { data: lessons, error: lessonsError } = await db().from('dictation_lessons').select('id').eq('subject_id', id)
   if (lessonsError) fail(lessonsError)
   const paths = await referencePdfPaths((lessons ?? []).map((l) => l.id as string))
@@ -278,7 +279,7 @@ export async function updateLesson(
   return toLesson(data as LessonRow)
 }
 
-/** Deletes the lesson together with its headings and reference (cascade), and its PDF file. */
+/** Deletes the lesson together with its headings and reference (cascade), and its uploaded files. */
 export async function deleteLesson(id: string): Promise<void> {
   const paths = await referencePdfPaths([id])
   const { error } = await db().from('dictation_lessons').delete().eq('id', id)
@@ -517,6 +518,64 @@ export async function attachReferencePdf(
   return getReference(lessonId)
 }
 
+/** Creates a one-time upload URL for an image shown on the student lesson page. */
+export async function createStudentImageUpload(
+  lessonId: string,
+  input: { name: string; contentType: string; size: number },
+): Promise<{ path: string; token: string }> {
+  if (!(await getLesson(lessonId))) throw new Error('Lesson not found.')
+  if (!/^image\/(jpeg|png|webp|gif)$/.test(input.contentType)) throw new Error('Unsupported image type.')
+  if (input.size <= 0 || input.size > DICTATION_LIMITS.studentImageBytes) {
+    throw new Error('Image must be 10 MB or smaller.')
+  }
+  const extension = input.contentType === 'image/jpeg' ? 'jpg' : input.contentType.slice('image/'.length)
+  const path = `${lessonId}/student/${randomUUID()}.${extension}`
+  const { data, error } = await db().storage.from(DICTATION_PDF_BUCKET).createSignedUploadUrl(path)
+  if (error) fail(error)
+  return { path, token: data!.token }
+}
+
+/** Saves the student-visible text and image references, removing images no longer used. */
+export async function setStudentMaterial(
+  lessonId: string,
+  text: string,
+  images: Array<{ path: string; name: string }>,
+): Promise<void> {
+  if (!(await getLesson(lessonId))) throw new Error('Lesson not found.')
+  if (text.length > DICTATION_LIMITS.referenceText) throw new Error('Student material is too large.')
+  if (images.length > DICTATION_LIMITS.studentImagesPerLesson) throw new Error('Too many student images.')
+  const normalized = images.map((image) => {
+    if (!image.path.startsWith(`${lessonId}/student/`) || image.path.includes('..')) {
+      throw new Error('Invalid student image path.')
+    }
+    return { path: image.path, name: image.name.slice(0, 200) }
+  })
+  const { data: existing, error: readError } = await db()
+    .from('dictation_lessons')
+    .select('student_images')
+    .eq('id', lessonId)
+    .single()
+  if (readError) fail(readError)
+  if (!existing) throw new Error('Lesson not found.')
+  const previous = parseStudentImages(existing.student_images)
+  const { error } = await db()
+    .from('dictation_lessons')
+    .update({ student_material: text, student_images: normalized, updated_at: now() })
+    .eq('id', lessonId)
+  if (error) fail(error)
+  const retained = new Set(normalized.map((image) => image.path))
+  await removePdfObjects(previous.filter((image) => !retained.has(image.path)).map((image) => image.path))
+}
+
+function parseStudentImages(value: unknown): Array<{ path: string; name: string }> {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (image): image is { path: string; name: string } =>
+      !!image && typeof image === 'object' &&
+      typeof image.path === 'string' && typeof image.name === 'string',
+  )
+}
+
 export async function clearReference(lessonId: string): Promise<void> {
   const previous = await getReference(lessonId)
   await upsertReference({
@@ -550,8 +609,29 @@ export async function getReferencePdfUrl(lessonId: string, expiresInSeconds = 60
 export async function getLessonFull(lessonId: string): Promise<DictationLessonFull | null> {
   const lesson = await getLesson(lessonId)
   if (!lesson) return null
-  const [headings, reference] = await Promise.all([listHeadings(lessonId), getReference(lessonId)])
-  return { lesson, headings, tree: buildHeadingTree(headings), reference }
+  const [headings, reference, material] = await Promise.all([
+    listHeadings(lessonId),
+    getReference(lessonId),
+    db().from('dictation_lessons').select('student_material, student_images').eq('id', lessonId).single(),
+  ])
+  if (material.error) fail(material.error)
+  if (!material.data) throw new Error('Lesson material not found.')
+  const images = parseStudentImages(material.data.student_images)
+  const studentImages = await Promise.all(
+    images.map(async (image): Promise<DictationStudentImage> => {
+      const { data, error } = await db().storage.from(DICTATION_PDF_BUCKET).createSignedUrl(image.path, 60 * 60 * 24)
+      if (error) fail(error)
+      if (!data) throw new Error('Could not create a signed URL for a student image.')
+      return { ...image, url: data.signedUrl }
+    }),
+  )
+  return {
+    lesson,
+    headings,
+    tree: buildHeadingTree(headings),
+    reference,
+    studentMaterial: { text: material.data.student_material, images: studentImages },
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -564,8 +644,15 @@ async function touchLesson(lessonId: string) {
 
 async function referencePdfPaths(lessonIds: string[]): Promise<string[]> {
   if (!lessonIds.length) return []
-  const { data } = await db().from('dictation_references').select('pdf_path').in('lesson_id', lessonIds)
-  return (data ?? []).map((r) => r.pdf_path as string | null).filter((p): p is string => !!p)
+  const [references, lessons] = await Promise.all([
+    db().from('dictation_references').select('pdf_path').in('lesson_id', lessonIds),
+    db().from('dictation_lessons').select('student_images').in('id', lessonIds),
+  ])
+  if (references.error) fail(references.error)
+  if (lessons.error) fail(lessons.error)
+  const pdfs = (references.data ?? []).map((r) => r.pdf_path as string | null).filter((p): p is string => !!p)
+  const images = (lessons.data ?? []).flatMap((lesson) => parseStudentImages(lesson.student_images).map((image) => image.path))
+  return [...pdfs, ...images]
 }
 
 /** Best effort: a leftover file is harmless, so storage errors never fail the main operation. */

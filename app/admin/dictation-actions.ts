@@ -43,6 +43,12 @@ async function runAdminAction<T>(action: () => Promise<T>): Promise<AdminActionR
         error: 'قاعدة البيانات تحتاج تحديثًا. شغّل migration 20261025000100_dictation_grading_prompt.sql في Supabase ثم أعد المحاولة.',
       }
     }
+    if (/student_material|student_images/i.test(message)) {
+      return {
+        ok: false,
+        error: 'قاعدة البيانات تحتاج تحديثًا. شغّل migration 20261026000000_dictation_student_material.sql في Supabase ثم أعد المحاولة.',
+      }
+    }
     return { ok: false, error: message || 'تعذر الحفظ في قاعدة البيانات. حاول مرة أخرى.' }
   }
 }
@@ -100,6 +106,12 @@ export async function adminLoadDictationLesson(
       return {
         ok: false,
         error: 'تعذر قراءة إعدادات التصحيح. شغّل migration 20261025000100_dictation_grading_prompt.sql في Supabase ثم أعد المحاولة.',
+      }
+    }
+    if (/student_material|student_images/i.test(message)) {
+      return {
+        ok: false,
+        error: 'قاعدة البيانات تحتاج تحديثًا لعرض المحتوى المنفصل. شغّل migration 20261026000000_dictation_student_material.sql في Supabase ثم أعد المحاولة.',
       }
     }
     return { ok: false, error: `تعذر تحميل بيانات الدرس من Supabase: ${message || 'خطأ غير معروف'}` }
@@ -189,6 +201,27 @@ export async function adminSaveDictationGradingPrompt(
     refresh()
     return reference
   })
+}
+
+export async function adminSaveDictationStudentMaterial(
+  lessonId: string,
+  text: string,
+  images: Array<{ path: string; name: string }>,
+): Promise<AdminActionResult<null>> {
+  return runAdminAction(async () => {
+    await requireAdmin()
+    await dictation.setStudentMaterial(lessonId, text, images)
+    refresh()
+    return null
+  })
+}
+
+export async function adminCreateDictationStudentImageUpload(
+  lessonId: string,
+  input: { name: string; contentType: string; size: number },
+): Promise<{ path: string; token: string }> {
+  await requireAdmin()
+  return dictation.createStudentImageUpload(lessonId, input)
 }
 
 export async function adminCreateDictationPdfUpload(lessonId: string): Promise<{ path: string; token: string }> {
