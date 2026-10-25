@@ -242,7 +242,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
             </div>
             <div className={fullscreenActive
               ? 'hw-stage relative min-h-0 flex-1 overflow-hidden bg-slate-100 p-2'
-              : 'relative aspect-[5/7] w-full overscroll-contain overflow-hidden bg-white'
+              : 'relative aspect-[5/7] w-full overflow-hidden bg-white'
             }>
               <div
                 className={fullscreenActive
