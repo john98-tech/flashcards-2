@@ -161,9 +161,18 @@ function DictationSubjects({
         </div>
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {selected.lessons.map((lesson) => (
-            <li key={lesson.id} className="flex h-full flex-col gap-1 rounded-xl border bg-card p-5">
-              <h3 className="font-semibold" dir="auto">{lesson.title}</h3>
-              {lesson.description && <p className="text-sm text-muted-foreground" dir="auto">{lesson.description}</p>}
+            <li key={lesson.id}>
+              <Link
+                href={`/dictation/${lesson.id}`}
+                onClick={() => {
+                  unlockAudio()
+                  sfx.success()
+                }}
+                className="flex h-full flex-col gap-1 rounded-xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <h3 className="font-semibold" dir="auto">{lesson.title}</h3>
+                {lesson.description && <p className="text-sm text-muted-foreground" dir="auto">{lesson.description}</p>}
+              </Link>
             </li>
           ))}
         </ul>
