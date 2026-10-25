@@ -44,7 +44,7 @@ const makePage = (id: number): DrawingPage => ({
 })
 
 function contextOf(canvas: HTMLCanvasElement) {
-  return canvas.getContext('2d', { desynchronized: true, willReadFrequently: true })
+  return canvas.getContext('2d', { willReadFrequently: true })
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png', quality?: number) {
@@ -69,6 +69,13 @@ function pointFromEvent(event: PointerEvent, canvas: HTMLCanvasElement): Point {
     y: ((event.clientY - rect.top) / rect.height) * canvas.height,
     pressure,
   }
+}
+
+// getCoalescedEvents() can return an empty array (Safari/iOS, some Chrome/Firefox builds).
+// Without a fallback no line is ever drawn - only the dot from pointerdown.
+function coalescedEventsOf(event: PointerEvent): PointerEvent[] {
+  const list = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : []
+  return list.length > 0 ? list : [event]
 }
 
 function hasVisiblePixels(canvas: HTMLCanvasElement) {
@@ -285,11 +292,19 @@ export function useDrawingEngine(
 
   const pointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || switchingRef.current) return
-    if (event.pointerType === 'touch' && penActiveRef.current) return
+    if (event.pointerType === 'touch' && penActiveRef.current && strokeRef.current) return
     if (strokeRef.current) {
-      // A stroke whose pointerup was lost would block drawing forever; close it first.
-      if (strokeRef.current.pointerId === event.pointerId) return
-      finishStroke(strokeRef.current.pointerId)
+      // A new pointerdown means the previous stroke's pointerup was lost (a mouse always
+      // reuses pointerId 1), so close it instead of ignoring every later press.
+      try {
+        finishStroke(strokeRef.current.pointerId)
+      } catch (error) {
+        reportError(error)
+      }
+      strokeRef.current = null
+      pendingPointsRef.current.length = 0
+      penActiveRef.current = false
+      setIsDrawing(false)
     }
     if (event.pointerType === 'pen') penActiveRef.current = true
     event.preventDefault()
@@ -328,9 +343,7 @@ export function useDrawingEngine(
       fallbackPointerIdRef.current = pointerId
       const onMove = (nativeEvent: PointerEvent) => {
         if (nativeEvent.pointerId !== pointerId) return
-        const coalesced = typeof nativeEvent.getCoalescedEvents === 'function'
-          ? nativeEvent.getCoalescedEvents()
-          : [nativeEvent]
+        const coalesced = coalescedEventsOf(nativeEvent)
         schedulePoints(coalesced.map((item) => pointFromEvent(item, canvas)))
       }
       const onEnd = (nativeEvent: PointerEvent) => {
@@ -349,7 +362,7 @@ export function useDrawingEngine(
         window.removeEventListener('pointercancel', onEnd)
       }
     }
-  }, [eraserSizeRef, finishStroke, initializeCanvases, schedulePoints, tool])
+  }, [eraserSizeRef, finishStroke, initializeCanvases, reportError, schedulePoints, tool])
 
   const pointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (fallbackPointerIdRef.current === event.pointerId) return
@@ -366,9 +379,7 @@ export function useDrawingEngine(
     if (!stroke || stroke.pointerId !== event.pointerId) return
     event.preventDefault()
     const nativeEvent = event.nativeEvent
-    const coalesced = typeof nativeEvent.getCoalescedEvents === 'function'
-      ? nativeEvent.getCoalescedEvents()
-      : [nativeEvent]
+    const coalesced = coalescedEventsOf(nativeEvent)
     schedulePoints(coalesced.map((item) => pointFromEvent(item, event.currentTarget)))
   }, [eraserSizeRef, schedulePoints, tool])
 
