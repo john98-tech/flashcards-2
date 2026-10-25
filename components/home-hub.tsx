@@ -27,6 +27,7 @@ type Props = {
 export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
   const demo = useDemoState()
   const [mode, setMode] = useState<'hub' | 'cards' | 'dictation'>('hub')
+  const [subjectId, setSubjectId] = useState<string | null>(null)
   const showCards = mode === 'cards' || demo.active
 
   // Deep link: /#flashcards opens the flashcards section directly.
@@ -45,12 +46,14 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
   const openDictation = useCallback(() => {
     unlockAudio()
     sfx.unlock()
+    setSubjectId(null)
     setMode('dictation')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
   const backToHub = useCallback(() => {
     sfx.whoosh()
+    setSubjectId(null)
     setMode('hub')
   }, [])
 
@@ -74,19 +77,20 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
   }
 
   if (mode === 'dictation') {
+    const selected = dictation.find((subject) => subject.id === subjectId) ?? null
     return (
       <div className="home-enter">
         <div className="mb-6">
           <button
             type="button"
-            onClick={backToHub}
+            onClick={selected ? () => setSubjectId(null) : backToHub}
             className="inline-flex items-center gap-2 rounded-full border bg-card/80 px-4 py-2 text-sm font-semibold text-muted-foreground backdrop-blur transition-colors hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeft className="size-4" aria-hidden />
-            الرئيسية
+            {selected ? 'المواد' : 'الرئيسية'}
           </button>
         </div>
-        <DictationSubjects subjects={dictation} />
+        <DictationSubjects subjects={dictation} selected={selected} onSelect={setSubjectId} />
       </div>
     )
   }
@@ -127,8 +131,17 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
   )
 }
 
-// Written dictation subjects and their lessons. Independent of the flashcards groups and decks.
-function DictationSubjects({ subjects }: { subjects: DictationHomeSubject[] }) {
+// Written dictation: subject cards first, then the lessons of the chosen subject.
+// Independent of the flashcards groups and decks.
+function DictationSubjects({
+  subjects,
+  selected,
+  onSelect,
+}: {
+  subjects: DictationHomeSubject[]
+  selected: DictationHomeSubject | null
+  onSelect: (id: string) => void
+}) {
   if (subjects.length === 0) {
     return (
       <p className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground" dir="rtl">
@@ -136,27 +149,52 @@ function DictationSubjects({ subjects }: { subjects: DictationHomeSubject[] }) {
       </p>
     )
   }
+
+  if (selected) {
+    return (
+      <section className="flex flex-col gap-4" dir="rtl">
+        <div className="flex items-center gap-3 border-b border-border/80 pb-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
+            <FolderOpen className="size-5" aria-hidden />
+          </span>
+          <h2 className="truncate text-xl font-bold sm:text-2xl" dir="auto">{selected.name}</h2>
+        </div>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {selected.lessons.map((lesson) => (
+            <li key={lesson.id} className="flex h-full flex-col gap-1 rounded-xl border bg-card p-5">
+              <h3 className="font-semibold" dir="auto">{lesson.title}</h3>
+              {lesson.description && <p className="text-sm text-muted-foreground" dir="auto">{lesson.description}</p>}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-6" dir="rtl">
+    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" dir="rtl">
       {subjects.map((subject) => (
-        <section key={subject.id} className="flex flex-col gap-3">
-          <div className="flex items-center gap-3 border-b border-border/80 pb-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
-              <FolderOpen className="size-5" aria-hidden />
+        <li key={subject.id}>
+          <button
+            type="button"
+            onClick={() => {
+              sfx.whoosh()
+              onSelect(subject.id)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            className="flex h-full w-full items-center gap-4 rounded-xl border bg-card p-5 text-start transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
+              <FolderOpen className="size-6" aria-hidden />
             </span>
-            <h2 className="truncate text-xl font-bold sm:text-2xl" dir="auto">{subject.name}</h2>
-          </div>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {subject.lessons.map((lesson) => (
-              <li key={lesson.id} className="flex h-full flex-col gap-1 rounded-xl border bg-card p-5">
-                <h3 className="font-semibold" dir="auto">{lesson.title}</h3>
-                {lesson.description && <p className="text-sm text-muted-foreground" dir="auto">{lesson.description}</p>}
-              </li>
-            ))}
-          </ul>
-        </section>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="truncate text-lg font-bold" dir="auto">{subject.name}</span>
+              <span className="text-xs text-muted-foreground">{subject.lessons.length} درس</span>
+            </span>
+          </button>
+        </li>
       ))}
-    </div>
+    </ul>
   )
 }
 
