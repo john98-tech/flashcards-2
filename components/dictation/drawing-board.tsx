@@ -1,6 +1,6 @@
 'use client'
 
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
@@ -23,9 +23,46 @@ export type DrawingBoardHandle = {
   clear: () => void
 }
 
+const UI_OPTIONS = {
+  tools: {
+    image: false,
+  },
+  canvasActions: {
+    changeViewBackgroundColor: false,
+    clearCanvas: true,
+    export: false as const,
+    loadScene: false,
+    saveToActiveFile: false,
+    saveAsImage: false,
+    toggleTheme: false,
+  },
+}
+
 export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard(_, ref) {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
+  const hasContentRef = useRef(false)
   const [hasContent, setHasContent] = useState(false)
+
+  const handleChange = useCallback((elements: readonly { id: string }[]) => {
+    const nextHasContent = elements.length > 0
+    if (hasContentRef.current !== nextHasContent) {
+      hasContentRef.current = nextHasContent
+      setHasContent(nextHasContent)
+    }
+  }, [])
+
+  const renderTopRightUI = useCallback(() => (
+    <button
+      type="button"
+      disabled={!hasContent}
+      onClick={() => {
+        if (confirm('تمسح كل اللي كتبته ورسمته؟')) apiRef.current?.updateScene({ elements: [] })
+      }}
+      className="rounded-lg border bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm disabled:opacity-40"
+    >
+      مسح الكل
+    </button>
+  ), [hasContent])
 
   useImperativeHandle(ref, () => ({
     async getAnswer() {
@@ -65,33 +102,12 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     <div className="h-full w-full" dir="ltr">
       <Excalidraw
         excalidrawAPI={(api) => { apiRef.current = api }}
-        onChange={(elements) => setHasContent(elements.length > 0)}
+        onChange={handleChange}
         langCode="ar-SA"
         theme="light"
         name="التسميع بالكتابة"
-        UIOptions={{
-          canvasActions: {
-            changeViewBackgroundColor: false,
-            clearCanvas: true,
-            export: false,
-            loadScene: false,
-            saveToActiveFile: false,
-            saveAsImage: false,
-            toggleTheme: false,
-          },
-        }}
-        renderTopRightUI={() => (
-          <button
-            type="button"
-            disabled={!hasContent}
-            onClick={() => {
-              if (confirm('تمسح كل اللي كتبته ورسمته؟')) apiRef.current?.updateScene({ elements: [] })
-            }}
-            className="rounded-lg border bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm disabled:opacity-40"
-          >
-            مسح الكل
-          </button>
-        )}
+        UIOptions={UI_OPTIONS}
+        renderTopRightUI={renderTopRightUI}
       />
     </div>
   )
