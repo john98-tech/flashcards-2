@@ -24,6 +24,29 @@ const refresh = () => {
   revalidatePath('/dictation', 'layout')
 }
 
+type AdminActionResult<T> = { ok: true; value: T } | { ok: false; error: string }
+
+async function runAdminAction<T>(action: () => Promise<T>): Promise<AdminActionResult<T>> {
+  try {
+    return { ok: true, value: await action() }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (/unregistered api key/i.test(message)) {
+      return {
+        ok: false,
+        error: 'Supabase رفض مفتاح الخدمة. راجع SUPABASE_URL وSUPABASE_SERVICE_ROLE_KEY في إعدادات الاستضافة وتأكد أنهما من نفس مشروع Supabase، ثم أعد النشر.',
+      }
+    }
+    if (/prompt_text/i.test(message)) {
+      return {
+        ok: false,
+        error: 'قاعدة البيانات تحتاج تحديثًا. شغّل migration 20261025000100_dictation_grading_prompt.sql في Supabase ثم أعد المحاولة.',
+      }
+    }
+    return { ok: false, error: message || 'تعذر الحفظ في قاعدة البيانات. حاول مرة أخرى.' }
+  }
+}
+
 // Subjects
 export async function adminListDictationSubjects(): Promise<DictationSubjectSummary[]> {
   await requireAdmin()
@@ -88,21 +111,25 @@ export async function adminCreateDictationLesson(input: {
   title: string
   description?: string
   order?: number
-}): Promise<DictationLesson> {
-  await requireAdmin()
-  const lesson = await dictation.createLesson(input)
-  refresh()
-  return lesson
+}): Promise<AdminActionResult<DictationLesson>> {
+  return runAdminAction(async () => {
+    await requireAdmin()
+    const lesson = await dictation.createLesson(input)
+    refresh()
+    return lesson
+  })
 }
 
 export async function adminUpdateDictationLesson(
   id: string,
   patch: { title?: string; description?: string; order?: number; subjectId?: string },
-): Promise<DictationLesson> {
-  await requireAdmin()
-  const lesson = await dictation.updateLesson(id, patch)
-  refresh()
-  return lesson
+): Promise<AdminActionResult<DictationLesson>> {
+  return runAdminAction(async () => {
+    await requireAdmin()
+    const lesson = await dictation.updateLesson(id, patch)
+    refresh()
+    return lesson
+  })
 }
 
 export async function adminDeleteDictationLesson(id: string): Promise<void> {
@@ -140,18 +167,28 @@ export async function adminReorderDictationHeadings(lessonId: string, orderedIds
 }
 
 // Reference (text or PDF)
-export async function adminSaveDictationReferenceText(lessonId: string, text: string): Promise<DictationReference> {
-  await requireAdmin()
-  const reference = await dictation.setReferenceText(lessonId, text)
-  refresh()
-  return reference
+export async function adminSaveDictationReferenceText(
+  lessonId: string,
+  text: string,
+): Promise<AdminActionResult<DictationReference>> {
+  return runAdminAction(async () => {
+    await requireAdmin()
+    const reference = await dictation.setReferenceText(lessonId, text)
+    refresh()
+    return reference
+  })
 }
 
-export async function adminSaveDictationGradingPrompt(lessonId: string, prompt: string): Promise<DictationReference> {
-  await requireAdmin()
-  const reference = await dictation.setReferencePrompt(lessonId, prompt)
-  refresh()
-  return reference
+export async function adminSaveDictationGradingPrompt(
+  lessonId: string,
+  prompt: string,
+): Promise<AdminActionResult<DictationReference>> {
+  return runAdminAction(async () => {
+    await requireAdmin()
+    const reference = await dictation.setReferencePrompt(lessonId, prompt)
+    refresh()
+    return reference
+  })
 }
 
 export async function adminCreateDictationPdfUpload(lessonId: string): Promise<{ path: string; token: string }> {

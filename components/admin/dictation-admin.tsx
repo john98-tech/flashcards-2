@@ -203,7 +203,9 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     if (!lesson || !moveTargetId || moveTargetId === lesson.subjectId) return
     setMove({ status: 'busy' })
     try {
-      const updated = await adminUpdateDictationLesson(lesson.id, { subjectId: moveTargetId })
+      const result = await adminUpdateDictationLesson(lesson.id, { subjectId: moveTargetId })
+      if (!result.ok) throw new Error(result.error)
+      const updated = result.value
       setLessons((current) => current.map((l) => (l.id === updated.id ? updated : l)))
       if (draft.id === updated.id) {
         setDraft((d) => ({ ...d, subjectId: updated.subjectId }))
@@ -231,25 +233,31 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setSave({ status: 'busy' })
     try {
       const description = draft.description.trim()
-      const lesson = draft.id
+      const lessonResult = draft.id
         ? await adminUpdateDictationLesson(draft.id, { title, description, subjectId: draft.subjectId })
         : await adminCreateDictationLesson({ subjectId: draft.subjectId, title, description })
+      if (!lessonResult.ok) throw new Error(lessonResult.error)
+      const lesson = lessonResult.value
       setLessons((current) =>
         current.some((l) => l.id === lesson.id) ? current.map((l) => (l.id === lesson.id ? lesson : l)) : [...current, lesson],
       )
       const next: Draft = { id: lesson.id, subjectId: lesson.subjectId, title: lesson.title, description: lesson.description }
+      setDraft(next)
+      setSavedDraft(next)
       if (contentDirty) {
-        const reference = await adminSaveDictationReferenceText(lesson.id, content)
+        const result = await adminSaveDictationReferenceText(lesson.id, content)
+        if (!result.ok) throw new Error(result.error)
+        const reference = result.value
         setRefKind(reference.kind)
         setSavedContent(content)
       }
       if (promptDirty) {
-        const reference = await adminSaveDictationGradingPrompt(lesson.id, prompt)
+        const result = await adminSaveDictationGradingPrompt(lesson.id, prompt)
+        if (!result.ok) throw new Error(result.error)
+        const reference = result.value
         setPrompt(reference.prompt)
         setSavedPrompt(reference.prompt)
       }
-      setDraft(next)
-      setSavedDraft(next)
       setSave({ status: 'done', message: 'اتحفظ الدرس.' })
       router.refresh()
     } catch (err) {
