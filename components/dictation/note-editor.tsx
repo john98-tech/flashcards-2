@@ -617,14 +617,16 @@ export function NoteEditor({
       let image: string | undefined
       if (hasHandwriting && canvas) {
         const imageCanvas = document.createElement('canvas')
-        imageCanvas.width = canvas.width
-        imageCanvas.height = canvas.height
+        const maxDimension = 1600
+        const scale = Math.min(1, maxDimension / Math.max(canvas.width, canvas.height))
+        imageCanvas.width = Math.max(1, Math.round(canvas.width * scale))
+        imageCanvas.height = Math.max(1, Math.round(canvas.height * scale))
         const imageContext = imageCanvas.getContext('2d')
         if (!imageContext) throw new Error('تعذر تجهيز صورة الكتابة للتصحيح.')
         imageContext.fillStyle = '#fff'
         imageContext.fillRect(0, 0, imageCanvas.width, imageCanvas.height)
-        imageContext.drawImage(canvas, 0, 0)
-        image = imageCanvas.toDataURL('image/png').split(',')[1]
+        imageContext.drawImage(canvas, 0, 0, imageCanvas.width, imageCanvas.height)
+        image = imageCanvas.toDataURL('image/jpeg', 0.85).split(',')[1]
       }
       const raw = await generate(
         config,
@@ -632,7 +634,7 @@ export function NoteEditor({
         {
           temperature: 0.1,
           json: true,
-          ...(image ? { images: [{ mimeType: 'image/png', data: image }] } : {}),
+          ...(image ? { images: [{ mimeType: 'image/jpeg', data: image }] } : {}),
         },
       )
       const parsed = parseGradingReport(raw)
