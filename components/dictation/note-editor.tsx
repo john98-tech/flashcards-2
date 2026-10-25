@@ -103,6 +103,11 @@ const touchCenter = (points: Map<number, { x: number; y: number }>) => {
     y: values.reduce((total, point) => total + point.y, 0) / values.length,
   }
 }
+const touchDistance = (points: Map<number, { x: number; y: number }>) => {
+  const values = Array.from(points.values())
+  if (values.length < 2) return 0
+  return Math.hypot(values[0].x - values[1].x, values[0].y - values[1].y)
+}
 
 // ---------------------------------------------------------------------------
 // Painting
@@ -355,6 +360,7 @@ export function NoteEditor({
   const [extra, setExtra] = useState(700)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
+  const [viewTransform, setViewTransform] = useState({ scale: 1, x: 0, y: 0 })
   const [keyOpen, setKeyOpen] = useState(false)
   const [grading, setGrading] = useState(false)
   const [notice, setNotice] = useState('')
@@ -371,9 +377,18 @@ export function NoteEditor({
   const frameRef = useRef(0)
   const boxRef = useRef(box)
   const pixelRatioRef = useRef(1)
+  const viewTransformRef = useRef(viewTransform)
   const touchPoints = useRef(new Map<number, { x: number; y: number }>())
-  const gestureRef = useRef<{ x: number; y: number } | null>(null)
+  const navigatingTouchRef = useRef(false)
+  const gestureRef = useRef<{
+    center: { x: number; y: number }
+    distance: number
+    scale: number
+    x: number
+    y: number
+  } | null>(null)
   boxRef.current = box
+  viewTransformRef.current = viewTransform
 
   const apply = useCallback((next: Item[]) => {
     itemsRef.current = next
@@ -485,7 +500,78 @@ export function NoteEditor({
   const pointOf = (e: React.PointerEvent<HTMLCanvasElement>): Pt => {
     const rect = e.currentTarget.getBoundingClientRect()
     const p = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure : 0.5
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top, p }
+    return {
+      x: (e.clientX - rect.left) / viewTransformRef.current.scale,
+      y: (e.clientY - rect.top) / viewTransformRef.current.scale,
+      p,
+    }
+  }
+
+  const beginTouchGesture = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'touch') return
+    if ((e.target as HTMLElement).closest('[data-touch-gesture-ignore]')) return
+    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touchPoints.current.size === 1 && !penOnly) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    navigatingTouchRef.current = true
+    if (touchPoints.current.size > 1) {
+      activeRef.current = null
+      liveRef.current = null
+      eraseSnapshot.current = null
+      scheduleRedraw()
+      for (const pointerId of touchPoints.current.keys()) {
+        if (pointerId !== e.pointerId && e.currentTarget.hasPointerCapture(pointerId)) continue
+        e.currentTarget.setPointerCapture(pointerId)
+      }
+    }
+    const transform = viewTransformRef.current
+    gestureRef.current = {
+      center: touchCenter(touchPoints.current),
+      distance: touchDistance(touchPoints.current),
+      ...transform,
+    }
+  }
+
+  const moveTouchGesture = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'touch' || !navigatingTouchRef.current || !touchPoints.current.has(e.pointerId)) return
+    e.preventDefault()
+    touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const previous = gestureRef.current
+    if (!previous) return
+
+    const center = touchCenter(touchPoints.current)
+    const distance = touchDistance(touchPoints.current)
+    const scale = distance > 0 && previous.distance > 0
+      ? Math.max(0.4, Math.min(4, previous.scale * (distance / previous.distance)))
+      : previous.scale
+    const x = center.x - ((previous.center.x - previous.x) / previous.scale) * scale
+    const y = center.y - ((previous.center.y - previous.y) / previous.scale) * scale
+    const next = { scale, x, y }
+    viewTransformRef.current = next
+    setViewTransform(next)
+    gestureRef.current = {
+      center,
+      distance,
+      ...next,
+    }
+  }
+
+  const endTouchGesture = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'touch' || !touchPoints.current.has(e.pointerId)) return
+    e.preventDefault()
+    touchPoints.current.delete(e.pointerId)
+    if (!touchPoints.current.size) {
+      navigatingTouchRef.current = false
+      gestureRef.current = null
+      return
+    }
+    const transform = viewTransformRef.current
+    gestureRef.current = {
+      center: touchCenter(touchPoints.current),
+      distance: touchDistance(touchPoints.current),
+      ...transform,
+    }
   }
 
   const eraseAt = (pt: Pt) => {
@@ -502,25 +588,7 @@ export function NoteEditor({
   }
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.pointerType === 'touch') {
-      touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-      if (touchPoints.current.size >= 2) {
-        e.preventDefault()
-        e.currentTarget.setPointerCapture(e.pointerId)
-        activeRef.current = null
-        liveRef.current = null
-        eraseSnapshot.current = null
-        gestureRef.current = touchCenter(touchPoints.current)
-        scheduleRedraw()
-        return
-      }
-      if (tool === 'pan') {
-        e.preventDefault()
-        e.currentTarget.setPointerCapture(e.pointerId)
-        gestureRef.current = { x: e.clientX, y: e.clientY }
-        return
-      }
-    }
+    if (e.pointerType === 'touch' && navigatingTouchRef.current) return
     if (tool === 'pan') return
     if (e.pointerType === 'touch' && penOnly) return
     if (e.pointerType === 'mouse' && e.button !== 0) return
@@ -548,17 +616,7 @@ export function NoteEditor({
   }
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.pointerType === 'touch' && touchPoints.current.has(e.pointerId)) {
-      touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-      const gesture = gestureRef.current
-      if (gesture && (touchPoints.current.size >= 2 || tool === 'pan')) {
-        e.preventDefault()
-        const center = touchPoints.current.size >= 2 ? touchCenter(touchPoints.current) : touchPoints.current.get(e.pointerId)!
-        window.scrollBy(gesture.x - center.x, gesture.y - center.y)
-        gestureRef.current = center
-        return
-      }
-    }
+    if (e.pointerType === 'touch' && navigatingTouchRef.current) return
     if (activeRef.current !== e.pointerId) return
     if (tool === 'eraser') {
       eraseAt(pointOf(e))
@@ -584,15 +642,7 @@ export function NoteEditor({
   }
 
   const finish = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const wasGesture = e.pointerType === 'touch' && gestureRef.current !== null
-    if (e.pointerType === 'touch') {
-      touchPoints.current.delete(e.pointerId)
-      if (touchPoints.current.size < 2) gestureRef.current = null
-      if (wasGesture) {
-        e.preventDefault()
-        return
-      }
-    }
+    if (e.pointerType === 'touch' && navigatingTouchRef.current) return
     if (activeRef.current !== e.pointerId) return
     activeRef.current = null
     if (tool === 'eraser') {
@@ -848,7 +898,24 @@ export function NoteEditor({
       </header>
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-2 py-4 sm:px-4 sm:py-6">
-        <div ref={pageRef} dir="ltr" className="relative overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-sm">
+        <div
+          className="relative h-[75dvh] min-h-[420px] overflow-hidden rounded-xl border bg-muted/40"
+          style={{ touchAction: 'none' }}
+          onPointerDown={beginTouchGesture}
+          onPointerMove={moveTouchGesture}
+          onPointerUp={endTouchGesture}
+          onPointerCancel={endTouchGesture}
+        >
+          <div
+            ref={pageRef}
+            data-dictation-page
+            dir="ltr"
+            className="absolute left-0 top-0 w-full overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-sm"
+            style={{
+              transform: `translate3d(${viewTransform.x}px, ${viewTransform.y}px, 0) scale(${viewTransform.scale})`,
+              transformOrigin: 'top left',
+            }}
+          >
           <div className="px-5 pt-7 sm:px-10">
             <LessonText text={studentText} />
             {studentImages.length > 0 && (
@@ -901,8 +968,10 @@ export function NoteEditor({
                 getItems={() => itemsRef.current}
                 onRemove={() => removeItem(item.id)}
                 pageWidth={box.w}
+                pageScale={viewTransform.scale}
               />
             ))}
+          </div>
           </div>
         </div>
 
@@ -916,7 +985,7 @@ export function NoteEditor({
           </button>
         </div>
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          على الموبايل استخدم صباعين مع بعض لتحريك الصفحة أثناء الكتابة.
+          على الموبايل استخدم إصبعين للتحريك والتكبير والتصغير. اسحب بإصبع واحد لتحريك الصفحة بعد تفعيل قلم الشاشة فقط.
         </p>
       </main>
       {notice && (
@@ -978,6 +1047,7 @@ function TextBox({
   editable,
   autoFocus,
   pageWidth,
+  pageScale,
   onFocus,
   onChange,
   onBlur,
@@ -990,6 +1060,7 @@ function TextBox({
   editable: boolean
   autoFocus: boolean
   pageWidth: number
+  pageScale: number
   onFocus: () => void
   onChange: (value: string) => void
   onBlur: () => void
@@ -1017,12 +1088,24 @@ function TextBox({
   const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { id: e.pointerId, dx: e.clientX - item.x, dy: e.clientY - item.y, snapshot: getItems() }
+    const pageRect = e.currentTarget.closest('[data-dictation-page]')?.getBoundingClientRect()
+    if (!pageRect) return
+    drag.current = {
+      id: e.pointerId,
+      dx: (e.clientX - pageRect.left) / pageScale - item.x,
+      dy: (e.clientY - pageRect.top) / pageScale - item.y,
+      snapshot: getItems(),
+    }
   }
   const moveDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
-    onMove(Math.max(0, Math.min(pageWidth - 40, e.clientX - d.dx)), Math.max(0, e.clientY - d.dy))
+    const pageRect = e.currentTarget.closest('[data-dictation-page]')?.getBoundingClientRect()
+    if (!pageRect) return
+    onMove(
+      Math.max(0, Math.min(pageWidth - 40, (e.clientX - pageRect.left) / pageScale - d.dx)),
+      Math.max(0, (e.clientY - pageRect.top) / pageScale - d.dy),
+    )
   }
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current
@@ -1033,6 +1116,7 @@ function TextBox({
 
   return (
     <div
+      data-touch-gesture-ignore
       className={cn('absolute', editable ? 'pointer-events-auto' : 'pointer-events-none')}
       style={{ left: item.x, top: item.y, width: item.w }}
     >
