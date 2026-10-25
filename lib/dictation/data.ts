@@ -54,6 +54,7 @@ type ReferenceRow = {
   lesson_id: string
   kind: ReferenceKind
   reference_text: string
+  prompt_text: string
   pdf_path: string | null
   pdf_name: string | null
   pdf_size: number | null
@@ -63,7 +64,7 @@ type ReferenceRow = {
 const SUBJECT_COLS = 'id, name, position, created_at, updated_at'
 const LESSON_COLS = 'id, subject_id, title, description, position, created_at, updated_at'
 const HEADING_COLS = 'id, lesson_id, parent_id, level, title, position, floating, content'
-const REFERENCE_COLS = 'lesson_id, kind, reference_text, pdf_path, pdf_name, pdf_size, updated_at'
+const REFERENCE_COLS = 'lesson_id, kind, reference_text, prompt_text, pdf_path, pdf_name, pdf_size, updated_at'
 
 const toSubject = (r: SubjectRow): DictationSubject => ({
   id: r.id,
@@ -98,6 +99,7 @@ const emptyReference = (lessonId: string): DictationReference => ({
   lessonId,
   kind: 'none',
   text: '',
+  prompt: '',
   pdf: null,
   updatedAt: null,
 })
@@ -106,6 +108,7 @@ const toReference = (r: ReferenceRow): DictationReference => ({
   lessonId: r.lesson_id,
   kind: r.kind,
   text: r.reference_text,
+  prompt: r.prompt_text,
   pdf: r.pdf_path ? { path: r.pdf_path, name: r.pdf_name ?? 'reference.pdf', size: r.pdf_size ?? 0 } : null,
   updatedAt: r.updated_at,
 })
@@ -399,6 +402,7 @@ export async function setReferenceText(lessonId: string, text: string): Promise<
         lesson_id: lessonId,
         kind: trimmed ? 'text' : 'none',
         reference_text: trimmed ? text : '',
+        prompt_text: previous.prompt,
         pdf_path: null,
         pdf_name: null,
         pdf_size: null,
@@ -408,6 +412,30 @@ export async function setReferenceText(lessonId: string, text: string): Promise<
     )
   if (error) fail(error)
   if (previous.pdf) await removePdfObjects([previous.pdf.path])
+  return getReference(lessonId)
+}
+
+/** Saves per-lesson grading instructions without changing its text or PDF reference. */
+export async function setReferencePrompt(lessonId: string, prompt: string): Promise<DictationReference> {
+  if (!(await getLesson(lessonId))) throw new Error('Lesson not found.')
+  if (prompt.length > DICTATION_LIMITS.gradingPrompt) throw new Error('Grading instructions are too large.')
+  const previous = await getReference(lessonId)
+  const { error } = await db()
+    .from('dictation_references')
+    .upsert(
+      {
+        lesson_id: lessonId,
+        kind: previous.kind,
+        reference_text: previous.text,
+        prompt_text: prompt,
+        pdf_path: previous.pdf?.path ?? null,
+        pdf_name: previous.pdf?.name ?? null,
+        pdf_size: previous.pdf?.size ?? null,
+        updated_at: now(),
+      },
+      { onConflict: 'lesson_id' },
+    )
+  if (error) fail(error)
   return getReference(lessonId)
 }
 
@@ -451,6 +479,7 @@ export async function attachReferencePdf(
         lesson_id: lessonId,
         kind: 'pdf',
         reference_text: '',
+        prompt_text: previous.prompt,
         pdf_path: file.path,
         pdf_name: (file.name || 'reference.pdf').slice(0, 200),
         pdf_size: size,
@@ -466,7 +495,19 @@ export async function attachReferencePdf(
 
 export async function clearReference(lessonId: string): Promise<void> {
   const previous = await getReference(lessonId)
-  const { error } = await db().from('dictation_references').delete().eq('lesson_id', lessonId)
+  const { error } = await db().from('dictation_references').upsert(
+    {
+      lesson_id: lessonId,
+      kind: 'none',
+      reference_text: '',
+      prompt_text: previous.prompt,
+      pdf_path: null,
+      pdf_name: null,
+      pdf_size: null,
+      updated_at: now(),
+    },
+    { onConflict: 'lesson_id' },
+  )
   if (error) fail(error)
   if (previous.pdf) await removePdfObjects([previous.pdf.path])
 }

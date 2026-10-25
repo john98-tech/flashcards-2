@@ -128,6 +128,13 @@ export async function adminSaveDictationReferenceText(lessonId: string, text: st
   return reference
 }
 
+export async function adminSaveDictationGradingPrompt(lessonId: string, prompt: string): Promise<DictationReference> {
+  await requireAdmin()
+  const reference = await dictation.setReferencePrompt(lessonId, prompt)
+  refresh()
+  return reference
+}
+
 export async function adminCreateDictationPdfUpload(lessonId: string): Promise<{ path: string; token: string }> {
   await requireAdmin()
   return dictation.createReferencePdfUpload(lessonId)

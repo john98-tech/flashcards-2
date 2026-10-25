@@ -10,6 +10,7 @@ import {
   adminCreateDictationSubject,
   adminDeleteDictationLesson,
   adminLoadDictationLesson,
+  adminSaveDictationGradingPrompt,
   adminSaveDictationReferenceText,
   adminUpdateDictationLesson,
 } from '@/app/admin/dictation-actions'
@@ -63,6 +64,8 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
   const [content, setContent] = useState('')
   const [savedContent, setSavedContent] = useState('')
   const [initialContent, setInitialContent] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [savedPrompt, setSavedPrompt] = useState('')
   const [refKind, setRefKind] = useState<ReferenceKind>('none')
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState('')
@@ -77,7 +80,8 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
   const moving = move.status === 'busy'
   const busy = saving || moving || removing
   const contentDirty = content !== savedContent
-  const dirty = active && (!savedDraft || JSON.stringify(savedDraft) !== JSON.stringify(draft) || contentDirty)
+  const promptDirty = prompt !== savedPrompt
+  const dirty = active && (!savedDraft || JSON.stringify(savedDraft) !== JSON.stringify(draft) || contentDirty || promptDirty)
   const lessonsOf = (subjectId: string) => lessons.filter((l) => l.subjectId === subjectId).sort(byOrder)
   const subjectName = (id: string) => subjects.find((s) => s.id === id)?.name ?? '—'
 
@@ -112,6 +116,8 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
         setInitialContent(text)
         setContent(text)
         setSavedContent(text)
+        setPrompt(full?.reference.prompt ?? '')
+        setSavedPrompt(full?.reference.prompt ?? '')
       })
       .catch((err) => {
         if (seq === loadSeq.current) setContentError(err instanceof Error ? err.message : 'تعذر تحميل محتوى الدرس.')
@@ -126,6 +132,8 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setContent('')
     setSavedContent('')
     setInitialContent('')
+    setPrompt('')
+    setSavedPrompt('')
     setRefKind('none')
     setContentError('')
     setContentLoading(false)
@@ -227,6 +235,11 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
         const reference = await adminSaveDictationReferenceText(lesson.id, content)
         setRefKind(reference.kind)
         setSavedContent(content)
+      }
+      if (promptDirty) {
+        const reference = await adminSaveDictationGradingPrompt(lesson.id, prompt)
+        setPrompt(reference.prompt)
+        setSavedPrompt(reference.prompt)
       }
       setDraft(next)
       setSavedDraft(next)
@@ -472,6 +485,23 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
               )}
             </section>
             <aside data-testid="dictation-side-slot" className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-4 lg:sticky lg:top-4">
+              <label htmlFor="dictation-grading-prompt" className="flex flex-col gap-2 text-sm font-semibold">
+                تعليمات التصحيح لهذا الدرس
+                <span className="text-xs font-normal text-muted-foreground">
+                  اكتب القواعد التي ينبغي مراعاتها عند تصحيح إجابة الطالب.
+                </span>
+              </label>
+              <textarea
+                id="dictation-grading-prompt"
+                className={`${inputClass} min-h-64 resize-y leading-7`}
+                value={prompt}
+                maxLength={DICTATION_LIMITS.gradingPrompt}
+                disabled={contentLoading || !!contentError || busy}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="مثال: اقبل الصياغات المكافئة، وركّز على الحقائق الأساسية..."
+                dir="auto"
+              />
+              <p className="text-xs text-muted-foreground">{prompt.length.toLocaleString()} حرف</p>
               <Button onClick={saveLesson} disabled={!draft.title.trim() || busy || contentLoading || !!contentError}>
                 {saving ? <Loader2 className="animate-spin" aria-hidden /> : <CloudUpload aria-hidden />} حفظ
               </Button>

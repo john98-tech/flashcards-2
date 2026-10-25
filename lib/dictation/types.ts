@@ -22,6 +22,7 @@ export const DICTATION_LIMITS = {
   headingContent: 20_000,
   headingsPerLesson: 500,
   referenceText: 2_000_000,
+  gradingPrompt: 100_000,
   pdfBytes: 20 * 1024 * 1024,
 } as const
 
@@ -75,6 +76,7 @@ export type DictationReference = {
   lessonId: string
   kind: ReferenceKind
   text: string
+  prompt: string
   pdf: { path: string; name: string; size: number } | null
   updatedAt: string | null
 }
