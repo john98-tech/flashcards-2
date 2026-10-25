@@ -73,11 +73,14 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     page.background = appState?.viewBackgroundColor ?? '#ffffff'
 
     const hasContent = elements.some((element) => !element.isDeleted)
-    setPages((current) => current.map((item, index) =>
-      index === currentPageRef.current && item.hasContent !== hasContent
-        ? { ...item, hasContent }
-        : item,
-    ))
+    setPages((current) => {
+      const index = currentPageRef.current
+      const item = current[index]
+      if (!item || item.hasContent === hasContent) return current
+      const next = current.slice()
+      next[index] = { ...item, hasContent }
+      return next
+    })
   }, [])
 
   const handleChange: ChangeHandler = useCallback((elements, appState, files) => {
