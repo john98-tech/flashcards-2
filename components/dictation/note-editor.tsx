@@ -150,7 +150,7 @@ function paint(ctx: CanvasRenderingContext2D, item: Drawable) {
     ctx.globalAlpha = 1
     if (pts.length === 1) {
       ctx.beginPath()
-      ctx.arc(pts[0].x, pts[0].y, (item.size * (0.5 + pts[0].p)) / 2, 0, Math.PI * 2)
+      ctx.arc(pts[0].x, pts[0].y, Math.max(2.5, (item.size * (0.5 + pts[0].p)) / 2), 0, Math.PI * 2)
       ctx.fill()
       return
     }
@@ -171,7 +171,7 @@ function paint(ctx: CanvasRenderingContext2D, item: Drawable) {
   if (marker) ctx.lineCap = 'square'
   if (pts.length === 1) {
     ctx.beginPath()
-    ctx.arc(pts[0].x, pts[0].y, ctx.lineWidth / 2, 0, Math.PI * 2)
+    ctx.arc(pts[0].x, pts[0].y, Math.max(2.5, ctx.lineWidth / 2), 0, Math.PI * 2)
     ctx.fill()
   } else {
     ctx.beginPath()
@@ -632,10 +632,11 @@ export function NoteEditor({
       const native = e.nativeEvent
       const events = typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : []
       const rect = e.currentTarget.getBoundingClientRect()
+      const scale = viewTransformRef.current.scale
       const list = events.length ? events : [native]
       for (const ev of list) {
         const p = ev.pointerType === 'pen' && ev.pressure > 0 ? ev.pressure : 0.5
-        live.points.push({ x: ev.clientX - rect.left, y: ev.clientY - rect.top, p })
+        live.points.push({ x: (ev.clientX - rect.left) / scale, y: (ev.clientY - rect.top) / scale, p })
       }
     }
     scheduleRedraw()
@@ -657,6 +658,11 @@ export function NoteEditor({
     const live = liveRef.current
     liveRef.current = null
     if (!live) return
+    if (live.kind === 'stroke') {
+      const last = live.points[live.points.length - 1]
+      const end = pointOf(e)
+      if (Math.hypot(end.x - last.x, end.y - last.y) > 0.5) live.points.push(end)
+    }
     if (live.kind === 'shape' && Math.hypot(live.x2 - live.x1, live.y2 - live.y1) < 4) {
       redraw()
       return
