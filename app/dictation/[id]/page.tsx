@@ -30,5 +30,12 @@ export default async function DictationLessonPage({ params }: PageProps<'/dictat
   // The page shows exactly what the admin wrote in the dictation editor for this lesson.
   const text = full.reference.kind === 'text' ? full.reference.text : ''
 
-  return <NoteEditor lessonTitle={full.lesson.title} subjectName={subject?.name ?? ''} text={text} />
+  return (
+    <NoteEditor
+      lessonTitle={full.lesson.title}
+      subjectName={subject?.name ?? ''}
+      text={text}
+      gradingPrompt={full.reference.prompt}
+    />
+  )
 }

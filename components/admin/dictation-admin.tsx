@@ -104,6 +104,8 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setSavedContent('')
     setInitialContent('')
     setRefKind('none')
+    setPrompt('')
+    setSavedPrompt('')
     setContentError('')
     setContentLoading(true)
     setEditorSession((n) => n + 1)
