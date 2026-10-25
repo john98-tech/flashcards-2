@@ -20,6 +20,7 @@ import type {
 
 const refresh = () => {
   revalidatePath('/admin')
+  revalidatePath('/')
   revalidatePath('/dictation', 'layout')
 }
 

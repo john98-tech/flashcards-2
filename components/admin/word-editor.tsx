@@ -208,11 +208,25 @@ type Props = {
   /** Bump this number to clear the editor. */
   resetKey?: number
   placeholder?: string
+  /** Plain text loaded into the editor when it mounts (blank lines separate paragraphs). */
+  initialText?: string
 }
 
-export function WordEditor({ onTextChange, resetKey = 0, placeholder }: Props) {
+const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+function textToHtml(text: string): string {
+  return text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+}
+
+export function WordEditor({ onTextChange, resetKey = 0, placeholder, initialText }: Props) {
   const editor = useEditor({
     immediatelyRender: false,
+    content: initialText ? textToHtml(initialText) : undefined,
     extensions: [
       StarterKit,
       TableKit.configure({ table: { resizable: true } }),

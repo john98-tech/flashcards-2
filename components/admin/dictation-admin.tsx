@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRightLeft, CloudUpload, Eraser, Loader2, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,9 +9,11 @@ import {
   adminCreateDictationLesson,
   adminCreateDictationSubject,
   adminDeleteDictationLesson,
+  adminLoadDictationLesson,
+  adminSaveDictationReferenceText,
   adminUpdateDictationLesson,
 } from '@/app/admin/dictation-actions'
-import { DICTATION_LIMITS, type DictationLesson, type DictationSubjectSummary } from '@/lib/dictation/types'
+import { DICTATION_LIMITS, type DictationLesson, type DictationSubjectSummary, type ReferenceKind } from '@/lib/dictation/types'
 
 /**
  * Admin section for written dictation ("التسميع بالكتابة").
@@ -57,6 +59,15 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
   const [save, setSave] = useState<Status>({ status: 'idle' })
   const [move, setMove] = useState<Status>({ status: 'idle' })
   const [removing, setRemoving] = useState(false)
+  // Editor content (the lesson's reference text) and its load state.
+  const [content, setContent] = useState('')
+  const [savedContent, setSavedContent] = useState('')
+  const [initialContent, setInitialContent] = useState('')
+  const [refKind, setRefKind] = useState<ReferenceKind>('none')
+  const [contentLoading, setContentLoading] = useState(false)
+  const [contentError, setContentError] = useState('')
+  const [editorSession, setEditorSession] = useState(0)
+  const loadSeq = useRef(0)
 
   // Keep local lists in step with the server after router.refresh().
   useEffect(() => setSubjects(initialSubjects), [initialSubjects])
@@ -65,7 +76,8 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
   const saving = save.status === 'busy'
   const moving = move.status === 'busy'
   const busy = saving || moving || removing
-  const dirty = active && (!savedDraft || JSON.stringify(savedDraft) !== JSON.stringify(draft))
+  const contentDirty = content !== savedContent
+  const dirty = active && (!savedDraft || JSON.stringify(savedDraft) !== JSON.stringify(draft) || contentDirty)
   const lessonsOf = (subjectId: string) => lessons.filter((l) => l.subjectId === subjectId).sort(byOrder)
   const subjectName = (id: string) => subjects.find((s) => s.id === id)?.name ?? '—'
 
@@ -78,6 +90,46 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setSelectedSubjectId(lesson.subjectId)
     setSave({ status: 'idle' })
     setActive(true)
+    loadContent(lesson.id)
+  }
+
+  // Loads the lesson's saved editor text. The editor only mounts once it is loaded, so a failed load can never overwrite it.
+  const loadContent = (lessonId: string) => {
+    const seq = ++loadSeq.current
+    setContent('')
+    setSavedContent('')
+    setInitialContent('')
+    setRefKind('none')
+    setContentError('')
+    setContentLoading(true)
+    setEditorSession((n) => n + 1)
+    adminLoadDictationLesson(lessonId)
+      .then((full) => {
+        if (seq !== loadSeq.current) return
+        const kind = full?.reference.kind ?? 'none'
+        const text = kind === 'text' ? full?.reference.text ?? '' : ''
+        setRefKind(kind)
+        setInitialContent(text)
+        setContent(text)
+        setSavedContent(text)
+      })
+      .catch((err) => {
+        if (seq === loadSeq.current) setContentError(err instanceof Error ? err.message : 'تعذر تحميل محتوى الدرس.')
+      })
+      .finally(() => {
+        if (seq === loadSeq.current) setContentLoading(false)
+      })
+  }
+
+  const resetContent = () => {
+    loadSeq.current++
+    setContent('')
+    setSavedContent('')
+    setInitialContent('')
+    setRefKind('none')
+    setContentError('')
+    setContentLoading(false)
+    setEditorSession((n) => n + 1)
   }
 
   const openExisting = (id: string) => {
@@ -107,6 +159,7 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setSavedDraft(null)
     setSave({ status: 'idle' })
     setNewLessonName('')
+    resetContent()
     setActive(true)
   }
 
@@ -159,6 +212,7 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
       alert('اختار المادة الأول.')
       return
     }
+    if (contentDirty && refKind === 'pdf' && content.trim() && !confirm('الدرس ده مرجعه ملف PDF، والنص اللي كتبته هيحل محله. تكمل؟')) return
     setSave({ status: 'busy' })
     try {
       const description = draft.description.trim()
@@ -169,6 +223,11 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
         current.some((l) => l.id === lesson.id) ? current.map((l) => (l.id === lesson.id ? lesson : l)) : [...current, lesson],
       )
       const next: Draft = { id: lesson.id, subjectId: lesson.subjectId, title: lesson.title, description: lesson.description }
+      if (contentDirty) {
+        const reference = await adminSaveDictationReferenceText(lesson.id, content)
+        setRefKind(reference.kind)
+        setSavedContent(content)
+      }
       setDraft(next)
       setSavedDraft(next)
       setSave({ status: 'done', message: 'اتحفظ الدرس.' })
@@ -193,6 +252,7 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
       setDraft(emptyDraft)
       setSavedDraft(null)
       setSave({ status: 'idle' })
+      resetContent()
       setActive(false)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'تعذر مسح الدرس.')
@@ -392,10 +452,37 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
 
           <div className="grid items-start gap-4 lg:grid-cols-2">
             <section data-testid="dictation-editor" className="min-w-0">
-              <WordEditor key={draft.id ?? 'new'} onTextChange={() => {}} placeholder="اكتب هنا…" />
+              {contentLoading && (
+                <p className="flex items-center gap-2 rounded-lg border bg-card p-4 text-sm text-muted-foreground" role="status">
+                  <Loader2 className="size-4 animate-spin" aria-hidden /> بيحمّل محتوى الدرس…
+                </p>
+              )}
+              {contentError && (
+                <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+                  تعذر تحميل محتوى الدرس: {contentError}. افتح الدرس تاني.
+                </p>
+              )}
+              {!contentLoading && !contentError && (
+                <WordEditor
+                  key={editorSession}
+                  initialText={initialContent}
+                  onTextChange={setContent}
+                  placeholder="اكتب هنا…"
+                />
+              )}
             </section>
-            {/* مساحة فاضية جنب المحرر لحاجة هتتضاف بعدين */}
-            <aside data-testid="dictation-side-slot" className="min-w-0" />
+            <aside data-testid="dictation-side-slot" className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-4 lg:sticky lg:top-4">
+              <Button onClick={saveLesson} disabled={!draft.title.trim() || busy || contentLoading || !!contentError}>
+                {saving ? <Loader2 className="animate-spin" aria-hidden /> : <CloudUpload aria-hidden />} حفظ
+              </Button>
+              <p className="text-xs" role="status" aria-live="polite">
+                {save.status === 'done' && <span className="text-primary">{save.message}</span>}
+                {save.status === 'error' && <span className="text-destructive">تعذر الحفظ: {save.message}</span>}
+                {save.status !== 'done' && save.status !== 'error' && dirty && (
+                  <span className="text-muted-foreground">فيه تعديلات لسه ما اتحفظتش.</span>
+                )}
+              </p>
+            </aside>
           </div>
         </>
       )}

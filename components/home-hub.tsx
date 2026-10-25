@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Layers, PenLine, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderOpen, Layers, PenLine, Sparkles } from 'lucide-react'
 import { GroupBrowser } from '@/components/group-browser'
 import { RedeemForm } from '@/components/redeem-form'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
@@ -12,25 +12,40 @@ import { sfx, unlockAudio } from '@/lib/sound'
 type BrowserDeck = DeckSummary & { open: boolean }
 type BrowserGroup = DeckGroup & { decks: BrowserDeck[] }
 
+export type DictationHomeSubject = {
+  id: string
+  name: string
+  lessons: { id: string; title: string; description: string }[]
+}
+
 type Props = {
   groups: BrowserGroup[]
   hasPaid: boolean
+  dictation?: DictationHomeSubject[]
 }
 
-export function HomeHub({ groups, hasPaid }: Props) {
+export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
   const demo = useDemoState()
-  const [mode, setMode] = useState<'hub' | 'cards'>('hub')
+  const [mode, setMode] = useState<'hub' | 'cards' | 'dictation'>('hub')
   const showCards = mode === 'cards' || demo.active
 
   // Deep link: /#flashcards opens the flashcards section directly.
   useEffect(() => {
     if (window.location.hash === '#flashcards') setMode('cards')
+    if (window.location.hash === '#dictation') setMode('dictation')
   }, [])
 
   const openCards = useCallback(() => {
     unlockAudio()
     sfx.unlock()
     setMode('cards')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  const openDictation = useCallback(() => {
+    unlockAudio()
+    sfx.unlock()
+    setMode('dictation')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
@@ -54,6 +69,24 @@ export function HomeHub({ groups, hasPaid }: Props) {
           {hasPaid && <RedeemForm className="w-full rounded-xl border bg-card p-4 md:max-w-sm" />}
         </div>
         <GroupBrowser groups={groups} />
+      </div>
+    )
+  }
+
+  if (mode === 'dictation') {
+    return (
+      <div className="home-enter">
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={backToHub}
+            className="inline-flex items-center gap-2 rounded-full border bg-card/80 px-4 py-2 text-sm font-semibold text-muted-foreground backdrop-blur transition-colors hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft className="size-4" aria-hidden />
+            الرئيسية
+          </button>
+        </div>
+        <DictationSubjects subjects={dictation} />
       </div>
     )
   }
@@ -82,14 +115,47 @@ export function HomeHub({ groups, hasPaid }: Props) {
         />
         <HubCard
           tone="coral"
-          href="/recite"
           icon={<PenLine className="size-8" aria-hidden />}
-          title="تسميع الدرس كتابةً"
-          desc="اكتب الدرس من حفظك وقارنه بالنص الأصلي، واعرف أخطاءك كلمة بكلمة."
+          title="التسميع بالكتابة"
+          desc="اختار المادة والدرس، واكتب اللي حافظه من غير كروت."
           cta="ابدأ التسميع"
+          onClick={openDictation}
           tourId="hub-recite"
         />
       </div>
+    </div>
+  )
+}
+
+// Written dictation subjects and their lessons. Independent of the flashcards groups and decks.
+function DictationSubjects({ subjects }: { subjects: DictationHomeSubject[] }) {
+  if (subjects.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground" dir="rtl">
+        لسه مفيش مواد في التسميع بالكتابة.
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-6" dir="rtl">
+      {subjects.map((subject) => (
+        <section key={subject.id} className="flex flex-col gap-3">
+          <div className="flex items-center gap-3 border-b border-border/80 pb-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
+              <FolderOpen className="size-5" aria-hidden />
+            </span>
+            <h2 className="truncate text-xl font-bold sm:text-2xl" dir="auto">{subject.name}</h2>
+          </div>
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {subject.lessons.map((lesson) => (
+              <li key={lesson.id} className="flex h-full flex-col gap-1 rounded-xl border bg-card p-5">
+                <h3 className="font-semibold" dir="auto">{lesson.title}</h3>
+                {lesson.description && <p className="text-sm text-muted-foreground" dir="auto">{lesson.description}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   )
 }
