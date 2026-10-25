@@ -44,7 +44,7 @@ export function Toolbar({
   const maxSize = tool === 'pen' ? 22 : 96
 
   return (
-    <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.45)] backdrop-blur lg:top-2 lg:bottom-auto">
+    <div className={`${isFullscreen ? 'relative shrink-0' : 'sticky bottom-0 z-20 lg:top-2 lg:bottom-auto'} flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.45)] backdrop-blur`}>
       <div className="flex items-center gap-2" role="group" aria-label="أداة الكتابة">
         <button
           type="button"

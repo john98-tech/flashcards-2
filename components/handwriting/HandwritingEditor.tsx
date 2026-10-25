@@ -25,6 +25,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const editorRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fallbackFullscreen, setFallbackFullscreen] = useState(false)
+  const fullscreenActive = isFullscreen || fallbackFullscreen
   const {
     pages,
     currentPage,
@@ -76,6 +77,15 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     return () => document.removeEventListener('fullscreenchange', syncFullscreen)
   }, [])
 
+  useEffect(() => {
+    if (!fallbackFullscreen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFallbackFullscreen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [fallbackFullscreen])
+
   const toggleFullscreen = useCallback(async () => {
     const element = editorRef.current
     if (!element) return
@@ -103,11 +113,11 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     void action().catch((error: unknown) => reportError(error))
   }, [reportError])
 
-  const editorClass = fallbackFullscreen
-    ? 'fixed inset-0 z-[100] overflow-y-auto bg-slate-100 p-3 sm:p-5'
+  const editorClass = fullscreenActive
+    ? 'fixed inset-0 z-[100] flex h-dvh w-screen flex-col overflow-hidden bg-slate-100 p-2 sm:p-4'
     : 'space-y-3'
-  const fullscreenContentClass = isFullscreen || fallbackFullscreen
-    ? 'mx-auto flex min-h-full max-w-6xl flex-col gap-3'
+  const fullscreenContentClass = fullscreenActive
+    ? 'mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-2'
     : 'space-y-3'
 
   return (
@@ -121,7 +131,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           canUndo={historyState.canUndo}
           canRedo={historyState.canRedo}
           isBusy={isSwitching || isDrawing}
-          isFullscreen={isFullscreen || fallbackFullscreen}
+          isFullscreen={fullscreenActive}
           onToolChange={setTool}
           onColorChange={setColor}
           onSizeChange={setBrushSize}
@@ -131,7 +141,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           onFullscreen={() => void toggleFullscreen().catch((error: unknown) => reportError(error))}
         />
 
-        <div className="space-y-3">
+        <div className={fullscreenActive ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-3'}>
           <PageBar
             currentPage={currentPage}
             pageCount={pages.length}
@@ -143,8 +153,11 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
             onDelete={() => runPageAction(deletePage)}
           />
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_-42px_rgba(15,23,42,0.45)]">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+          <div className={fullscreenActive
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_-42px_rgba(15,23,42,0.45)]'
+            : 'overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_-42px_rgba(15,23,42,0.45)]'
+          }>
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2.5">
               <div>
                 <p className="text-sm font-bold text-slate-800">دفتر الإجابة</p>
                 <p className="text-xs text-slate-500">اكتب إجابتك بخط واضح داخل المساحة</p>
@@ -153,37 +166,46 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                 {pages[currentPage]?.hasContent ? 'فيها كتابة' : 'صفحة فارغة'}
               </span>
             </div>
-            <div
-              className="relative aspect-[5/7] w-full overscroll-contain overflow-hidden bg-white"
-              style={{
-                backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 39px, #e2eaf2 39px, #e2eaf2 40px)',
-                backgroundSize: '100% 40px',
-              }}
-              onContextMenu={handleContextMenu}
-            >
-              <canvas
-                ref={canvasRef}
-                width={CANVAS_WIDTH}
-                height={CANVAS_HEIGHT}
-                onPointerDown={pointerDown}
-                onPointerMove={pointerMove}
-                onPointerUp={pointerUp}
-                onPointerCancel={(event) => finishStroke(event.pointerId)}
-                onLostPointerCapture={(event) => finishStroke(event.pointerId)}
-                onPointerLeave={handlePointerLeave}
-                onContextMenu={handleContextMenu}
-                className={`absolute inset-0 h-full w-full touch-none select-none ${tool === 'eraser' ? 'cursor-none' : 'cursor-crosshair'}`}
-                style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
-                aria-label="مساحة كتابة الإجابة"
-              />
+            <div className={fullscreenActive
+              ? 'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-slate-100 p-2'
+              : 'relative aspect-[5/7] w-full overscroll-contain overflow-hidden bg-white'
+            }>
               <div
-                ref={cursorRef}
-                aria-hidden
-                className="pointer-events-none absolute left-0 top-0 z-10 rounded-full border border-slate-500/70 bg-slate-400/25 opacity-0"
-              />
+                className={fullscreenActive
+                  ? 'relative h-full max-h-full max-w-full flex-none overflow-hidden bg-white shadow-[0_12px_40px_-16px_rgba(15,23,42,0.3)]'
+                  : 'absolute inset-0 overflow-hidden'
+                }
+                style={{
+                  ...(fullscreenActive ? { aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` } : {}),
+                  backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent calc(100% - 1px), #e2eaf2 calc(100% - 1px), #e2eaf2 100%)',
+                  backgroundSize: `100% ${(40 / CANVAS_HEIGHT) * 100}%`,
+                }}
+                onContextMenu={handleContextMenu}
+              >
+                <canvas
+                  ref={canvasRef}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                  onPointerDown={pointerDown}
+                  onPointerMove={pointerMove}
+                  onPointerUp={pointerUp}
+                  onPointerCancel={(event) => finishStroke(event.pointerId)}
+                  onLostPointerCapture={(event) => finishStroke(event.pointerId)}
+                  onPointerLeave={handlePointerLeave}
+                  onContextMenu={handleContextMenu}
+                  className={`absolute inset-0 h-full w-full touch-none select-none ${tool === 'eraser' ? 'cursor-none' : 'cursor-crosshair'}`}
+                  style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+                  aria-label="مساحة كتابة الإجابة"
+                />
+                <div
+                  ref={cursorRef}
+                  aria-hidden
+                  className="pointer-events-none absolute left-0 top-0 z-10 rounded-full border border-slate-500/70 bg-slate-400/25 opacity-0"
+                />
+              </div>
             </div>
           </div>
-          <p className="px-1 text-center text-xs text-slate-500">
+          <p className={`${fullscreenActive ? 'hidden' : ''} px-1 text-center text-xs text-slate-500`}>
             التراجع والإعادة متاحان لآخر 10 خطوات في كل صفحة
           </p>
         </div>
