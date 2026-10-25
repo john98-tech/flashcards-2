@@ -143,6 +143,27 @@
   html.cursor-fx-on [contenteditable='true'] {
     cursor: text !important;
   }
+  html.cursor-fx-on [data-handwriting-editor],
+  html.cursor-fx-on [data-handwriting-editor] * {
+    cursor: default !important;
+  }
+  html.cursor-fx-on [data-handwriting-editor] button,
+  html.cursor-fx-on [data-handwriting-editor] input[type='range'],
+  html.cursor-fx-on [data-handwriting-editor] label {
+    cursor: pointer !important;
+  }
+  html.cursor-fx-on [data-handwriting-editor] canvas[data-tool='pen'] {
+    cursor: crosshair !important;
+  }
+  html.cursor-fx-on [data-handwriting-editor] canvas[data-tool='eraser'] {
+    cursor: none !important;
+  }
+  html.cursor-fx-on [data-handwriting-editor] [data-hw-pan='idle'] {
+    cursor: grab !important;
+  }
+  html.cursor-fx-on [data-handwriting-editor] [data-hw-pan='active'] {
+    cursor: grabbing !important;
+  }
 }
 
 .cursor-ring {

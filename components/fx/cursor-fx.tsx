@@ -31,10 +31,23 @@ export function CursorFx() {
     const refresh = () => {
       if (!visible) return
       const el = document.elementFromPoint(x, y)
+      const handwritingEditor = el?.closest?.('[data-handwriting-editor]') ?? null
       const hit = el?.closest?.(INTERACTIVE) ?? null
       const card = el?.closest?.('[data-card-id]') ?? null
       const field = el?.closest?.('input, textarea, [contenteditable="true"]') ?? null
       const dragging = document.body.dataset.dragging === 'true'
+      if (handwritingEditor) {
+        ring.style.opacity = '0'
+        dot.style.opacity = '0'
+        ring.dataset.active = 'false'
+        ring.dataset.grab = 'false'
+        ring.dataset.grabbing = 'false'
+        dot.dataset.hide = 'true'
+        magnet = null
+        return
+      }
+      ring.style.opacity = '1'
+      dot.style.opacity = '1'
       // magnetic only on small buttons/links
       if (hit && !card) {
         const r = hit.getBoundingClientRect()

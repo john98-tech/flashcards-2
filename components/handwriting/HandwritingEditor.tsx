@@ -461,7 +461,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     : 'space-y-3'
 
   return (
-    <div ref={editorRef} className={editorClass} dir="rtl" data-hw-fs={fullscreenActive ? 'true' : 'false'}>
+    <div ref={editorRef} className={editorClass} dir="rtl" data-handwriting-editor data-hw-fs={fullscreenActive ? 'true' : 'false'}>
       <div className={fullscreenContentClass}>
         <Toolbar
           tool={tool}
