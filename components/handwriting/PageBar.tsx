@@ -1,6 +1,7 @@
 'use client'
 
 import { ChevronLeft, ChevronRight, FilePlus2, FileX2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type Props = {
   currentPage: number
@@ -43,7 +44,7 @@ export function PageBar({
         </button>
       </div>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={onAdd} disabled={pageCount >= maxPages || isBusy} className={`${buttonClass} border-teal-700 bg-teal-700 text-white hover:bg-teal-800`}>
+        <button type="button" onClick={onAdd} disabled={pageCount >= maxPages || isBusy} className={cn(buttonClass, 'border-teal-700 bg-teal-700 text-white hover:bg-teal-800')}>
           <FilePlus2 className="size-4" aria-hidden />
           إضافة صفحة
         </button>

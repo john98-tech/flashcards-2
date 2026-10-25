@@ -44,7 +44,7 @@ const makePage = (id: number): DrawingPage => ({
 })
 
 function contextOf(canvas: HTMLCanvasElement) {
-  return canvas.getContext('2d', { desynchronized: true })
+  return canvas.getContext('2d', { desynchronized: true, willReadFrequently: true })
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png', quality?: number) {
