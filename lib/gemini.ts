@@ -113,6 +113,8 @@ export type GenerateOptions = {
   system?: string
   /** Ask Gemini to answer with JSON matching this schema (OpenAPI subset). */
   responseSchema?: unknown
+  /** Ask for a JSON reply without a schema. */
+  json?: boolean
   temperature?: number
   images?: { mimeType: string; data: string }[]
   signal?: AbortSignal
@@ -126,7 +128,12 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
     contents: [{ role: 'user', parts }],
     generationConfig: {
       temperature: opts.temperature ?? 0.2,
-      ...(opts.responseSchema ? { responseMimeType: 'application/json', responseSchema: opts.responseSchema } : {}),
+      ...(opts.responseSchema || opts.json
+        ? {
+            responseMimeType: 'application/json',
+            ...(opts.responseSchema ? { responseSchema: opts.responseSchema } : {}),
+          }
+        : {}),
     },
   }
   if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] }

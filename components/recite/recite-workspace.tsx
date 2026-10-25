@@ -15,6 +15,17 @@ type SaveState = 'idle' | 'saving' | 'saved'
 
 const draftKey = (id: string) => `kwk:recite:draft:${id}`
 
+function parseReport(raw: string): any | null {
+  const start = raw.indexOf('{')
+  const end = raw.lastIndexOf('}')
+  if (start === -1 || end <= start) return null
+  try {
+    return JSON.parse(raw.slice(start, end + 1))
+  } catch {
+    return null
+  }
+}
+
 function ToolButton({ label, active, disabled, onClick, children }: { label: string; active?: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -42,6 +53,7 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
   const [notice, setNotice] = useState('')
   const [grading, setGrading] = useState(false)
   const [report, setReport] = useState<any>(null)
+  const [rawReply, setRawReply] = useState('')
   const { config, ready } = useGeminiConfig()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -101,12 +113,13 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
     const answer = editor?.getText().trim() ?? ''
     if (!answer) return setNotice('اكتب حاجة الأول قبل التصحيح.')
     if (!reference.trim()) return setNotice('مفيش نص مرجعي محفوظ للدرس ده؛ اطلب من المسؤول إضافته.')
-    setGrading(true); setReport(null); setNotice('')
+    setGrading(true); setReport(null); setNotice(''); setRawReply('')
     try {
       const prompt = 'صحح تسميع الطالب مقارنة حصريًا بالنص المرجعي. اعتبر النص المرجعي المصدر المعتمد ولا تخترع معلومات. اقبل الصياغات المكافئة، وراجع الحقائق والعناوين والتفاصيل. افصل المعلومات الخاطئة والناقصة والمعلومات الموضوعة تحت عنوان غير مناسب والأخطاء الإملائية. أرجع JSON فقط بالشكل: {"summary":{"score":0},"wrongFacts":[{"studentText":"","correction":"","reason":""}],"missingFacts":[{"expected":"","section":""}],"misplacedFacts":[{"studentText":"","correctSection":"","reason":""}],"spelling":[{"written":"","correct":"","context":""}],"strengths":[],"nextSteps":[]}. الدرجة من 100 ولا تخصم مرتين عن نفس الخطأ. النص المرجعي:\n' + reference + '\nإجابة الطالب:\n' + answer
-      const raw = await generate(config, prompt, { temperature: 0.1 })
-      const parsed = JSON.parse(raw.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, ''))
-      setReport(parsed); setNotice('تم التصحيح. التقرير التفصيلي جاهز.')
+      const raw = await generate(config, prompt, { temperature: 0.1, json: true })
+      const parsed = parseReport(raw)
+      if (parsed) { setReport(parsed); setNotice('تم التصحيح. التقرير التفصيلي جاهز.') }
+      else { setRawReply(raw); setNotice('تم التصحيح.') }
     } catch (err) { setNotice(err instanceof Error ? err.message : 'تعذر تصحيح التسميع. جرّب مرة أخرى.') }
     finally { setGrading(false) }
   }
@@ -165,6 +178,7 @@ export function ReciteWorkspace({ lesson, reference }: { lesson: Lesson; referen
       </main>
 
       {report && <section className="fixed inset-0 z-40 overflow-y-auto bg-neutral-100 p-3 sm:p-8" dir="rtl"><div className="mx-auto max-w-4xl space-y-4"><header className="flex items-center justify-between rounded-2xl bg-white p-5"><div><p className="text-sm text-primary">تقرير التسميع الذكي</p><h2 className="text-2xl font-bold">نتيجة {lesson.title}</h2></div><button onClick={() => setReport(null)} className="rounded-lg border px-4 py-2">العودة للكتابة</button></header><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><ScoreTile title="الدرجة" value={report.summary?.score ?? 0} suffix="/100"/><ScoreTile title="معلومات خاطئة" value={report.wrongFacts?.length ?? 0}/><ScoreTile title="معلومات ناقصة" value={report.missingFacts?.length ?? 0}/><ScoreTile title="أخطاء إملائية" value={report.spelling?.length ?? 0}/></div><ReportSection title="المعلومات الخاطئة" items={report.wrongFacts} render={(x: any) => <><p className="font-semibold">{x.studentText}</p><p className="text-success">الصحيح: {x.correction}</p><p className="text-sm text-neutral-600">{x.reason}</p></>}/><ReportSection title="المعلومات الناقصة" items={report.missingFacts} render={(x: any) => <><p>{x.expected}</p><p className="text-sm text-neutral-500">العنوان: {x.section}</p></>}/><ReportSection title="معلومات في غير مكانها" items={report.misplacedFacts} render={(x: any) => <><p>{x.studentText}</p><p className="text-success">مكانها: {x.correctSection}</p><p className="text-sm text-neutral-600">{x.reason}</p></>}/><ReportSection title="الأخطاء الإملائية" items={report.spelling} render={(x: any) => <p>{x.written} ← <strong className="text-success">{x.correct}</strong><span className="block text-sm text-neutral-500">{x.context}</span></p>}/><ReportSection title="نقاط القوة" items={(report.strengths ?? []).map((x: string) => ({text:x}))} render={(x: any) => <p>{x.text}</p>}/><ReportSection title="خطوات للمراجعة" items={(report.nextSteps ?? []).map((x: string) => ({text:x}))} render={(x: any) => <p>{x.text}</p>}/><button onClick={() => {setReport(null); editor?.commands.focus()}} className="w-full rounded-xl bg-primary p-3 font-semibold text-primary-foreground">الرجوع للتسميع</button></div></section>}
+      {rawReply && <section className="fixed inset-0 z-40 overflow-y-auto bg-neutral-100 p-3 sm:p-8" dir="rtl"><div className="mx-auto max-w-4xl space-y-4"><div className="rounded-2xl bg-white p-5"><h2 className="mb-3 text-xl font-bold">رد Gemini</h2><p className="whitespace-pre-wrap leading-8" dir="auto">{rawReply}</p></div><button onClick={() => setRawReply('')} className="w-full rounded-xl bg-primary p-3 font-semibold text-primary-foreground">الرجوع للتسميع</button></div></section>}
       <ApiKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} />
     </div>
   )
