@@ -49,7 +49,9 @@ export type DrawingBoardHandle = {
 
 const EMPTY_ELEMENTS: PageElements = []
 const EMPTY_SNAPSHOT: PageSnapshot = { elements: EMPTY_ELEMENTS, files: [] }
-const MAX_HISTORY = 20
+const MAX_UNDO_STEPS = 10
+const MAX_HISTORY_SNAPSHOTS = MAX_UNDO_STEPS + 1
+const FLATTEN_DEBOUNCE_MS = 900
 const UI_OPTIONS = {
   canvasActions: {
     changeViewBackgroundColor: false,
@@ -144,7 +146,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
       if (!visibleElements.length) {
         const history = page.history.slice(0, page.historyIndex + 1)
         history.push(EMPTY_SNAPSHOT)
-        page.history = history.slice(-MAX_HISTORY)
+        page.history = history.slice(-MAX_HISTORY_SNAPSHOTS)
         page.historyIndex = page.history.length - 1
         page.elements = EMPTY_ELEMENTS
         page.files = []
@@ -166,9 +168,8 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
           viewBackgroundColor: page.background,
         },
         files: api.getFiles(),
-        mimeType: 'image/jpeg',
-        quality: 0.92,
-        maxWidthOrHeight: 1600,
+        mimeType: 'image/png',
+        maxWidthOrHeight: 4096,
         exportPadding: 0,
       })
 
@@ -192,23 +193,22 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
         width,
         height,
         fileId,
-        locked: true,
+        status: 'saved',
       }])
       if (
         pageIndex !== currentPageRef.current ||
         revision !== sceneRevisionRef.current ||
         sceneSignature(api.getSceneElementsIncludingDeleted()) !== signature
       ) return
-      api.addFiles([fileData])
-
       const history = page.history.slice(0, page.historyIndex + 1)
       history.push({ elements: imageElements, files: [fileData] })
-      if (history.length > MAX_HISTORY) history.shift()
+      if (history.length > MAX_HISTORY_SNAPSHOTS) history.shift()
       page.history = history
       page.historyIndex = history.length - 1
       page.elements = imageElements
       page.files = [fileData]
 
+      api.addFiles([fileData])
       api.updateScene({ elements: imageElements, appState: { currentItemRoughness: 0 } })
       api.history.clear()
       api.setActiveTool({ type: 'freedraw', locked: true })
@@ -226,7 +226,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
               console.error('Unable to flatten dictation drawing.', error)
               apiRef.current?.setToast({ message: 'تعذر تجهيز الرسم كطبقة واحدة.' })
             })
-          }, 120)
+          }, FLATTEN_DEBOUNCE_MS)
         }
       }
     }
@@ -263,7 +263,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
         console.error('Unable to flatten dictation drawing.', error)
         apiRef.current?.setToast({ message: 'تعذر تجهيز الرسم كطبقة واحدة.' })
       })
-    }, 180)
+    }, FLATTEN_DEBOUNCE_MS)
   }, [flattenCurrentPage])
 
   const undo = useCallback(async () => {
@@ -439,7 +439,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
       if (!api || !page) return
       const history = page.history.slice(0, page.historyIndex + 1)
       history.push(EMPTY_SNAPSHOT)
-      page.history = history.slice(-MAX_HISTORY)
+      page.history = history.slice(-MAX_HISTORY_SNAPSHOTS)
       page.historyIndex = page.history.length - 1
       page.elements = EMPTY_ELEMENTS
       page.files = []
@@ -458,7 +458,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     if (!page || !api) return
     const history = page.history.slice(0, page.historyIndex + 1)
     history.push(EMPTY_SNAPSHOT)
-    page.history = history.slice(-MAX_HISTORY)
+    page.history = history.slice(-MAX_HISTORY_SNAPSHOTS)
     page.historyIndex = page.history.length - 1
     page.elements = EMPTY_ELEMENTS
     page.files = []
