@@ -65,6 +65,19 @@
   --violet: oklch(0.62 0.16 290);
 }
 
+.dictation-board .excalidraw {
+  --color-primary: #0f766e;
+  --color-primary-darker: #0d6862;
+  --color-primary-darkest: #0f5e59;
+  --color-primary-light: #d9f4ef;
+  --color-primary-light-darker: #c9e9e3;
+  --color-primary-hover: #0d766e;
+  --island-bg-color: rgb(255 255 255 / 96%);
+  --button-gray-1: #f1f5f4;
+  --button-gray-2: #e5eceb;
+  --button-gray-3: #dce5e4;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
