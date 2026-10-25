@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRightLeft, CloudUpload, Eraser, Loader2, PenLine, TriangleAlert } from 'lucide-react'
+import { ArrowRightLeft, CloudUpload, Eraser, Loader2, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { WordEditor } from '@/components/admin/word-editor'
 import {
   adminCreateDictationLesson,
   adminCreateDictationSubject,
@@ -389,13 +390,13 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
             </div>
           </section>
 
-          <section
-            data-testid="dictation-editor-placeholder"
-            className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-10 text-center"
-          >
-            <PenLine className="size-6 text-muted-foreground" aria-hidden />
-            <h2 className="font-semibold">المحرر هيتضاف في الجزء 3</h2>
-          </section>
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <section data-testid="dictation-editor" className="min-w-0">
+              <WordEditor key={draft.id ?? 'new'} onTextChange={() => {}} placeholder="اكتب هنا…" />
+            </section>
+            {/* مساحة فاضية جنب المحرر لحاجة هتتضاف بعدين */}
+            <aside data-testid="dictation-side-slot" className="min-w-0" />
+          </div>
         </>
       )}
     </div>
