@@ -54,7 +54,7 @@ type ReferenceRow = {
   lesson_id: string
   kind: ReferenceKind
   reference_text: string
-  prompt_text: string
+  prompt_text?: string
   pdf_path: string | null
   pdf_name: string | null
   pdf_size: number | null
@@ -65,6 +65,25 @@ const SUBJECT_COLS = 'id, name, position, created_at, updated_at'
 const LESSON_COLS = 'id, subject_id, title, description, position, created_at, updated_at'
 const HEADING_COLS = 'id, lesson_id, parent_id, level, title, position, floating, content'
 const REFERENCE_COLS = 'lesson_id, kind, reference_text, prompt_text, pdf_path, pdf_name, pdf_size, updated_at'
+const LEGACY_REFERENCE_COLS = 'lesson_id, kind, reference_text, pdf_path, pdf_name, pdf_size, updated_at'
+
+function isMissingPromptColumn(error: { code?: string; message: string }) {
+  return error.code === '42703' || /prompt_text.*(column|schema cache)|column.*prompt_text/i.test(error.message)
+}
+
+function isUnregisteredApiKey(error: { message: string }) {
+  return /unregistered api key/i.test(error.message)
+}
+
+function failReference(error: { code?: string; message: string }): never {
+  if (isUnregisteredApiKey(error)) {
+    throw new Error('Supabase رفض مفتاح الخدمة. راجع SUPABASE_URL وSUPABASE_SERVICE_ROLE_KEY وتأكد أنهما من نفس مشروع Supabase.')
+  }
+  if (isMissingPromptColumn(error)) {
+    throw new Error('قاعدة البيانات تحتاج تحديثًا. شغّل migration 20261025000100_dictation_grading_prompt.sql في Supabase.')
+  }
+  return fail(error)
+}
 
 const toSubject = (r: SubjectRow): DictationSubject => ({
   id: r.id,
@@ -108,7 +127,7 @@ const toReference = (r: ReferenceRow): DictationReference => ({
   lessonId: r.lesson_id,
   kind: r.kind,
   text: r.reference_text,
-  prompt: r.prompt_text,
+  prompt: r.prompt_text ?? '',
   pdf: r.pdf_path ? { path: r.pdf_path, name: r.pdf_name ?? 'reference.pdf', size: r.pdf_size ?? 0 } : null,
   updatedAt: r.updated_at,
 })
@@ -380,13 +399,35 @@ export async function reorderHeadings(lessonId: string, orderedIds: string[]): P
 // ---------------------------------------------------------------------------
 
 export async function getReference(lessonId: string): Promise<DictationReference> {
-  const { data, error } = await db()
+  const result = await db()
     .from('dictation_references')
     .select(REFERENCE_COLS)
     .eq('lesson_id', lessonId)
     .maybeSingle()
-  if (error) fail(error)
-  return data ? toReference(data as ReferenceRow) : emptyReference(lessonId)
+  if (result.error && isMissingPromptColumn(result.error)) {
+    const legacy = await db()
+      .from('dictation_references')
+      .select(LEGACY_REFERENCE_COLS)
+      .eq('lesson_id', lessonId)
+      .maybeSingle()
+    if (legacy.error) failReference(legacy.error)
+    return legacy.data ? toReference(legacy.data as ReferenceRow) : emptyReference(lessonId)
+  }
+  if (result.error) failReference(result.error)
+  return result.data ? toReference(result.data as ReferenceRow) : emptyReference(lessonId)
+}
+
+async function upsertReference(values: Record<string, unknown>, allowLegacyPrompt = true) {
+  const { error } = await db().from('dictation_references').upsert(values, { onConflict: 'lesson_id' })
+  if (!error) return
+  if ('prompt_text' in values && isMissingPromptColumn(error)) {
+    if (!allowLegacyPrompt) failReference(error)
+    const { prompt_text: _promptText, ...legacyValues } = values
+    const retry = await db().from('dictation_references').upsert(legacyValues, { onConflict: 'lesson_id' })
+    if (!retry.error) return
+    failReference(retry.error)
+  }
+  failReference(error)
 }
 
 /** Saves the reference as plain text. An empty text clears the reference. */
@@ -395,22 +436,16 @@ export async function setReferenceText(lessonId: string, text: string): Promise<
   if (text.length > DICTATION_LIMITS.referenceText) throw new Error('Reference text is too large.')
   const previous = await getReference(lessonId)
   const trimmed = text.trim()
-  const { error } = await db()
-    .from('dictation_references')
-    .upsert(
-      {
-        lesson_id: lessonId,
-        kind: trimmed ? 'text' : 'none',
-        reference_text: trimmed ? text : '',
-        prompt_text: previous.prompt,
-        pdf_path: null,
-        pdf_name: null,
-        pdf_size: null,
-        updated_at: now(),
-      },
-      { onConflict: 'lesson_id' },
-    )
-  if (error) fail(error)
+  await upsertReference({
+    lesson_id: lessonId,
+    kind: trimmed ? 'text' : 'none',
+    reference_text: trimmed ? text : '',
+    prompt_text: previous.prompt,
+    pdf_path: null,
+    pdf_name: null,
+    pdf_size: null,
+    updated_at: now(),
+  })
   if (previous.pdf) await removePdfObjects([previous.pdf.path])
   return getReference(lessonId)
 }
@@ -420,22 +455,17 @@ export async function setReferencePrompt(lessonId: string, prompt: string): Prom
   if (!(await getLesson(lessonId))) throw new Error('Lesson not found.')
   if (prompt.length > DICTATION_LIMITS.gradingPrompt) throw new Error('Grading instructions are too large.')
   const previous = await getReference(lessonId)
-  const { error } = await db()
-    .from('dictation_references')
-    .upsert(
-      {
-        lesson_id: lessonId,
-        kind: previous.kind,
-        reference_text: previous.text,
-        prompt_text: prompt,
-        pdf_path: previous.pdf?.path ?? null,
-        pdf_name: previous.pdf?.name ?? null,
-        pdf_size: previous.pdf?.size ?? null,
-        updated_at: now(),
-      },
-      { onConflict: 'lesson_id' },
-    )
-  if (error) fail(error)
+  const values = {
+    lesson_id: lessonId,
+    kind: previous.kind,
+    reference_text: previous.text,
+    prompt_text: prompt,
+    pdf_path: previous.pdf?.path ?? null,
+    pdf_name: previous.pdf?.name ?? null,
+    pdf_size: previous.pdf?.size ?? null,
+    updated_at: now(),
+  }
+  await upsertReference(values, false)
   return getReference(lessonId)
 }
 
@@ -472,22 +502,16 @@ export async function attachReferencePdf(
   }
 
   const previous = await getReference(lessonId)
-  const { error } = await db()
-    .from('dictation_references')
-    .upsert(
-      {
-        lesson_id: lessonId,
-        kind: 'pdf',
-        reference_text: '',
-        prompt_text: previous.prompt,
-        pdf_path: file.path,
-        pdf_name: (file.name || 'reference.pdf').slice(0, 200),
-        pdf_size: size,
-        updated_at: now(),
-      },
-      { onConflict: 'lesson_id' },
-    )
-  if (error) fail(error)
+  await upsertReference({
+    lesson_id: lessonId,
+    kind: 'pdf',
+    reference_text: '',
+    prompt_text: previous.prompt,
+    pdf_path: file.path,
+    pdf_name: (file.name || 'reference.pdf').slice(0, 200),
+    pdf_size: size,
+    updated_at: now(),
+  })
   if (previous.pdf && previous.pdf.path !== file.path) await removePdfObjects([previous.pdf.path])
   await touchLesson(lessonId)
   return getReference(lessonId)
@@ -495,20 +519,16 @@ export async function attachReferencePdf(
 
 export async function clearReference(lessonId: string): Promise<void> {
   const previous = await getReference(lessonId)
-  const { error } = await db().from('dictation_references').upsert(
-    {
-      lesson_id: lessonId,
-      kind: 'none',
-      reference_text: '',
-      prompt_text: previous.prompt,
-      pdf_path: null,
-      pdf_name: null,
-      pdf_size: null,
-      updated_at: now(),
-    },
-    { onConflict: 'lesson_id' },
-  )
-  if (error) fail(error)
+  await upsertReference({
+    lesson_id: lessonId,
+    kind: 'none',
+    reference_text: '',
+    prompt_text: previous.prompt,
+    pdf_path: null,
+    pdf_name: null,
+    pdf_size: null,
+    updated_at: now(),
+  })
   if (previous.pdf) await removePdfObjects([previous.pdf.path])
 }
 

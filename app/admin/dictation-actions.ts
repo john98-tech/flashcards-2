@@ -59,9 +59,28 @@ export async function adminListDictationLessons(subjectId?: string): Promise<Dic
   return dictation.listLessons(subjectId)
 }
 
-export async function adminLoadDictationLesson(lessonId: string): Promise<DictationLessonFull | null> {
+export async function adminLoadDictationLesson(
+  lessonId: string,
+): Promise<{ ok: true; lesson: DictationLessonFull | null } | { ok: false; error: string }> {
   await requireAdmin()
-  return dictation.getLessonFull(lessonId)
+  try {
+    return { ok: true, lesson: await dictation.getLessonFull(lessonId) }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (/unregistered api key/i.test(message)) {
+      return {
+        ok: false,
+        error: 'Supabase رفض مفتاح الخدمة. راجع SUPABASE_URL وSUPABASE_SERVICE_ROLE_KEY في إعدادات الاستضافة وتأكد أنهما من نفس المشروع، ثم أعد النشر.',
+      }
+    }
+    if (/prompt_text/i.test(message)) {
+      return {
+        ok: false,
+        error: 'تعذر قراءة إعدادات التصحيح. شغّل migration 20261025000100_dictation_grading_prompt.sql في Supabase ثم أعد المحاولة.',
+      }
+    }
+    return { ok: false, error: `تعذر تحميل بيانات الدرس من Supabase: ${message || 'خطأ غير معروف'}` }
+  }
 }
 
 export async function adminCreateDictationLesson(input: {

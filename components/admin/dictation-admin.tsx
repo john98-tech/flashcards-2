@@ -110,8 +110,13 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
     setContentLoading(true)
     setEditorSession((n) => n + 1)
     adminLoadDictationLesson(lessonId)
-      .then((full) => {
+      .then((result) => {
         if (seq !== loadSeq.current) return
+        if (!result.ok) {
+          setContentError(result.error)
+          return
+        }
+        const full = result.lesson
         const kind = full?.reference.kind ?? 'none'
         const text = kind === 'text' ? full?.reference.text ?? '' : ''
         setRefKind(kind)
