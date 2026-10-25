@@ -103,7 +103,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
       if (page.files.length) api.addFiles(page.files)
       api.updateScene({
         elements: page.elements,
-        appState: { viewBackgroundColor: page.background },
+        appState: { currentItemRoughness: 0, viewBackgroundColor: page.background },
       })
       api.history.clear()
       currentPageRef.current = nextIndex
@@ -146,7 +146,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     if (page.files.length) api.addFiles(page.files)
     api.updateScene({
       elements: page.elements,
-      appState: { viewBackgroundColor: page.background },
+      appState: { currentItemRoughness: 0, viewBackgroundColor: page.background },
     })
     api.history.clear()
     requestAnimationFrame(() => {
@@ -267,6 +267,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
           <Excalidraw
             excalidrawAPI={(api) => { apiRef.current = api }}
             onChange={handleChange}
+            initialData={{ appState: { currentItemRoughness: 0 } }}
             langCode="ar-SA"
             theme="light"
             name="التسميع بالكتابة"

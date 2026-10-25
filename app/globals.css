@@ -78,6 +78,42 @@
   --button-gray-3: #dce5e4;
 }
 
+.dictation-board .App-toolbar {
+  border: 1px solid rgb(226 232 240 / 85%);
+  border-radius: 1rem;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 12px 36px -18px rgb(15 23 42 / 32%);
+  backdrop-filter: blur(12px);
+}
+
+.dictation-board .App-toolbar .ToolIcon__icon,
+.dictation-board .App-toolbar .ToolIcon__icon--mobile {
+  border-radius: 0.65rem;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.dictation-board .App-toolbar .ToolIcon__icon:hover,
+.dictation-board .App-toolbar .ToolIcon__icon--mobile:hover {
+  background-color: #e7f5f2;
+}
+
+.dictation-board .App-toolbar .ToolIcon_type_checkbox:checked + .ToolIcon__icon,
+.dictation-board .App-toolbar .ToolIcon_type_radio:checked + .ToolIcon__icon {
+  box-shadow: inset 0 0 0 1px rgb(15 118 110 / 18%);
+}
+
+.dictation-board .Island {
+  border: 1px solid rgb(226 232 240 / 85%);
+  border-radius: 1rem;
+  box-shadow: 0 12px 36px -20px rgb(15 23 42 / 28%);
+  backdrop-filter: blur(12px);
+}
+
+.dictation-board .default-sidebar .sidebar-tab-trigger:nth-of-type(2),
+.dictation-board .layer-ui__wrapper__footer {
+  display: none !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
