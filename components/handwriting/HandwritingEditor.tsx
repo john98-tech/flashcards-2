@@ -69,7 +69,8 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
       const availH = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
       if (!(availW > 0) || !(availH > 0)) return
       const ratio = CANVAS_WIDTH / CANVAS_HEIGHT
-      const w = Math.floor(Math.min(availW, availH * ratio))
+      // Always use the full available width; the sheet gets taller than the screen and is scrolled / panned.
+      const w = Math.floor(availW)
       const h = Math.floor(w / ratio)
       setStageSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }))
     }
@@ -124,6 +125,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     reset,
     exportPages,
     reportError,
+    setRenderScale,
   } = useDrawingEngine(canvasRef, shadowRef, { maxPages, onChange, onError: handleEngineError })
 
   useImperativeHandle(ref, () => ({
@@ -157,6 +159,22 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current)
   }, [])
 
+  // Re-render the vector ink at the real on-screen resolution (debounced) so it never looks pixelated.
+  const resolutionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleResolution = useCallback(() => {
+    if (resolutionTimerRef.current) clearTimeout(resolutionTimerRef.current)
+    resolutionTimerRef.current = setTimeout(() => {
+      const paper = paperRef.current
+      if (!paper) return
+      const width = paper.getBoundingClientRect().width
+      if (width > 0) setRenderScale((width * (window.devicePixelRatio || 1)) / CANVAS_WIDTH)
+    }, 160)
+  }, [setRenderScale])
+
+  useEffect(() => () => {
+    if (resolutionTimerRef.current) clearTimeout(resolutionTimerRef.current)
+  }, [])
+
   const applyView = useCallback((z: number, x: number, y: number) => {
     const stage = stageRef.current
     const paper = paperRef.current
@@ -176,8 +194,11 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     viewRef.current = { z: zoom, x: nextX, y: nextY }
     if (paper) paper.style.transform = `translate(${nextX}px, ${nextY}px) scale(${zoom})`
     setZoomPct(Math.round(zoom * 100))
-    if (Math.abs(zoom - previousZoom) > 0.001) flashBadge()
-  }, [flashBadge])
+    if (Math.abs(zoom - previousZoom) > 0.001) {
+      flashBadge()
+      scheduleResolution()
+    }
+  }, [flashBadge, scheduleResolution])
 
   const zoomAt = useCallback((nextZoom: number, clientX: number, clientY: number) => {
     const stage = stageRef.current
@@ -215,11 +236,12 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     const observer = new ResizeObserver(() => {
       const view = viewRef.current
       applyView(view.z, view.x, view.y)
+      scheduleResolution()
     })
     observer.observe(stage)
     observer.observe(paper)
     return () => observer.disconnect()
-  }, [applyView])
+  }, [applyView, scheduleResolution])
 
   // The floating controls stay on screen while the writing sheet is visible, even when the page scrolls.
   useEffect(() => {
@@ -236,7 +258,18 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     if (!stage) return
 
     const onWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey) return
+      if (!event.ctrlKey) {
+        // Sheet taller / wider than the viewport (fullscreen or zoomed): wheel scrolls it.
+        const paper = paperRef.current
+        const before = viewRef.current
+        if (!paper) return
+        if (paper.offsetHeight * before.z <= stage.clientHeight + 1 && paper.offsetWidth * before.z <= stage.clientWidth + 1) return
+        const unit = event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? 400 : 1
+        applyView(before.z, before.x - event.deltaX * unit, before.y - event.deltaY * unit)
+        const after = viewRef.current
+        if (after.x !== before.x || after.y !== before.y) event.preventDefault()
+        return
+      }
       event.preventDefault()
       const raw = event.deltaMode === 1 ? event.deltaY * 33 : event.deltaMode === 2 ? event.deltaY * 400 : event.deltaY
       const delta = Math.max(-120, Math.min(120, raw))
@@ -424,7 +457,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     ? 'fixed inset-0 z-[100] flex h-dvh w-screen flex-col overflow-hidden bg-slate-100 p-2 sm:p-4'
     : 'space-y-3'
   const fullscreenContentClass = fullscreenActive
-    ? 'mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-2'
+    ? 'mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col gap-2'
     : 'space-y-3'
 
   return (

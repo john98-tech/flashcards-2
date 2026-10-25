@@ -2,19 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 
+// Logical page size. Strokes are stored in these units (vector data); the <canvas> backing store
+// is re-rendered from the strokes at whatever resolution the screen / zoom needs, so ink stays sharp.
 export const CANVAS_WIDTH = 1000
 export const CANVAS_HEIGHT = 1400
 const MAX_HISTORY = 10
+const MIN_RENDER_SCALE = 1
+// 3.25 -> 3250 x 4550 px (~14.8M px): safely under the iOS / mobile canvas area limit.
+const MAX_RENDER_SCALE = 3.25
 
 export type DrawingTool = 'pen' | 'eraser'
 
-type Patch = { x: number; y: number; imageData: ImageData }
+type Point = { x: number; y: number; pressure: number }
+type StrokeData = { tool: DrawingTool; color: string; size: number; points: Point[] }
+
 export type DrawingPage = {
   id: number
   blob: Blob | null
   hasContent: boolean
-  undoStack: Patch[]
-  redoStack: Patch[]
+  strokes: StrokeData[]
+  // History keeps whole (immutable) stroke lists, so undo / redo is just swapping arrays.
+  undoStack: StrokeData[][]
+  redoStack: StrokeData[][]
 }
 export type PageInfo = { pageCount: number; hasContent: boolean }
 export type DrawingEngineOptions = {
@@ -23,15 +32,11 @@ export type DrawingEngineOptions = {
   onError?: (message: string) => void
 }
 
-type Point = { x: number; y: number; pressure: number }
-type Stroke = {
+type ActiveStroke = {
   pointerId: number
-  tool: DrawingTool
-  color: string
-  size: number
+  data: StrokeData
   last: Point
   lastMidpoint: Point
-  bounds: { left: number; top: number; right: number; bottom: number }
 }
 
 const COLORS = ['#171717', '#2563eb', '#dc2626', '#15803d']
@@ -39,13 +44,10 @@ const makePage = (id: number): DrawingPage => ({
   id,
   blob: null,
   hasContent: false,
+  strokes: [],
   undoStack: [],
   redoStack: [],
 })
-
-function contextOf(canvas: HTMLCanvasElement) {
-  return canvas.getContext('2d', { willReadFrequently: true })
-}
 
 function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png', quality?: number) {
   return new Promise<Blob>((resolve, reject) => {
@@ -59,14 +61,15 @@ function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png', quality?: n
   })
 }
 
+// Pointer position -> logical page coordinates (independent of the canvas backing resolution).
 function pointFromEvent(event: PointerEvent, canvas: HTMLCanvasElement): Point {
   const rect = canvas.getBoundingClientRect()
   const pressure = event.pointerType === 'pen' && event.pressure > 0
     ? Math.max(0.75, Math.min(1.25, 0.85 + event.pressure * 0.3))
     : 1
   return {
-    x: ((event.clientX - rect.left) / Math.max(rect.width, 1)) * canvas.width,
-    y: ((event.clientY - rect.top) / Math.max(rect.height, 1)) * canvas.height,
+    x: ((event.clientX - rect.left) / Math.max(rect.width, 1)) * CANVAS_WIDTH,
+    y: ((event.clientY - rect.top) / Math.max(rect.height, 1)) * CANVAS_HEIGHT,
     pressure,
   }
 }
@@ -78,11 +81,78 @@ function coalescedEventsOf(event: PointerEvent): PointerEvent[] {
   return list.length > 0 ? list : [event]
 }
 
-function hasVisiblePixels(canvas: HTMLCanvasElement) {
-  if (!canvas.width || !canvas.height) return false
-  const context = contextOf(canvas)
-  if (!context) throw new Error('متصفحك لا يدعم مساحة الكتابة.')
-  const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+// ---------------------------------------------------------------------------
+// Stroke painting. The same three functions are used for live drawing and for replaying the
+// stored strokes, so a re-render at a new resolution looks identical to what the student drew.
+// ---------------------------------------------------------------------------
+function paintDot(context: CanvasRenderingContext2D, stroke: StrokeData, point: Point) {
+  context.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over'
+  context.fillStyle = stroke.color
+  context.beginPath()
+  context.arc(point.x, point.y, (stroke.size * point.pressure) / 2, 0, Math.PI * 2)
+  context.fill()
+  context.globalCompositeOperation = 'source-over'
+}
+
+function paintSegment(context: CanvasRenderingContext2D, stroke: StrokeData, last: Point, lastMidpoint: Point, point: Point): Point {
+  const middleX = (last.x + point.x) / 2
+  const middleY = (last.y + point.y) / 2
+  context.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over'
+  context.strokeStyle = stroke.color
+  context.lineWidth = stroke.size * point.pressure
+  context.beginPath()
+  context.moveTo(lastMidpoint.x, lastMidpoint.y)
+  context.quadraticCurveTo(last.x, last.y, middleX, middleY)
+  context.stroke()
+  context.globalCompositeOperation = 'source-over'
+  return { x: middleX, y: middleY, pressure: point.pressure }
+}
+
+function paintEnd(context: CanvasRenderingContext2D, stroke: StrokeData, last: Point, lastMidpoint: Point) {
+  context.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over'
+  context.strokeStyle = stroke.color
+  context.lineWidth = stroke.size * last.pressure
+  context.beginPath()
+  context.moveTo(lastMidpoint.x, lastMidpoint.y)
+  context.quadraticCurveTo(last.x, last.y, last.x, last.y)
+  context.stroke()
+  context.globalCompositeOperation = 'source-over'
+}
+
+function replayStrokes(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, strokes: StrokeData[]) {
+  context.setTransform(1, 0, 0, 1, 0, 0)
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  context.setTransform(canvas.width / CANVAS_WIDTH, 0, 0, canvas.height / CANVAS_HEIGHT, 0, 0)
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  for (const stroke of strokes) {
+    const points = stroke.points
+    if (points.length === 0) continue
+    paintDot(context, stroke, points[0])
+    let last = points[0]
+    let lastMidpoint = points[0]
+    for (let index = 1; index < points.length; index++) {
+      lastMidpoint = paintSegment(context, stroke, last, lastMidpoint, points[index])
+      last = points[index]
+    }
+    paintEnd(context, stroke, last, lastMidpoint)
+  }
+}
+
+// A page "has content" when some pen ink survives the eraser. Only erased pages need the
+// (small, half-size) pixel check.
+function pageHasInk(page: DrawingPage) {
+  if (!page.strokes.some((stroke) => stroke.tool === 'pen')) return false
+  if (!page.strokes.some((stroke) => stroke.tool === 'eraser')) return true
+  const probe = document.createElement('canvas')
+  probe.width = CANVAS_WIDTH / 2
+  probe.height = CANVAS_HEIGHT / 2
+  const context = probe.getContext('2d', { willReadFrequently: true })
+  if (!context) return true
+  replayStrokes(context, probe, page.strokes)
+  const { data } = context.getImageData(0, 0, probe.width, probe.height)
+  probe.width = 0
+  probe.height = 0
   for (let pixel = 3; pixel < data.length; pixel += 4) {
     if (data[pixel] > 8) return true
   }
@@ -100,7 +170,7 @@ export function useDrawingEngine(
   const operationIdRef = useRef(0)
   const onChangeRef = useRef(onChange)
   const onErrorRef = useRef(onError)
-  const strokeRef = useRef<Stroke | null>(null)
+  const strokeRef = useRef<ActiveStroke | null>(null)
   const penActiveRef = useRef(false)
   const pendingPointsRef = useRef<Point[]>([])
   const animationRef = useRef<number | null>(null)
@@ -108,6 +178,8 @@ export function useDrawingEngine(
   const canvasDisposedRef = useRef(false)
   const fallbackPointerIdRef = useRef<number | null>(null)
   const fallbackListenersRef = useRef<(() => void) | null>(null)
+  const renderScaleRef = useRef(MIN_RENDER_SCALE)
+  const pendingScaleRef = useRef<number | null>(null)
   const colorRef = useRef(COLORS[0])
   const penSizeRef = useRef(5)
   const eraserSizeRef = useRef(34)
@@ -132,28 +204,49 @@ export function useDrawingEngine(
     onErrorRef.current?.(message)
   }, [])
 
+  // Sizes the backing store to CANVAS * renderScale and keeps the logical 1000x1400 coordinate system.
   const initializeCanvases = useCallback(() => {
     const canvas = canvasRef.current
-    const shadow = shadowRef.current
-    if (!canvas || !shadow) throw new Error('تعذر تجهيز مساحة الكتابة.')
-    if (canvas.width !== CANVAS_WIDTH || canvas.height !== CANVAS_HEIGHT) {
-      canvas.width = CANVAS_WIDTH
-      canvas.height = CANVAS_HEIGHT
+    if (!canvas) throw new Error('تعذر تجهيز مساحة الكتابة.')
+    const scale = renderScaleRef.current
+    const width = Math.round(CANVAS_WIDTH * scale)
+    const height = Math.round(CANVAS_HEIGHT * scale)
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width
+      canvas.height = height
     }
-    if (shadow.width !== CANVAS_WIDTH || shadow.height !== CANVAS_HEIGHT) {
-      shadow.width = CANVAS_WIDTH
-      shadow.height = CANVAS_HEIGHT
-    }
-    const context = contextOf(canvas)
-    const shadowContext = contextOf(shadow)
-    if (!context || !shadowContext) throw new Error('متصفحك لا يدعم مساحة الكتابة.')
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('متصفحك لا يدعم مساحة الكتابة.')
+    context.setTransform(width / CANVAS_WIDTH, 0, 0, height / CANVAS_HEIGHT, 0, 0)
     context.lineCap = 'round'
     context.lineJoin = 'round'
-    shadowContext.lineCap = 'round'
-    shadowContext.lineJoin = 'round'
     canvasDisposedRef.current = false
-    return { canvas, shadow, context, shadowContext }
-  }, [canvasRef, shadowRef])
+    return { canvas, context }
+  }, [canvasRef])
+
+  const redraw = useCallback(() => {
+    const { canvas, context } = initializeCanvases()
+    const page = pagesRef.current[currentPageRef.current]
+    replayStrokes(context, canvas, page ? page.strokes : [])
+  }, [initializeCanvases])
+
+  // Called by the editor (debounced) when the on-screen size of the sheet changes: zoom, resize,
+  // fullscreen. Re-renders the vector strokes at the new resolution so nothing looks pixelated.
+  const setRenderScale = useCallback((requested: number) => {
+    if (!Number.isFinite(requested)) return
+    const next = Math.min(MAX_RENDER_SCALE, Math.max(MIN_RENDER_SCALE, Math.ceil(requested * 4) / 4))
+    if (strokeRef.current) {
+      pendingScaleRef.current = next
+      return
+    }
+    if (next === renderScaleRef.current) return
+    renderScaleRef.current = next
+    try {
+      redraw()
+    } catch (error) {
+      reportError(error)
+    }
+  }, [redraw, reportError])
 
   const updatePageList = useCallback(() => {
     const currentPages = pagesRef.current
@@ -180,67 +273,11 @@ export function useDrawingEngine(
     })
   }, [])
 
-  const saveCurrentPage = useCallback(async () => {
-    const page = pagesRef.current[currentPageRef.current]
-    const canvas = canvasRef.current
-    if (!page || !canvas || !page.hasContent) {
-      if (page) page.blob = null
-      return
-    }
-    page.blob = await canvasToBlob(canvas)
-  }, [canvasRef])
-
-  const updateShadowPatch = useCallback((patch: Patch) => {
-    const { shadowContext } = initializeCanvases()
-    shadowContext.putImageData(patch.imageData, patch.x, patch.y)
-  }, [initializeCanvases])
-
-  const setHistoryEntry = useCallback((page: DrawingPage, bounds: Stroke['bounds']) => {
-    const canvas = canvasRef.current
-    const shadow = shadowRef.current
-    if (!canvas || !shadow) return
-    const left = Math.max(0, Math.floor(bounds.left))
-    const top = Math.max(0, Math.floor(bounds.top))
-    const right = Math.min(canvas.width, Math.ceil(bounds.right))
-    const bottom = Math.min(canvas.height, Math.ceil(bounds.bottom))
-    if (right <= left || bottom <= top) return
-    const width = right - left
-    const height = bottom - top
-    const beforeContext = contextOf(shadow)
-    if (!beforeContext) throw new Error('تعذر تجهيز سجل التراجع.')
-    const before: Patch = { x: left, y: top, imageData: beforeContext.getImageData(left, top, width, height) }
-    page.undoStack.push(before)
-    if (page.undoStack.length > MAX_HISTORY) page.undoStack.shift()
-    page.redoStack.length = 0
-    const { shadowContext } = initializeCanvases()
-    // Erased pixels are transparent: clear first, otherwise the shadow keeps the erased ink
-    // and a later undo would bring it back.
-    shadowContext.clearRect(left, top, width, height)
-    shadowContext.drawImage(canvas, left, top, width, height, left, top, width, height)
-    syncHistoryState()
-  }, [canvasRef, initializeCanvases, shadowRef, syncHistoryState])
-
-  const processPoint = useCallback((point: Point, stroke: Stroke) => {
+  const processPoint = useCallback((point: Point, stroke: ActiveStroke) => {
     const { context } = initializeCanvases()
-    const lineWidth = stroke.size * point.pressure
-    context.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over'
-    context.strokeStyle = stroke.color
-    context.fillStyle = stroke.color
-    context.lineWidth = lineWidth
-    context.beginPath()
-    const middleX = (stroke.last.x + point.x) / 2
-    const middleY = (stroke.last.y + point.y) / 2
-    context.moveTo(stroke.lastMidpoint.x, stroke.lastMidpoint.y)
-    context.quadraticCurveTo(stroke.last.x, stroke.last.y, middleX, middleY)
-    context.stroke()
-    context.globalCompositeOperation = 'source-over'
-    const margin = stroke.size * 0.65 + 2
-    stroke.bounds.left = Math.min(stroke.bounds.left, stroke.last.x - margin, point.x - margin)
-    stroke.bounds.top = Math.min(stroke.bounds.top, stroke.last.y - margin, point.y - margin)
-    stroke.bounds.right = Math.max(stroke.bounds.right, stroke.last.x + margin, point.x + margin)
-    stroke.bounds.bottom = Math.max(stroke.bounds.bottom, stroke.last.y + margin, point.y + margin)
+    stroke.lastMidpoint = paintSegment(context, stroke.data, stroke.last, stroke.lastMidpoint, point)
+    stroke.data.points.push(point)
     stroke.last = point
-    stroke.lastMidpoint = { x: middleX, y: middleY, pressure: point.pressure }
   }, [initializeCanvases])
 
   const drawPendingPoints = useCallback(() => {
@@ -258,6 +295,21 @@ export function useDrawingEngine(
     }
   }, [drawPendingPoints])
 
+  const releaseStroke = useCallback(() => {
+    strokeRef.current = null
+    pendingPointsRef.current.length = 0
+    penActiveRef.current = false
+    fallbackPointerIdRef.current = null
+    fallbackListenersRef.current?.()
+    fallbackListenersRef.current = null
+    setIsDrawing(false)
+    const pending = pendingScaleRef.current
+    if (pending !== null) {
+      pendingScaleRef.current = null
+      setRenderScale(pending)
+    }
+  }, [setRenderScale])
+
   const finishStroke = useCallback((pointerId?: number) => {
     const stroke = strokeRef.current
     if (!stroke || (pointerId !== undefined && stroke.pointerId !== pointerId)) return
@@ -266,32 +318,27 @@ export function useDrawingEngine(
       animationRef.current = null
     }
     drawPendingPoints()
-    const { context } = initializeCanvases()
-    context.beginPath()
-    context.moveTo(stroke.lastMidpoint.x, stroke.lastMidpoint.y)
-    context.quadraticCurveTo(stroke.last.x, stroke.last.y, stroke.last.x, stroke.last.y)
-    context.strokeStyle = stroke.color
-    context.lineWidth = stroke.size * stroke.last.pressure
-    context.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over'
-    context.stroke()
-    context.globalCompositeOperation = 'source-over'
     try {
-      setHistoryEntry(pagesRef.current[currentPageRef.current], stroke.bounds)
-      updateContentState(currentPageRef.current, stroke.tool === 'pen' || hasVisiblePixels(context.canvas))
+      const { context } = initializeCanvases()
+      paintEnd(context, stroke.data, stroke.last, stroke.lastMidpoint)
+      const index = currentPageRef.current
+      const page = pagesRef.current[index]
+      if (page) {
+        page.undoStack.push(page.strokes)
+        if (page.undoStack.length > MAX_HISTORY) page.undoStack.shift()
+        page.redoStack.length = 0
+        page.strokes = [...page.strokes, stroke.data]
+        updateContentState(index, pageHasInk(page))
+        syncHistoryState()
+      }
     } catch (error) {
       reportError(error)
     }
-    strokeRef.current = null
-    pendingPointsRef.current.length = 0
-    penActiveRef.current = false
-    fallbackPointerIdRef.current = null
-    fallbackListenersRef.current?.()
-    fallbackListenersRef.current = null
-    setIsDrawing(false)
-  }, [drawPendingPoints, initializeCanvases, reportError, setHistoryEntry, updateContentState])
+    releaseStroke()
+  }, [drawPendingPoints, initializeCanvases, releaseStroke, reportError, syncHistoryState, updateContentState])
 
   // Aborts the stroke in progress without saving it (a second finger landed, so the gesture is
-  // a pinch / pan, not writing). The shadow canvas still holds the pre-stroke pixels.
+  // a pinch / pan, not writing). Strokes are only committed on finish, so a repaint is enough.
   const cancelStroke = useCallback(() => {
     const stroke = strokeRef.current
     if (!stroke) return
@@ -300,27 +347,14 @@ export function useDrawingEngine(
       animationRef.current = null
     }
     pendingPointsRef.current.length = 0
+    strokeRef.current = null
     try {
-      const { canvas, shadow, context } = initializeCanvases()
-      const left = Math.max(0, Math.floor(stroke.bounds.left) - 2)
-      const top = Math.max(0, Math.floor(stroke.bounds.top) - 2)
-      const right = Math.min(canvas.width, Math.ceil(stroke.bounds.right) + 2)
-      const bottom = Math.min(canvas.height, Math.ceil(stroke.bounds.bottom) + 2)
-      if (right > left && bottom > top) {
-        context.globalCompositeOperation = 'source-over'
-        context.clearRect(left, top, right - left, bottom - top)
-        context.drawImage(shadow, left, top, right - left, bottom - top, left, top, right - left, bottom - top)
-      }
+      redraw()
     } catch (error) {
       reportError(error)
     }
-    strokeRef.current = null
-    penActiveRef.current = false
-    fallbackPointerIdRef.current = null
-    fallbackListenersRef.current?.()
-    fallbackListenersRef.current = null
-    setIsDrawing(false)
-  }, [initializeCanvases, reportError])
+    releaseStroke()
+  }, [redraw, releaseStroke, reportError])
 
   const pointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || switchingRef.current) return
@@ -344,44 +378,30 @@ export function useDrawingEngine(
     const point = pointFromEvent(event.nativeEvent, canvas)
     const activeTool = tool
     const size = activeTool === 'eraser' ? eraserSizeRef.current : penSizeRef.current
-    const margin = size * 0.65 + 2
-    strokeRef.current = {
-      pointerId: event.pointerId,
+    const data: StrokeData = {
       tool: activeTool,
       color: activeTool === 'eraser' ? '#000000' : colorRef.current,
       size,
-      last: point,
-      lastMidpoint: point,
-      bounds: { left: point.x, top: point.y, right: point.x, bottom: point.y },
+      points: [point],
     }
-    context.beginPath()
-    context.arc(point.x, point.y, size * point.pressure / 2, 0, Math.PI * 2)
-    context.fillStyle = activeTool === 'eraser' ? '#000000' : colorRef.current
-    context.globalCompositeOperation = activeTool === 'eraser' ? 'destination-out' : 'source-over'
-    context.fill()
-    context.globalCompositeOperation = 'source-over'
-    strokeRef.current.bounds = {
-      left: point.x - size / 2 - margin,
-      top: point.y - size / 2 - margin,
-      right: point.x + size / 2 + margin,
-      bottom: point.y + size / 2 + margin,
-    }
+    strokeRef.current = { pointerId: event.pointerId, data, last: point, lastMidpoint: point }
+    paintDot(context, data, point)
     setIsDrawing(true)
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
     } catch {
       const pointerId = event.pointerId
-      const canvas = event.currentTarget
+      const target = event.currentTarget
       fallbackPointerIdRef.current = pointerId
       const onMove = (nativeEvent: PointerEvent) => {
         if (nativeEvent.pointerId !== pointerId) return
         const coalesced = coalescedEventsOf(nativeEvent)
-        schedulePoints(coalesced.map((item) => pointFromEvent(item, canvas)))
+        schedulePoints(coalesced.map((item) => pointFromEvent(item, target)))
       }
       const onEnd = (nativeEvent: PointerEvent) => {
         if (nativeEvent.pointerId !== pointerId) return
         if (nativeEvent.type === 'pointerup') {
-          schedulePoints([pointFromEvent(nativeEvent, canvas)])
+          schedulePoints([pointFromEvent(nativeEvent, target)])
         }
         finishStroke(pointerId)
       }
@@ -394,7 +414,7 @@ export function useDrawingEngine(
         window.removeEventListener('pointercancel', onEnd)
       }
     }
-  }, [eraserSizeRef, finishStroke, initializeCanvases, reportError, schedulePoints, tool])
+  }, [finishStroke, initializeCanvases, reportError, schedulePoints, tool])
 
   const pointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (fallbackPointerIdRef.current === event.pointerId) return
@@ -402,11 +422,11 @@ export function useDrawingEngine(
     if (cursorRef.current && tool === 'eraser' && event.pointerType !== 'touch') {
       const scale = rect.width / CANVAS_WIDTH
       const diameter = eraserSizeRef.current * scale
-      cursorRef.current.style.width = `${diameter}px`
-      cursorRef.current.style.height = `${diameter}px`
+      cursorRef.current.style.width = diameter + 'px'
+      cursorRef.current.style.height = diameter + 'px'
       // The cursor ring lives outside the zoomed paper layer, so position it against its own host.
       const host = (cursorRef.current.parentElement ?? event.currentTarget).getBoundingClientRect()
-      cursorRef.current.style.transform = `translate(${event.clientX - host.left - diameter / 2}px, ${event.clientY - host.top - diameter / 2}px)`
+      cursorRef.current.style.transform = 'translate(' + (event.clientX - host.left - diameter / 2) + 'px, ' + (event.clientY - host.top - diameter / 2) + 'px)'
       cursorRef.current.style.opacity = '1'
     }
     const stroke = strokeRef.current
@@ -415,7 +435,7 @@ export function useDrawingEngine(
     const nativeEvent = event.nativeEvent
     const coalesced = coalescedEventsOf(nativeEvent)
     schedulePoints(coalesced.map((item) => pointFromEvent(item, event.currentTarget)))
-  }, [eraserSizeRef, schedulePoints, tool])
+  }, [schedulePoints, tool])
 
   const pointerUp = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (fallbackPointerIdRef.current === event.pointerId) return
@@ -448,30 +468,24 @@ export function useDrawingEngine(
 
   const applyHistory = useCallback((direction: 'undo' | 'redo') => {
     if (strokeRef.current || switchingRef.current) return
-    const page = pagesRef.current[currentPageRef.current]
-    const canvas = canvasRef.current
-    if (!page || !canvas) return
+    const index = currentPageRef.current
+    const page = pagesRef.current[index]
+    if (!page) return
     const source = direction === 'undo' ? page.undoStack : page.redoStack
     const destination = direction === 'undo' ? page.redoStack : page.undoStack
-    const patch = source.pop()
-    if (!patch) return
-    const { context, shadowContext } = initializeCanvases()
-    const previous: Patch = {
-      x: patch.x,
-      y: patch.y,
-      imageData: context.getImageData(patch.x, patch.y, patch.imageData.width, patch.imageData.height),
-    }
-    destination.push(previous)
-    if (direction === 'redo' && page.undoStack.length > MAX_HISTORY) page.undoStack.shift()
-    context.putImageData(patch.imageData, patch.x, patch.y)
-    shadowContext.putImageData(patch.imageData, patch.x, patch.y)
+    const snapshot = source.pop()
+    if (!snapshot) return
+    destination.push(page.strokes)
+    if (destination.length > MAX_HISTORY) destination.shift()
+    page.strokes = snapshot
     try {
-      updateContentState(currentPageRef.current, hasVisiblePixels(canvas))
+      redraw()
+      updateContentState(index, pageHasInk(page))
     } catch (error) {
       reportError(error)
     }
     syncHistoryState()
-  }, [canvasRef, initializeCanvases, reportError, syncHistoryState, updateContentState])
+  }, [redraw, reportError, syncHistoryState, updateContentState])
 
   const undo = useCallback(() => applyHistory('undo'), [applyHistory])
   const redo = useCallback(() => applyHistory('redo'), [applyHistory])
@@ -479,22 +493,21 @@ export function useDrawingEngine(
   const clearPage = useCallback(() => {
     if (strokeRef.current || switchingRef.current) return
     try {
-      const { canvas, context, shadowContext } = initializeCanvases()
-      const page = pagesRef.current[currentPageRef.current]
+      const index = currentPageRef.current
+      const page = pagesRef.current[index]
       if (!page) return
-      const before: Patch = { x: 0, y: 0, imageData: context.getImageData(0, 0, canvas.width, canvas.height) }
-      context.clearRect(0, 0, canvas.width, canvas.height)
-      shadowContext.clearRect(0, 0, shadowRef.current?.width ?? 0, shadowRef.current?.height ?? 0)
-      page.undoStack.push(before)
+      page.undoStack.push(page.strokes)
       if (page.undoStack.length > MAX_HISTORY) page.undoStack.shift()
       page.redoStack.length = 0
+      page.strokes = []
       page.blob = null
-      updateContentState(currentPageRef.current, false)
+      redraw()
+      updateContentState(index, false)
       syncHistoryState()
     } catch (error) {
       reportError(error)
     }
-  }, [initializeCanvases, reportError, shadowRef, syncHistoryState, updateContentState])
+  }, [redraw, reportError, syncHistoryState, updateContentState])
 
   const switchPage = useCallback(async (nextIndex: number) => {
     if (
@@ -504,39 +517,20 @@ export function useDrawingEngine(
       switchingRef.current ||
       strokeRef.current
     ) return
-    const operationId = ++operationIdRef.current
     switchingRef.current = true
     setIsSwitching(true)
     try {
-      await saveCurrentPage()
-      if (operationId !== operationIdRef.current) return
-      const page = pagesRef.current[nextIndex]
-      const bitmap = page.blob ? await createImageBitmap(page.blob) : null
-      try {
-        if (operationId !== operationIdRef.current) return
-        const { canvas, shadow, context, shadowContext } = initializeCanvases()
-        context.clearRect(0, 0, canvas.width, canvas.height)
-        shadowContext.clearRect(0, 0, shadow.width, shadow.height)
-        if (bitmap) {
-          context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-          shadowContext.drawImage(bitmap, 0, 0, shadow.width, shadow.height)
-          page.blob = null
-        }
-        currentPageRef.current = nextIndex
-        setCurrentPage(nextIndex)
-        syncHistoryState()
-      } finally {
-        bitmap?.close()
-      }
+      currentPageRef.current = nextIndex
+      setCurrentPage(nextIndex)
+      redraw()
+      syncHistoryState()
     } catch (error) {
       reportError(error)
     } finally {
-      if (operationId === operationIdRef.current) {
-        switchingRef.current = false
-        setIsSwitching(false)
-      }
+      switchingRef.current = false
+      setIsSwitching(false)
     }
-  }, [initializeCanvases, reportError, saveCurrentPage, syncHistoryState])
+  }, [redraw, reportError, syncHistoryState])
 
   const addPage = useCallback(async () => {
     if (pagesRef.current.length >= effectiveMaxPages || switchingRef.current || strokeRef.current) return
@@ -553,47 +547,29 @@ export function useDrawingEngine(
       clearPage()
       return
     }
-    const operationId = ++operationIdRef.current
     switchingRef.current = true
     setIsSwitching(true)
     try {
-      await saveCurrentPage()
-      if (operationId !== operationIdRef.current) return
       const nextIndex = Math.min(current, pagesRef.current.length - 2)
-      const target = pagesRef.current[current === pagesRef.current.length - 1 ? current - 1 : current + 1]
-      const targetBitmap = target.blob ? await createImageBitmap(target.blob) : null
-      try {
-        if (operationId !== operationIdRef.current) return
-        const removed = pagesRef.current.splice(current, 1)[0]
-        if (removed) {
-          removed.blob = null
-          removed.undoStack.length = 0
-          removed.redoStack.length = 0
-        }
-        const { canvas, shadow, context, shadowContext } = initializeCanvases()
-        context.clearRect(0, 0, canvas.width, canvas.height)
-        shadowContext.clearRect(0, 0, shadow.width, shadow.height)
-        if (targetBitmap) {
-          context.drawImage(targetBitmap, 0, 0, canvas.width, canvas.height)
-          shadowContext.drawImage(targetBitmap, 0, 0, shadow.width, shadow.height)
-          target.blob = null
-        }
-        currentPageRef.current = nextIndex
-        setCurrentPage(nextIndex)
-        updatePageList()
-        syncHistoryState()
-      } finally {
-        targetBitmap?.close()
+      const removed = pagesRef.current.splice(current, 1)[0]
+      if (removed) {
+        removed.blob = null
+        removed.strokes = []
+        removed.undoStack.length = 0
+        removed.redoStack.length = 0
       }
+      currentPageRef.current = nextIndex
+      setCurrentPage(nextIndex)
+      redraw()
+      updatePageList()
+      syncHistoryState()
     } catch (error) {
       reportError(error)
     } finally {
-      if (operationId === operationIdRef.current) {
-        switchingRef.current = false
-        setIsSwitching(false)
-      }
+      switchingRef.current = false
+      setIsSwitching(false)
     }
-  }, [clearPage, initializeCanvases, reportError, saveCurrentPage, syncHistoryState, updatePageList])
+  }, [clearPage, redraw, reportError, syncHistoryState, updatePageList])
 
   const hasContent = useCallback(() => pagesRef.current.some((page) => page.hasContent), [])
 
@@ -604,6 +580,7 @@ export function useDrawingEngine(
     animationRef.current = null
     strokeRef.current = null
     pendingPointsRef.current.length = 0
+    pendingScaleRef.current = null
     fallbackPointerIdRef.current = null
     fallbackListenersRef.current?.()
     fallbackListenersRef.current = null
@@ -612,6 +589,7 @@ export function useDrawingEngine(
     setIsSwitching(false)
     for (const page of pagesRef.current) {
       page.blob = null
+      page.strokes = []
       page.undoStack.length = 0
       page.redoStack.length = 0
     }
@@ -634,27 +612,45 @@ export function useDrawingEngine(
     updatePageList()
   }, [canvasRef, shadowRef, updatePageList])
 
+  // Export always renders every page from its strokes at the fixed 1000x1400 size, so the image
+  // sent to the AI is the same no matter how far the student zoomed in.
   const exportPages = useCallback(async () => {
     if (switchingRef.current || strokeRef.current) throw new Error('انتظر حتى ينتهي حفظ الصفحة الحالية.')
     const operationId = operationIdRef.current
     switchingRef.current = true
     setIsSwitching(true)
-    const page = pagesRef.current[currentPageRef.current]
     try {
-      if (page) updateContentState(currentPageRef.current, hasVisiblePixels(initializeCanvases().canvas))
-      await saveCurrentPage()
-      if (operationId !== operationIdRef.current) throw new Error('أُعيد ضبط صفحات الإجابة قبل اكتمال التصدير.')
-      if (page) page.blob = null
+      const scratch = document.createElement('canvas')
+      scratch.width = CANVAS_WIDTH
+      scratch.height = CANVAS_HEIGHT
+      const scratchContext = scratch.getContext('2d')
+      if (!scratchContext) throw new Error('تعذر تجهيز صورة صفحة الإجابة.')
+      try {
+        for (const page of pagesRef.current) {
+          if (!page.hasContent) {
+            page.blob = null
+            continue
+          }
+          replayStrokes(scratchContext, scratch, page.strokes)
+          page.blob = await canvasToBlob(scratch)
+          if (operationId !== operationIdRef.current) throw new Error('أُعيد ضبط صفحات الإجابة قبل اكتمال التصدير.')
+        }
+      } finally {
+        scratch.width = 0
+        scratch.height = 0
+      }
       const { exportPages: convertPages } = await import('./exportPages')
       if (operationId !== operationIdRef.current) throw new Error('أُعيد ضبط صفحات الإجابة قبل اكتمال التصدير.')
-      return await convertPages(pagesRef.current, currentPageRef.current, canvasRef.current)
+      // activePage = -1: every page is read from its rendered blob.
+      return await convertPages(pagesRef.current, -1, canvasRef.current)
     } finally {
+      for (const page of pagesRef.current) page.blob = null
       if (operationId === operationIdRef.current) {
         switchingRef.current = false
         setIsSwitching(false)
       }
     }
-  }, [canvasRef, initializeCanvases, saveCurrentPage, updateContentState])
+  }, [canvasRef])
 
   useEffect(() => {
     if (pagesRef.current.length === 0) {
@@ -673,7 +669,7 @@ export function useDrawingEngine(
       ? new ResizeObserver(() => {
           if (!canvasDisposedRef.current) return
           try {
-            initializeCanvases()
+            redraw()
           } catch (error) {
             reportError(error)
           }
@@ -703,6 +699,7 @@ export function useDrawingEngine(
       pendingPointsRef.current.length = 0
       for (const page of pagesRef.current) {
         page.blob = null
+        page.strokes = []
         page.undoStack.length = 0
         page.redoStack.length = 0
       }
@@ -716,7 +713,7 @@ export function useDrawingEngine(
         shadowRef.current.height = 0
       }
     }
-  }, [canvasRef, initializeCanvases, redo, reportError, shadowRef, undo, updatePageList])
+  }, [canvasRef, initializeCanvases, redo, redraw, reportError, shadowRef, undo, updatePageList])
 
   const handleContextMenu = useCallback((event: React.MouseEvent) => event.preventDefault(), [])
   const handlePointerLeave = useCallback(() => {
@@ -747,6 +744,7 @@ export function useDrawingEngine(
     setTool: setCurrentTool,
     setColor: changePenColor,
     setBrushSize: changeBrushSize,
+    setRenderScale,
     undo,
     redo,
     clearPage,
