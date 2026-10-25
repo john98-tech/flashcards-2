@@ -96,7 +96,7 @@ const replaceFiles = (api: ExcalidrawImperativeAPI, files: BinaryFileData[]) => 
 }
 const UI_OPTIONS = {
   canvasActions: {
-    changeViewBackgroundColor: false,
+    changeViewBackgroundColor: true,
     clearCanvas: false,
     export: false as const,
     loadScene: false,
@@ -128,6 +128,12 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
   const [currentPage, setCurrentPage] = useState(0)
   const [isSwitching, setIsSwitching] = useState(false)
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
+  const [brushColor, setBrushColor] = useState('#0f766e')
+  const [brushSize, setBrushSize] = useState(2)
+  const [backgroundColor, setBackgroundColor] = useState('#ffffff')
+  const brushColorRef = useRef(brushColor)
+  const brushSizeRef = useRef(brushSize)
+  const backgroundColorRef = useRef(backgroundColor)
 
   const sceneSignature = (elements: PageElements) => elements
     .map((element) => `${element.id}:${element.version}:${element.isDeleted ? 1 : 0}`)
@@ -169,6 +175,18 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     if (!isSwitchingRef.current) {
       sceneRevisionRef.current += 1
       saveCurrentPage(elements, appState, files)
+      if (brushColorRef.current !== appState.currentItemStrokeColor) {
+        brushColorRef.current = appState.currentItemStrokeColor
+        setBrushColor(appState.currentItemStrokeColor)
+      }
+      if (brushSizeRef.current !== appState.currentItemStrokeWidth) {
+        brushSizeRef.current = appState.currentItemStrokeWidth
+        setBrushSize(appState.currentItemStrokeWidth)
+      }
+      if (backgroundColorRef.current !== appState.viewBackgroundColor) {
+        backgroundColorRef.current = appState.viewBackgroundColor
+        setBackgroundColor(appState.viewBackgroundColor)
+      }
     }
   }, [saveCurrentPage])
 
@@ -415,6 +433,12 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
       })
       api.history.clear()
       flattenedSignatureRef.current = sceneSignature(page.elements)
+      brushColorRef.current = api.getAppState().currentItemStrokeColor
+      setBrushColor(brushColorRef.current)
+      brushSizeRef.current = api.getAppState().currentItemStrokeWidth
+      setBrushSize(brushSizeRef.current)
+      backgroundColorRef.current = page.background
+      setBackgroundColor(page.background)
       updateHistoryState(page)
       currentPageRef.current = nextIndex
       setCurrentPage(nextIndex)
@@ -472,6 +496,12 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
     })
     api.history.clear()
     flattenedSignatureRef.current = sceneSignature(page.elements)
+    brushColorRef.current = api.getAppState().currentItemStrokeColor
+    setBrushColor(brushColorRef.current)
+    brushSizeRef.current = api.getAppState().currentItemStrokeWidth
+    setBrushSize(brushSizeRef.current)
+    backgroundColorRef.current = page.background
+    setBackgroundColor(page.background)
     updateHistoryState(page)
     requestAnimationFrame(() => {
       isSwitchingRef.current = false
@@ -558,6 +588,25 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
   const handlePointerUp: NonNullable<ExcalidrawProps['onPointerUp']> = useCallback(() => {
     scheduleFlatten()
   }, [scheduleFlatten])
+
+  const setPenColor = useCallback((color: string) => {
+    brushColorRef.current = color
+    setBrushColor(color)
+    apiRef.current?.updateScene({ appState: { currentItemStrokeColor: color } })
+  }, [])
+
+  const setPenSize = useCallback((size: number) => {
+    brushSizeRef.current = size
+    setBrushSize(size)
+    apiRef.current?.updateScene({ appState: { currentItemStrokeWidth: size } })
+  }, [])
+
+  const setPageBackground = useCallback((color: string) => {
+    backgroundColorRef.current = color
+    setBackgroundColor(color)
+    pagesRef.current[currentPageRef.current].background = color
+    apiRef.current?.updateScene({ appState: { viewBackgroundColor: color } })
+  }, [])
 
   const handleBoardKeyDownCapture = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target
@@ -659,6 +708,55 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 border-b border-slate-200/70 bg-white px-4 py-3">
+        <div className="flex items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+            <span className="relative size-9 overflow-hidden rounded-full bg-[conic-gradient(from_0deg,#ef4444,#eab308,#22c55e,#06b6d4,#3b82f6,#a855f7,#ef4444)] p-[3px] shadow-sm ring-1 ring-black/10">
+              <span className="block size-full rounded-full border-2 border-white" style={{ backgroundColor: brushColor }} />
+              <input
+                type="color"
+                value={brushColor}
+                onChange={(event) => setPenColor(event.target.value)}
+                aria-label="لون القلم"
+                title="اختار لون القلم"
+                className="absolute inset-0 size-full cursor-pointer opacity-0"
+              />
+            </span>
+            لون القلم
+          </label>
+
+          <div className="flex min-w-40 items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
+            <label htmlFor="dictation-pen-size" className="shrink-0 text-xs font-semibold text-slate-600">سمك القلم</label>
+            <input
+              id="dictation-pen-size"
+              type="range"
+              min={1}
+              max={100}
+              step={1}
+              value={brushSize}
+              onChange={(event) => setPenSize(Number(event.target.value))}
+              aria-label="سمك القلم من 1 إلى 100"
+              className="h-1.5 w-24 cursor-pointer accent-teal-700"
+            />
+            <output htmlFor="dictation-pen-size" className="min-w-7 text-center text-xs font-bold tabular-nums text-teal-800">{brushSize}</output>
+          </div>
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+          <span className="relative size-7 overflow-hidden rounded-lg border border-slate-200 shadow-sm" style={{ backgroundColor }}>
+            <input
+              type="color"
+              value={backgroundColor}
+              onChange={(event) => setPageBackground(event.target.value)}
+              aria-label="لون خلفية الصفحة"
+              title="اختار لون خلفية الصفحة"
+              className="absolute inset-0 size-full cursor-pointer opacity-0"
+            />
+          </span>
+          لون الخلفية
+        </label>
+      </div>
+
       <div className="relative min-h-0 flex-1 bg-[#f5f7f7] p-1.5 sm:p-3">
         <div className="pointer-events-none absolute inset-3 rounded-2xl bg-[radial-gradient(ellipse_at_top,_rgba(13,148,136,0.09),_transparent_55%)]" />
         <div className="relative h-full overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-sm">
@@ -666,7 +764,7 @@ export const DrawingBoard = forwardRef<DrawingBoardHandle>(function DrawingBoard
             excalidrawAPI={(api) => { apiRef.current = api }}
             onChange={handleChange}
             onPointerUp={handlePointerUp}
-            initialData={{ appState: { currentItemRoughness: 0, activeTool: { type: 'freedraw', customType: null, locked: true, lastActiveTool: null } } }}
+            initialData={{ appState: { currentItemRoughness: 0, currentItemStrokeColor: brushColor, currentItemStrokeWidth: brushSize, activeTool: { type: 'freedraw', customType: null, locked: true, lastActiveTool: null } } }}
             langCode="ar-SA"
             theme="light"
             name="التسميع بالكتابة"

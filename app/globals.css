@@ -114,6 +114,10 @@
   display: none !important;
 }
 
+.dictation-board .App-bottom-bar .undo-redo-buttons {
+  display: none !important;
+}
+
 .dictation-board .App-toolbar [data-testid="toolbar-selection"] {
   display: none !important;
 }
