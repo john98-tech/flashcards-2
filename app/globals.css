@@ -114,6 +114,10 @@
   display: none !important;
 }
 
+.dictation-board .App-toolbar [data-testid="toolbar-selection"] {
+  display: none !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
