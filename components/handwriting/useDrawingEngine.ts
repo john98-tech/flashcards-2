@@ -206,6 +206,9 @@ export function useDrawingEngine(
     if (page.undoStack.length > MAX_HISTORY) page.undoStack.shift()
     page.redoStack.length = 0
     const { shadowContext } = initializeCanvases()
+    // Erased pixels are transparent: clear first, otherwise the shadow keeps the erased ink
+    // and a later undo would bring it back.
+    shadowContext.clearRect(left, top, width, height)
     shadowContext.drawImage(canvas, left, top, width, height, left, top, width, height)
     syncHistoryState()
   }, [canvasRef, initializeCanvases, shadowRef, syncHistoryState])
@@ -267,7 +270,7 @@ export function useDrawingEngine(
     context.globalCompositeOperation = 'source-over'
     try {
       setHistoryEntry(pagesRef.current[currentPageRef.current], stroke.bounds)
-      updateContentState(currentPageRef.current, hasVisiblePixels(context.canvas))
+      updateContentState(currentPageRef.current, stroke.tool === 'pen' || hasVisiblePixels(context.canvas))
     } catch (error) {
       reportError(error)
     }
@@ -281,8 +284,13 @@ export function useDrawingEngine(
   }, [drawPendingPoints, initializeCanvases, reportError, setHistoryEntry, updateContentState])
 
   const pointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!event.isPrimary || switchingRef.current || strokeRef.current) return
+    if (!event.isPrimary || switchingRef.current) return
     if (event.pointerType === 'touch' && penActiveRef.current) return
+    if (strokeRef.current) {
+      // A stroke whose pointerup was lost would block drawing forever; close it first.
+      if (strokeRef.current.pointerId === event.pointerId) return
+      finishStroke(strokeRef.current.pointerId)
+    }
     if (event.pointerType === 'pen') penActiveRef.current = true
     event.preventDefault()
     const { canvas, context } = initializeCanvases()
@@ -425,7 +433,6 @@ export function useDrawingEngine(
 
   const clearPage = useCallback(() => {
     if (strokeRef.current || switchingRef.current) return
-    if (!window.confirm('تمسح كل ما كتبته في الصفحة الحالية؟ يمكنك التراجع عن المسح.')) return
     try {
       const { canvas, context, shadowContext } = initializeCanvases()
       const page = pagesRef.current[currentPageRef.current]
@@ -501,7 +508,6 @@ export function useDrawingEngine(
       clearPage()
       return
     }
-    if (!window.confirm(`تحذف الصفحة ${current + 1} وكل ما فيها؟`)) return
     const operationId = ++operationIdRef.current
     switchingRef.current = true
     setIsSwitching(true)

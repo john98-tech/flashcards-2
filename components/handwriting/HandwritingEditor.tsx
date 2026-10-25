@@ -14,10 +14,11 @@ export type HandwritingEditorHandle = {
 type Props = {
   maxPages?: number
   onChange?: (info: PageInfo) => void
+  onError?: (message: string) => void
 }
 
 export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(function HandwritingEditor(
-  { maxPages = 10, onChange },
+  { maxPages = 10, onChange, onError },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -26,6 +27,12 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fallbackFullscreen, setFallbackFullscreen] = useState(false)
   const fullscreenActive = isFullscreen || fallbackFullscreen
+  const [errorMessage, setErrorMessage] = useState('')
+  const [confirmAction, setConfirmAction] = useState<'clear' | 'delete' | null>(null)
+  const handleEngineError = useCallback((message: string) => {
+    setErrorMessage(message)
+    onError?.(message)
+  }, [onError])
   const {
     pages,
     currentPage,
@@ -57,7 +64,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     reset,
     exportPages,
     reportError,
-  } = useDrawingEngine(canvasRef, shadowRef, { maxPages, onChange })
+  } = useDrawingEngine(canvasRef, shadowRef, { maxPages, onChange, onError: handleEngineError })
 
   useImperativeHandle(ref, () => ({
     async exportPages() {
@@ -113,6 +120,25 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     void action().catch((error: unknown) => reportError(error))
   }, [reportError])
 
+  const askConfirm = useCallback((action: 'clear' | 'delete') => {
+    if (!pages[currentPage]?.hasContent) {
+      if (action === 'delete' && pages.length > 1) runPageAction(deletePage)
+      return
+    }
+    setConfirmAction(action)
+  }, [pages, currentPage, deletePage, runPageAction])
+
+  const runConfirmed = () => {
+    const action = confirmAction
+    setConfirmAction(null)
+    if (action === 'clear') clearPage()
+    else if (action === 'delete') runPageAction(deletePage)
+  }
+
+  const confirmMessage = confirmAction === 'delete' && pages.length > 1
+    ? 'تحذف الصفحة ' + (currentPage + 1) + ' وكل ما فيها؟'
+    : 'تمسح كل ما كتبته في الصفحة الحالية؟ يمكنك التراجع عن المسح.'
+
   const editorClass = fullscreenActive
     ? 'fixed inset-0 z-[100] flex h-dvh w-screen flex-col overflow-hidden bg-slate-100 p-2 sm:p-4'
     : 'space-y-3'
@@ -137,7 +163,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           onSizeChange={setBrushSize}
           onUndo={undo}
           onRedo={redo}
-          onClear={clearPage}
+          onClear={() => askConfirm('clear')}
           onFullscreen={() => void toggleFullscreen().catch((error: unknown) => reportError(error))}
         />
 
@@ -150,7 +176,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
             onPrevious={() => runPageAction(() => switchPage(currentPage - 1))}
             onNext={() => runPageAction(() => switchPage(currentPage + 1))}
             onAdd={() => runPageAction(addPage)}
-            onDelete={() => runPageAction(deletePage)}
+            onDelete={() => askConfirm('delete')}
           />
 
           <div className={fullscreenActive
@@ -167,16 +193,16 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
               </span>
             </div>
             <div className={fullscreenActive
-              ? 'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-slate-100 p-2'
+              ? 'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-slate-100 p-2 [container-type:size]'
               : 'relative aspect-[5/7] w-full overscroll-contain overflow-hidden bg-white'
             }>
               <div
                 className={fullscreenActive
-                  ? 'relative h-full max-h-full max-w-full flex-none overflow-hidden bg-white shadow-[0_12px_40px_-16px_rgba(15,23,42,0.3)]'
+                  ? 'relative flex-none overflow-hidden bg-white shadow-[0_12px_40px_-16px_rgba(15,23,42,0.3)]'
                   : 'absolute inset-0 overflow-hidden'
                 }
                 style={{
-                  ...(fullscreenActive ? { aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` } : {}),
+                  ...(fullscreenActive ? { aspectRatio: CANVAS_WIDTH + ' / ' + CANVAS_HEIGHT, width: 'min(100cqw, calc(100cqh * ' + CANVAS_WIDTH + ' / ' + CANVAS_HEIGHT + '))' } : {}),
                   backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent calc(100% - 1px), #e2eaf2 calc(100% - 1px), #e2eaf2 100%)',
                   backgroundSize: `100% ${(40 / CANVAS_HEIGHT) * 100}%`,
                 }}
@@ -210,6 +236,23 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           </p>
         </div>
       </div>
+      {errorMessage && (
+        <div role="alert" className="fixed inset-x-3 bottom-3 z-[120] mx-auto flex max-w-xl items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 shadow-lg">
+          <span>{errorMessage}</span>
+          <button type="button" onClick={() => setErrorMessage('')} className="shrink-0 rounded-lg px-2 py-1 font-semibold hover:bg-rose-100">إغلاق</button>
+        </div>
+      )}
+      {confirmAction && (
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 shadow-xl">
+            <p className="text-sm font-semibold leading-7 text-slate-800">{confirmMessage}</p>
+            <div className="flex gap-2">
+              <button type="button" onClick={runConfirmed} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-rose-600 px-3 text-sm font-semibold text-white hover:bg-rose-700">تأكيد</button>
+              <button type="button" onClick={() => setConfirmAction(null)} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
       <canvas ref={shadowRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" aria-hidden />
     </div>
   )
