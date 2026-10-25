@@ -1,16 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { BookOpenText, KeyRound, Layers, PenLine } from 'lucide-react'
+import { KeyRound, Layers, PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
 import { DeckEditor } from './deck-editor'
 import { CodesPanel } from './codes-panel'
-import { RecitationEditor } from './recitation-editor'
 import { DictationAdmin, type DictationAdminData } from './dictation-admin'
 
 type Section = 'flashcards' | 'dictation'
-type Tab = 'decks' | 'recitation' | 'codes'
+type Tab = 'decks' | 'codes'
 
 const noDictation: DictationAdminData = { subjects: [], lessons: [], loadError: null }
 
@@ -45,7 +44,7 @@ export function AdminTabs({
   )
 }
 
-// The flashcards admin, unchanged: Decks / old recitation / Access codes.
+// The flashcards admin: Decks / Access codes.
 function FlashcardsSection({ decks, groups }: { decks: DeckSummary[]; groups: DeckGroup[] }) {
   const [tab, setTab] = useState<Tab>('decks')
 
@@ -55,18 +54,12 @@ function FlashcardsSection({ decks, groups }: { decks: DeckSummary[]; groups: De
         <TabButton active={tab === 'decks'} onClick={() => setTab('decks')}>
           <Layers className="size-4" aria-hidden /> Decks
         </TabButton>
-        <TabButton active={tab === 'recitation'} onClick={() => setTab('recitation')}>
-          <BookOpenText className="size-4" aria-hidden /> التسميع الحالي
-        </TabButton>
         <TabButton active={tab === 'codes'} onClick={() => setTab('codes')} data-tour="admin-codes-tab" data-tour-action="open-admin-codes">
           <KeyRound className="size-4" aria-hidden /> Access codes
         </TabButton>
       </div>
       <div hidden={tab !== 'decks'}>
         <DeckEditor existingDecks={decks} existingGroups={groups} />
-      </div>
-      <div hidden={tab !== 'recitation'}>
-        <RecitationEditor decks={decks} />
       </div>
       <div hidden={tab !== 'codes'}>
         <CodesPanel decks={decks} />
