@@ -15,6 +15,7 @@ import {
   Pencil,
   Plus,
   Redo2,
+  Sparkles,
   Square,
   Trash2,
   Type,
@@ -520,6 +521,14 @@ export function NoteEditor({ lessonTitle, subjectName, text }: { lessonTitle: st
             <h1 className="truncate text-base font-bold" dir="auto">{lessonTitle}</h1>
             {subjectName && <p className="truncate text-xs text-muted-foreground" dir="auto">{subjectName}</p>}
           </div>
+          <button
+            type="button"
+            data-ai-correct-btn
+            className="ms-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Sparkles className="size-4" aria-hidden />
+            صحّح بالذكاء الاصطناعي
+          </button>
         </div>
 
         <div className="mx-auto w-full max-w-5xl overflow-x-auto px-3 pb-2" dir="ltr">
