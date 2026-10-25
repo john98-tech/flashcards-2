@@ -183,3 +183,27 @@ export async function loadReciteSource(deckId: string): Promise<string> {
   if (error) throw new Error(error.message)
   return data?.source_text ?? ''
 }
+
+
+export async function saveReciteConfig(deckId: string, sourceText: string, promptText: string) {
+  await requireAdmin()
+  if (!DECK_ID_RE.test(deckId)) throw new Error('Invalid lesson.')
+  if (sourceText.length > 2_000_000) throw new Error('Source text is too large.')
+  if (promptText.length > 100_000) throw new Error('Prompt is too large.')
+  const { error } = await db().from('recite_sources').upsert({
+    deck_id: deckId,
+    source_text: sourceText,
+    prompt_text: promptText,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'deck_id' })
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin')
+  revalidatePath('/recite', 'layout')
+}
+
+export async function loadReciteConfig(deckId: string): Promise<{ source: string; prompt: string }> {
+  await requireAdmin()
+  const { data, error } = await db().from('recite_sources').select('source_text, prompt_text').eq('deck_id', deckId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return { source: data?.source_text ?? '', prompt: data?.prompt_text ?? '' }
+}
