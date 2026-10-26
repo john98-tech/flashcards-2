@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { EditorContent, useEditor, useEditorState, type JSONContent } from '@tiptap/react'
-import { ArrowLeft, CheckCheck, FileText, KeyRound, ListTree, Loader2, PenTool, Sparkles, Type } from 'lucide-react'
+import { ArrowRight, CheckCheck, FileText, KeyRound, ListTree, Loader2, PenTool, Sparkles, Type, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GeminiError, useGeminiConfig } from '@/lib/gemini'
 import { gradeAttempt, type Report } from '@/lib/grade'
@@ -23,7 +23,6 @@ const draftKey = (id: string) => `kwk:recite:draft:${id}`
 const inkKey = (id: string) => `kwk:recite:ink:${id}`
 const reportKey = (id: string) => `kwk:recite:report:${id}`
 
-/** "Heading" lines become H2, lines starting with "-" become H3; each is followed by an empty paragraph to write in. */
 function outlineToDoc(outline: string) {
   const content: JSONContent[] = []
   for (const raw of outline.split('\n')) {
@@ -84,7 +83,6 @@ export function ReciteWorkspace({
     },
   })
 
-  // Restore the saved draft; otherwise start from the admin's outline.
   useEffect(() => {
     if (!editor) return
     let restored = false
@@ -111,13 +109,11 @@ export function ReciteWorkspace({
   const finish = async () => {
     if (busy) return
     if (!config) return setKeyOpen(true)
-    // Words beyond the outline headings themselves.
     const typed = editor?.getText({ blockSeparator: '\n' }).trim() ?? ''
     const onlyHeadings = typed.split('\n').filter((l) => l.trim() && !headings.some((h) => h.replace(/^[-–•*]\s*/, '') === l.trim())).length === 0
     const images = ink.current?.exportImages() ?? []
     if (onlyHeadings && images.length === 0) return setNotice('اكتب حاجة الأول قبل التصحيح.')
     if (!reference.trim() && !referenceImage) return setNotice('الدرس ده مالوش نص مرجعي لسه. كلّم الأدمن.')
-
     setNotice('')
     setBusy(true)
     abort.current = new AbortController()
@@ -147,81 +143,170 @@ export function ReciteWorkspace({
     }
   }
 
-  const tab = (m: Mode, label: string, icon: React.ReactNode) => (
-    <button
-      type="button"
-      onClick={() => setMode(m)}
-      aria-pressed={mode === m}
-      className={cn('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium', mode === m ? 'bg-primary text-primary-foreground' : 'text-neutral-600 hover:bg-neutral-100')}
-    >
-      {icon} {label}
-    </button>
-  )
-
   return (
-    <div className={cn('flex h-dvh flex-col bg-neutral-200/70', reciteFontVars)}>
-      <header className="z-30 flex shrink-0 items-center gap-2 border-b bg-white px-3 py-2">
-        <Link href="/recite" aria-label="رجوع" className="flex size-9 items-center justify-center rounded-lg text-neutral-600 hover:bg-neutral-100">
-          <ArrowLeft className="size-5" aria-hidden />
+    <div className={cn('flex h-dvh flex-col bg-neutral-100 dark:bg-neutral-900', reciteFontVars)}>
+      {/* ── Header ── */}
+      <header className="z-30 flex shrink-0 items-center gap-2 border-b bg-white/95 px-3 py-2 shadow-sm backdrop-blur-sm dark:bg-neutral-950/95 dark:border-neutral-800">
+        <Link
+          href="/recite"
+          aria-label="رجوع"
+          className="flex size-9 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+        >
+          <ArrowRight className="size-5" aria-hidden />
         </Link>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs text-primary" dir="auto">{lesson.subject}</p>
+
+        <div className="min-w-0 flex-1" dir="rtl">
+          <p className="truncate text-xs font-medium text-primary" dir="auto">{lesson.subject}</p>
           <h1 className="truncate text-sm font-bold sm:text-base" dir="auto">{lesson.title}</h1>
         </div>
-        <div className="flex gap-1 rounded-lg border bg-white p-0.5">
-          {tab('type', 'كتابة', <Type className="size-4" aria-hidden />)}
-          {tab('pen', 'قلم', <PenTool className="size-4" aria-hidden />)}
+
+        {/* Mode toggle */}
+        <div className="flex gap-0.5 rounded-xl border bg-neutral-50 p-1 dark:border-neutral-800 dark:bg-neutral-900">
+          {([['type', 'كتابة', <Type className="size-3.5" aria-hidden />], ['pen', 'قلم', <PenTool className="size-3.5" aria-hidden />]] as const).map(([m, label, icon]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m as Mode)}
+              aria-pressed={mode === m}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+                mode === m
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200',
+              )}
+            >
+              {icon} {label}
+            </button>
+          ))}
         </div>
-        <span className="hidden items-center gap-1 text-xs text-neutral-500 lg:flex" aria-live="polite">
-          {save === 'saving' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : save === 'saved' ? <CheckCheck className="size-3.5 text-success" aria-hidden /> : null}
-          {save === 'saving' ? 'بيحفظ...' : save === 'saved' ? 'اتحفظ' : ''}
+
+        {/* Save indicator */}
+        <span className="hidden items-center gap-1 text-xs text-neutral-400 lg:flex" aria-live="polite">
+          {save === 'saving' && <><Loader2 className="size-3.5 animate-spin" aria-hidden /> بيحفظ...</>}
+          {save === 'saved' && <><CheckCheck className="size-3.5 text-emerald-500" aria-hidden /> اتحفظ</>}
         </span>
+
+        {/* Outline toggle */}
         {headings.length > 0 && (
-          <button type="button" onClick={() => setShowOutline((v) => !v)} aria-label="العناوين" title="العناوين" className="flex size-9 items-center justify-center rounded-lg text-neutral-600 hover:bg-neutral-100">
+          <button
+            type="button"
+            onClick={() => setShowOutline((v) => !v)}
+            title="العناوين"
+            aria-label="العناوين"
+            className={cn(
+              'flex size-9 items-center justify-center rounded-xl transition-colors',
+              showOutline
+                ? 'bg-primary/10 text-primary'
+                : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800',
+            )}
+          >
             <ListTree className="size-5" aria-hidden />
           </button>
         )}
+
+        {/* Last report */}
         {lastReport && (
-          <button type="button" onClick={() => setReport(lastReport)} aria-label="آخر تقرير" title="آخر تقرير" className="flex size-9 items-center justify-center rounded-lg text-neutral-600 hover:bg-neutral-100">
+          <button
+            type="button"
+            onClick={() => setReport(lastReport)}
+            title="آخر تقرير"
+            aria-label="آخر تقرير"
+            className="flex size-9 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800"
+          >
             <FileText className="size-5" aria-hidden />
           </button>
         )}
+
+        {/* Gemini key */}
         <button
           type="button"
           onClick={() => setKeyOpen(true)}
-          aria-label="مفتاح Gemini"
           title="مفتاح Gemini"
-          className={cn('flex size-9 items-center justify-center rounded-lg hover:bg-neutral-100', ready && config ? 'text-success' : 'text-neutral-500')}
+          aria-label="مفتاح Gemini"
+          className={cn(
+            'flex size-9 items-center justify-center rounded-xl transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800',
+            ready && config ? 'text-emerald-500' : 'text-neutral-400',
+          )}
         >
           <KeyRound className="size-5" aria-hidden />
         </button>
-        <button type="button" onClick={finish} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-70">
+
+        {/* Submit */}
+        <button
+          type="button"
+          onClick={finish}
+          disabled={busy}
+          className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/30 transition-all hover:brightness-110 active:scale-95 disabled:opacity-70 disabled:shadow-none"
+        >
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
-          {busy ? 'بيصحح...' : 'خلصت، صحّح'}
+          <span className="hidden sm:inline">{busy ? 'بيصحح...' : 'خلصت، صحّح'}</span>
+          <span className="sm:hidden">{busy ? '...' : 'صحّح'}</span>
         </button>
       </header>
 
+      {/* ── Outline drawer ── */}
       {showOutline && (
-        <div className="flex shrink-0 flex-wrap gap-2 border-b bg-white px-4 py-2 text-xs" dir="auto">
-          {headings.map((h, i) => (
-            <span key={i} className={cn('rounded-full bg-accent px-3 py-1 text-accent-foreground', /^[-–•*]/.test(h) && 'opacity-75')}>
-              {h.replace(/^[-–•*]\s*/, '')}
-            </span>
-          ))}
+        <div className="shrink-0 border-b bg-primary/5 dark:bg-primary/10 dark:border-neutral-800" dir="rtl">
+          <div className="flex items-center justify-between gap-2 px-4 py-2">
+            <p className="text-xs font-semibold text-primary">عناوين الدرس</p>
+            <button type="button" onClick={() => setShowOutline(false)} className="text-neutral-400 hover:text-neutral-600" aria-label="إغلاق">
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 px-4 pb-3">
+            {headings.map((h, i) => (
+              <span
+                key={i}
+                className={cn(
+                  'rounded-full px-3 py-1 text-xs font-medium',
+                  /^[-–•*]/.test(h)
+                    ? 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
+                    : 'bg-primary/10 text-primary dark:bg-primary/20',
+                )}
+              >
+                {h.replace(/^[-–•*]\s*/, '')}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
+      {/* ── Notice banner ── */}
       {notice && (
-        <p role="status" onClick={() => setNotice('')} className="shrink-0 cursor-pointer bg-highlight px-4 py-2 text-center text-sm text-highlight-foreground">
-          {notice}
-        </p>
+        <div
+          role="status"
+          className="flex shrink-0 items-center justify-between gap-3 border-b bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/50"
+          dir="rtl"
+        >
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice('')} className="rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-800/50" aria-label="إغلاق">
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
       )}
 
+      {/* ── Type mode ── */}
       <div className={cn('flex min-h-0 flex-1 flex-col', mode !== 'type' && 'hidden')}>
         <EditorToolbar editor={editor} />
-        <p className="shrink-0 border-b bg-white px-4 py-1 text-end text-xs text-neutral-500">{s?.words ?? 0} كلمة</p>
-        <main className="flex-1 overflow-y-auto px-0 py-0 sm:px-4 sm:py-6" onClick={() => editor?.commands.focus()}>
-          <div className="mx-auto min-h-full w-full max-w-[860px] bg-white text-neutral-900 shadow-sm sm:min-h-[1100px] sm:rounded-sm sm:shadow-md" onClick={(e) => e.stopPropagation()}>
+
+        {/* Word count bar */}
+        <div className="flex shrink-0 items-center justify-between border-b bg-white/80 px-4 py-1.5 text-xs text-neutral-500 backdrop-blur-sm dark:bg-neutral-950/80 dark:border-neutral-800" dir="rtl">
+          <span className="flex items-center gap-1.5">
+            <span className={cn('size-2 rounded-full', (s?.words ?? 0) > 0 ? 'bg-emerald-400' : 'bg-neutral-300')} />
+            {(s?.words ?? 0) > 0 ? 'تكتب' : 'في انتظار الكتابة'}
+          </span>
+          <span className="font-medium">{s?.words ?? 0} كلمة</span>
+        </div>
+
+        <main
+          className="flex-1 overflow-y-auto bg-neutral-100 dark:bg-neutral-900"
+          style={{ backgroundImage: 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: '24px 24px' }}
+          onClick={() => editor?.commands.focus()}
+        >
+          <div
+            className="mx-auto my-6 min-h-[calc(100%-3rem)] w-full max-w-[860px] rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-neutral-950 dark:ring-white/5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <EditorContent editor={editor} />
           </div>
         </main>
