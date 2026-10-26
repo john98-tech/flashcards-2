@@ -668,7 +668,7 @@
 
 .hub-grid { display: grid; gap: 1.5rem; grid-template-columns: 1fr; perspective: 1200px; }
 @media (min-width: 768px) { .hub-grid { grid-template-columns: 1fr 1fr; gap: 2rem; } }
-@media (min-width: 900px) { .hub-grid { grid-template-columns: 1fr 1fr 1fr; } }
+@media (min-width: 900px) { .hub-grid { grid-template-columns: 1fr 1fr; } }
 
 .hub-card {
   --mx: 50%; --my: 50%; --rx: 0deg; --ry: 0deg;
