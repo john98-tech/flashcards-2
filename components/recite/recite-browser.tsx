@@ -5,86 +5,10 @@ import Link from 'next/link'
 import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, Clock, FolderOpen, KeyRound, Lock, PenLine, Sparkles, Trophy, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useGeminiConfig } from '@/lib/gemini'
-import { SectionSwitcher } from '@/components/section-switcher'
 import { ApiKeyDialog } from '@/components/recite/api-key-dialog'
 
 export type ReciteDeck = { id: string; title: string; subject: string; description: string; cardCount: number; open: boolean }
 export type ReciteGroup = { id: string; name: string; decks: ReciteDeck[] }
-
-function HeroSection({ onKeyClick, ready, config }: { onKeyClick: () => void; ready: boolean; config: unknown }) {
-  return (
-    <section className="relative mb-8 overflow-hidden rounded-2xl bg-gradient-to-br from-primary/90 to-primary p-6 text-primary-foreground sm:p-8" dir="rtl">
-      <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-white/5 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-10 left-0 size-48 rounded-full bg-white/5 blur-2xl" />
-      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-4">
-          <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
-            <PenLine className="size-7" aria-hidden />
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">التسميع بالكتابة</h1>
-            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-primary-foreground/80">
-              اختار درس، اكتب كل اللي فاكره على صفحة بيضا بالكيبورد أو القلم، وGemini هيصحح لك الغلط والإملاء والنواقص.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
-                <Zap className="size-3.5" aria-hidden /> تصحيح بالذكاء الاصطناعي
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
-                <BookOpen className="size-3.5" aria-hidden /> كتابة + رسم
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
-                <Trophy className="size-3.5" aria-hidden /> تقرير مفصّل
-              </span>
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onKeyClick}
-          className={cn(
-            'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-lg transition-all hover:scale-105 active:scale-95',
-            ready && config
-              ? 'bg-white text-success hover:bg-white/90'
-              : 'bg-white text-primary hover:bg-white/90',
-          )}
-        >
-          {ready && config ? (
-            <><CheckCircle2 className="size-4 text-success" aria-hidden /> مفتاح Gemini جاهز</>
-          ) : (
-            <><KeyRound className="size-4" aria-hidden /> ضيف مفتاح Gemini</>
-          )}
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function StepGuide() {
-  const steps = [
-    { icon: <FolderOpen className="size-4" />, label: 'اختار المادة' },
-    { icon: <BookOpen className="size-4" />, label: 'اختار الدرس' },
-    { icon: <PenLine className="size-4" />, label: 'اكتب من دماغك' },
-    { icon: <Sparkles className="size-4" />, label: 'اعرف نتيجتك' },
-  ]
-  return (
-    <div className="mb-8 flex items-center justify-center gap-0" dir="rtl">
-      {steps.map((s, i) => (
-        <>
-          <div key={s.label} className="flex flex-col items-center gap-1">
-            <span className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-foreground ring-2 ring-border">
-              {s.icon}
-            </span>
-            <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
-          </div>
-          {i < steps.length - 1 && (
-            <div key={`sep-${i}`} className="mb-4 h-px w-8 shrink-0 bg-border sm:w-12" />
-          )}
-        </>
-      ))}
-    </div>
-  )
-}
 
 export function ReciteBrowser({ groups }: { groups: ReciteGroup[] }) {
   const [groupId, setGroupId] = useState<string | null>(null)
@@ -96,8 +20,49 @@ export function ReciteBrowser({ groups }: { groups: ReciteGroup[] }) {
 
   return (
     <>
-      <SectionSwitcher active="recite" />
-      <HeroSection onKeyClick={() => setKeyOpen(true)} ready={ready} config={config} />
+      {/* ── Hero ── */}
+      <section className="relative mb-8 overflow-hidden rounded-2xl bg-gradient-to-br from-primary/90 to-primary p-6 text-primary-foreground sm:p-8" dir="rtl">
+        <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-white/5 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-10 left-0 size-48 rounded-full bg-white/5 blur-2xl" />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
+              <PenLine className="size-7" aria-hidden />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">التسميع بالكتابة</h1>
+              <p className="mt-1.5 max-w-md text-sm leading-relaxed text-primary-foreground/80">
+                اختار درس، اكتب كل اللي فاكره على صفحة بيضا بالكيبورد، وGemini هيصحح لك الغلط والإملاء والنواقص.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
+                  <Zap className="size-3.5" aria-hidden /> تصحيح بالذكاء الاصطناعي
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
+                  <BookOpen className="size-3.5" aria-hidden /> حفظ تلقائي
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
+                  <Trophy className="size-3.5" aria-hidden /> تقرير مفصّل
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setKeyOpen(true)}
+            className={cn(
+              'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-lg transition-all hover:scale-105 active:scale-95',
+              ready && config ? 'bg-white text-success hover:bg-white/90' : 'bg-white text-primary hover:bg-white/90',
+            )}
+          >
+            {ready && config ? (
+              <><CheckCircle2 className="size-4 text-success" aria-hidden /> مفتاح Gemini جاهز</>
+            ) : (
+              <><KeyRound className="size-4" aria-hidden /> ضيف مفتاح Gemini</>
+            )}
+          </button>
+        </div>
+      </section>
 
       {groups.length === 0 ? (
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed py-16 text-center">
@@ -111,13 +76,33 @@ export function ReciteBrowser({ groups }: { groups: ReciteGroup[] }) {
         </div>
       ) : !group ? (
         <>
-          <StepGuide />
+          {/* Step guide */}
+          <div className="mb-8 flex items-center justify-center" dir="rtl">
+            {[
+              { icon: <FolderOpen className="size-4" />, label: 'اختار المادة' },
+              { icon: <BookOpen className="size-4" />, label: 'اختار الدرس' },
+              { icon: <PenLine className="size-4" />, label: 'اكتب من دماغك' },
+              { icon: <Sparkles className="size-4" />, label: 'اعرف نتيجتك' },
+            ].map((s, i, arr) => (
+              <div key={s.label} className="flex items-center">
+                <div className="flex flex-col items-center gap-1">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-foreground ring-2 ring-border">
+                    {s.icon}
+                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
+                </div>
+                {i < arr.length - 1 && <div className="mb-4 h-px w-8 shrink-0 bg-border sm:w-12" />}
+              </div>
+            ))}
+          </div>
+
           <div className="mb-5 flex items-center justify-between gap-3" dir="rtl">
             <div>
               <h2 className="text-lg font-bold">اختار المادة</h2>
               <p className="text-sm text-muted-foreground">{groups.length} مادة · {openDecks} من {totalDecks} درس متاح</p>
             </div>
           </div>
+
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {groups.map((g) => {
               const openCount = g.decks.filter((d) => d.open).length
@@ -132,9 +117,7 @@ export function ReciteBrowser({ groups }: { groups: ReciteGroup[] }) {
                       <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                         <FolderOpen className="size-6" aria-hidden />
                       </span>
-                      <span className="mt-1 flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary">
-                        <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                      </span>
+                      <ArrowRight className="mt-1 size-5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
                     </div>
                     <h3 className="mt-4 text-base font-bold" dir="auto">{g.name}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">{g.decks.length} درس</p>
