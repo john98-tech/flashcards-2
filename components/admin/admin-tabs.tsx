@@ -1,37 +1,49 @@
 'use client'
 
 import { useState } from 'react'
-import { KeyRound, Layers, PenLine } from 'lucide-react'
+import { BookOpen, KeyRound, Layers, PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { RecallCourse, RecallLesson } from '@/lib/active-recall/types'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
 import { DeckEditor } from './deck-editor'
 import { CodesPanel } from './codes-panel'
 import { DictationAdmin, type DictationAdminData } from './dictation-admin'
+import { ActiveRecallAdmin } from './active-recall-admin'
 
-type Section = 'flashcards' | 'dictation'
+type Section = 'flashcards' | 'dictation' | 'active-recall'
 type Tab = 'decks' | 'codes'
 
 const noDictation: DictationAdminData = { subjects: [], lessons: [], loadError: null }
+const noActiveRecall = { courses: [], lessons: [], loadError: null } satisfies {
+  courses: RecallCourse[]
+  lessons: RecallLesson[]
+  loadError: null
+}
 
 export function AdminTabs({
   decks,
   groups,
   dictation = noDictation,
+  activeRecall = noActiveRecall,
 }: {
   decks: DeckSummary[]
   groups: DeckGroup[]
   dictation?: DictationAdminData
+  activeRecall?: { courses: RecallCourse[]; lessons: RecallLesson[]; loadError: string | null }
 }) {
   const [section, setSection] = useState<Section>('flashcards')
 
   return (
     <div className="flex flex-col gap-6">
-      <div role="tablist" aria-label="Admin areas" className="grid w-full grid-cols-2 gap-1 rounded-xl border bg-card p-1 sm:w-fit sm:min-w-96">
+      <div role="tablist" aria-label="Admin areas" className="flex w-full gap-1 overflow-x-auto rounded-xl border bg-card p-1 sm:w-fit">
         <SectionButton active={section === 'flashcards'} onClick={() => setSection('flashcards')}>
           <Layers className="size-4" aria-hidden /> الفلاش كاردس
         </SectionButton>
         <SectionButton active={section === 'dictation'} onClick={() => setSection('dictation')}>
           <PenLine className="size-4" aria-hidden /> التسميع بالكتابة
+        </SectionButton>
+        <SectionButton active={section === 'active-recall'} onClick={() => setSection('active-recall')}>
+          <BookOpen className="size-4" aria-hidden /> المراجعة اليومية
         </SectionButton>
       </div>
       <div hidden={section !== 'flashcards'}>
@@ -39,6 +51,9 @@ export function AdminTabs({
       </div>
       <div hidden={section !== 'dictation'}>
         <DictationAdmin {...dictation} />
+      </div>
+      <div hidden={section !== 'active-recall'}>
+        <ActiveRecallAdmin {...activeRecall} />
       </div>
     </div>
   )
@@ -76,7 +91,7 @@ function SectionButton({ active, onClick, children }: { active: boolean; onClick
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        'flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors',
+        'flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors sm:px-4',
         active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
       )}
     >

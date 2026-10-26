@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation'
 import { SiteHeader } from '@/components/site-header'
 import { AdminTabs } from '@/components/admin/admin-tabs'
 import type { DictationAdminData } from '@/components/admin/dictation-admin'
+import type { RecallCourse, RecallLesson } from '@/lib/active-recall/types'
 import { isAdmin } from '@/lib/admin-auth'
+import { listRecallCourses, listRecallLessons } from '@/lib/active-recall/data'
 import { getDeckGroups, getDeckSummaries } from '@/lib/decks'
 import { listLessons, listSubjects } from '@/lib/dictation/data'
 
@@ -22,9 +24,23 @@ async function loadDictation(): Promise<DictationAdminData> {
   }
 }
 
+async function loadActiveRecall(): Promise<{ courses: RecallCourse[]; lessons: RecallLesson[]; loadError: string | null }> {
+  try {
+    const [courses, lessons] = await Promise.all([listRecallCourses(), listRecallLessons()])
+    return { courses, lessons, loadError: null }
+  } catch (error) {
+    return { courses: [], lessons: [], loadError: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
 export default async function AdminPage() {
   if (!(await isAdmin())) notFound()
-  const [decks, groups, dictation] = await Promise.all([getDeckSummaries(), getDeckGroups(), loadDictation()])
+  const [decks, groups, dictation, activeRecall] = await Promise.all([
+    getDeckSummaries(),
+    getDeckGroups(),
+    loadDictation(),
+    loadActiveRecall(),
+  ])
 
   return (
     <div className="min-h-dvh">
@@ -32,7 +48,7 @@ export default async function AdminPage() {
         <span className="text-sm text-muted-foreground">Admin panel</span>
       </SiteHeader>
       <main className="mx-auto w-full max-w-5xl px-4 py-8">
-        <AdminTabs decks={decks} groups={groups} dictation={dictation} />
+        <AdminTabs decks={decks} groups={groups} dictation={dictation} activeRecall={activeRecall} />
       </main>
     </div>
   )

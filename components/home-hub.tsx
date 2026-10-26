@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, FolderOpen, Layers, PenLine, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, FolderOpen, Layers, PenLine, Sparkles } from 'lucide-react'
 import { GroupBrowser } from '@/components/group-browser'
 import { RedeemForm } from '@/components/redeem-form'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
@@ -126,6 +126,14 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
           onClick={openDictation}
           tourId="hub-recite"
         />
+        <HubCard
+          tone="violet"
+          icon={<BookOpen className="size-8" aria-hidden />}
+          title="المراجعة اليومية"
+          desc="اقرأ درس اليوم وجاوب على سؤال واحد عشان تثبت المعلومة بالاستدعاء النشط."
+          cta="ابدأ مراجعة اليوم"
+          href="/active-recall"
+        />
       </div>
     </div>
   )
@@ -217,7 +225,7 @@ function HubCard({
   onClick,
   tourId,
 }: {
-  tone: 'teal' | 'coral'
+  tone: 'teal' | 'coral' | 'violet'
   icon: React.ReactNode
   title: string
   desc: string
