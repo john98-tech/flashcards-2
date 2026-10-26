@@ -9,7 +9,14 @@ export const dynamic = 'force-dynamic'
 
 export default async function ActiveRecallPage() {
   if (!(await getSession())) redirect('/login?next=%2Factive-recall')
-  const courses = await listRecallCourses()
+  let courses: Awaited<ReturnType<typeof listRecallCourses>> = []
+  let loadFailed = false
+  try {
+    courses = await listRecallCourses()
+  } catch (error) {
+    console.error('[active-recall] failed to load courses:', error)
+    loadFailed = true
+  }
   return (
     <div className="min-h-dvh" dir="rtl">
       <SiteHeader />
@@ -23,7 +30,9 @@ export default async function ActiveRecallPage() {
           <p className="mt-2 text-sm leading-6 text-muted-foreground">اقرأ درس اليوم، وبعدها جاوب على سؤال واحد من غير ما تبص على الإجابة. الدروس بتفتح يومًا بعد يوم.</p>
         </header>
 
-        {courses.length === 0 ? (
+        {loadFailed ? (
+          <p className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">تعذّر تحميل الدورات حاليًا. حاول مرة أخرى بعد قليل.</p>
+        ) : courses.length === 0 ? (
           <p className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">لا توجد دورات متاحة حاليًا.</p>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -33,7 +42,7 @@ export default async function ActiveRecallPage() {
                   <BookOpen className="size-6 text-primary" aria-hidden />
                   <span className="text-lg font-bold">{course.name}</span>
                   <span className="text-sm text-muted-foreground">{course.lessonCount} درس يومي</span>
-                  <span className="mt-auto flex items-center gap-2 text-xs text-muted-foreground"><CalendarDays className="size-4" aria-hidden /> البداية: {new Date(`${course.startDate}T00:00:00Z`).toLocaleDateString('ar-EG')}</span>
+                  <span className="mt-auto flex items-center gap-2 text-xs text-muted-foreground"><CalendarDays className="size-4" aria-hidden /> البداية: {new Date(`${course.startDate}T00:00:00Z`).toLocaleDateString('ar-EG', { timeZone: 'UTC' })}</span>
                 </Link>
               </li>
             ))}
