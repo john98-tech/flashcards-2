@@ -13,7 +13,7 @@ const HandwritingEditor = dynamic(
   { ssr: false, loading: () => <div className="grid h-56 place-items-center rounded-xl border bg-white text-sm text-muted-foreground">بيجهز دفتر الكتابة…</div> },
 )
 
-export function RecallCourse({ course }: { course: StudentRecallCourse }) {
+export function RecallCourse({ course, startDateLabel }: { course: StudentRecallCourse; startDateLabel: string }) {
   const boardRef = useRef<HandwritingEditorHandle>(null)
   const availableLessons = course.lessons.filter((lesson) => lesson.available)
   const todayLesson = availableLessons.find((lesson) => lesson.day === course.currentDay)
@@ -119,7 +119,7 @@ export function RecallCourse({ course }: { course: StudentRecallCourse }) {
                 {course.lessons.length === 0
                   ? 'لم تتم إضافة دروس لهذه الدورة بعد.'
                   : course.currentDay < 1
-                  ? `تبدأ الدورة يوم ${new Date(`${course.startDate}T00:00:00Z`).toLocaleDateString('ar-EG')}.`
+                  ? `تبدأ الدورة يوم ${startDateLabel}.`
                   : 'يمكنك فتح الأيام السابقة من القائمة لمراجعتها.'}
               </p>
             </div>

@@ -11,5 +11,8 @@ export default async function ActiveRecallCoursePage({ params }: { params: Promi
   if (!session) redirect(`/login?next=${encodeURIComponent(`/active-recall/${courseId}`)}`)
   const course = await getStudentRecallCourse(courseId, session.id)
   if (!course) notFound()
-  return <RecallCourse course={course} />
+  const startDateLabel = new Date(`${course.startDate}T00:00:00Z`).toLocaleDateString('ar-EG', {
+    timeZone: 'UTC',
+  })
+  return <RecallCourse course={course} startDateLabel={startDateLabel} />
 }
