@@ -3,9 +3,9 @@ import { notFound } from 'next/navigation'
 import { SiteHeader } from '@/components/site-header'
 import { AdminTabs } from '@/components/admin/admin-tabs'
 import type { DictationAdminData } from '@/components/admin/dictation-admin'
-import type { RecallCourse, RecallLesson } from '@/lib/active-recall/types'
+import type { RecallCourse, RecallLesson, RecallSettings } from '@/lib/active-recall/types'
 import { isAdmin } from '@/lib/admin-auth'
-import { listRecallCourses, listRecallLessons } from '@/lib/active-recall/data'
+import { getRecallSettings, listRecallCourses, listRecallLessons } from '@/lib/active-recall/data'
 import { getDeckGroups, getDeckSummaries } from '@/lib/decks'
 import { listLessons, listSubjects } from '@/lib/dictation/data'
 
@@ -24,12 +24,12 @@ async function loadDictation(): Promise<DictationAdminData> {
   }
 }
 
-async function loadActiveRecall(): Promise<{ courses: RecallCourse[]; lessons: RecallLesson[]; loadError: string | null }> {
+async function loadActiveRecall(): Promise<{ courses: RecallCourse[]; lessons: RecallLesson[]; settings: RecallSettings | null; loadError: string | null }> {
   try {
-    const [courses, lessons] = await Promise.all([listRecallCourses(), listRecallLessons()])
-    return { courses, lessons, loadError: null }
+    const [courses, lessons, settings] = await Promise.all([listRecallCourses(), listRecallLessons(), getRecallSettings()])
+    return { courses, lessons, settings, loadError: null }
   } catch (error) {
-    return { courses: [], lessons: [], loadError: error instanceof Error ? error.message : 'Unknown error' }
+    return { courses: [], lessons: [], settings: null, loadError: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
 

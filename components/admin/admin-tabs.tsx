@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { BookOpen, KeyRound, Layers, PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { RecallCourse, RecallLesson } from '@/lib/active-recall/types'
+import type { RecallCourse, RecallLesson, RecallSettings } from '@/lib/active-recall/types'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
 import { DeckEditor } from './deck-editor'
 import { CodesPanel } from './codes-panel'
@@ -14,9 +14,10 @@ type Section = 'flashcards' | 'dictation' | 'active-recall'
 type Tab = 'decks' | 'codes'
 
 const noDictation: DictationAdminData = { subjects: [], lessons: [], loadError: null }
-const noActiveRecall = { courses: [], lessons: [], loadError: null } satisfies {
+const noActiveRecall = { courses: [], lessons: [], settings: null, loadError: null } satisfies {
   courses: RecallCourse[]
   lessons: RecallLesson[]
+  settings: RecallSettings | null
   loadError: null
 }
 
@@ -29,7 +30,7 @@ export function AdminTabs({
   decks: DeckSummary[]
   groups: DeckGroup[]
   dictation?: DictationAdminData
-  activeRecall?: { courses: RecallCourse[]; lessons: RecallLesson[]; loadError: string | null }
+  activeRecall?: { courses: RecallCourse[]; lessons: RecallLesson[]; settings: RecallSettings | null; loadError: string | null }
 }) {
   const [section, setSection] = useState<Section>('flashcards')
 

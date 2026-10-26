@@ -1,7 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { RecallCourse } from '@/components/active-recall/recall-course'
+import { SiteHeader } from '@/components/site-header'
 import { getSession } from '@/lib/auth'
-import { getStudentRecallCourse } from '@/lib/active-recall/data'
+import { cairoDate, getRecallSettings, getStudentRecallCourse } from '@/lib/active-recall/data'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,20 +10,24 @@ export default async function ActiveRecallCoursePage({ params }: { params: Promi
   const { courseId } = await params
   const session = await getSession()
   if (!session) redirect(`/login?next=${encodeURIComponent(`/active-recall/${courseId}`)}`)
-  let course: Awaited<ReturnType<typeof getStudentRecallCourse>> = null
-  try {
-    course = await getStudentRecallCourse(courseId, session.id)
-  } catch (error) {
-    console.error('[active-recall] failed to load course:', error)
+  const loaded = await Promise.all([
+    getStudentRecallCourse(courseId, session.id),
+    getRecallSettings(),
+  ]).catch((error) => {
+    console.error('[active-recall] failed to load course plan:', error)
+    return null
+  })
+  if (!loaded) {
     return (
-      <main className="mx-auto w-full max-w-xl px-4 py-16 text-center" dir="rtl">
-        <p className="rounded-xl border border-dashed p-10 text-sm text-muted-foreground">تعذّر تحميل الدورة حاليًا. حاول مرة أخرى بعد قليل.</p>
-      </main>
+      <div className="min-h-dvh" dir="rtl">
+        <SiteHeader />
+        <main className="mx-auto w-full max-w-xl px-4 py-16 text-center">
+          <p className="rounded-xl border border-dashed p-10 text-sm text-muted-foreground">تعذّر تحميل الخطة حاليًا. تأكد من تحديث قاعدة البيانات ثم حاول مرة أخرى.</p>
+        </main>
+      </div>
     )
   }
+  const [course, settings] = loaded
   if (!course) notFound()
-  const startDateLabel = new Date(`${course.startDate}T00:00:00Z`).toLocaleDateString('ar-EG', {
-    timeZone: 'UTC',
-  })
-  return <RecallCourse course={course} startDateLabel={startDateLabel} />
+  return <RecallCourse course={course} today={cairoDate()} settings={settings} />
 }

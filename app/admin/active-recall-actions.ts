@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/admin-auth'
 import * as recall from '@/lib/active-recall/data'
-import type { RecallLesson, RecallQuestion } from '@/lib/active-recall/types'
+import type { RecallLesson, RecallQuestion, RecallSettings } from '@/lib/active-recall/types'
 
 const refresh = () => {
   revalidatePath('/admin')
@@ -37,6 +37,7 @@ export async function adminSaveRecallLesson(input: {
   title: string
   content: string
   question: RecallQuestion
+  additionalQuestion?: RecallQuestion | null
 }): Promise<RecallLesson> {
   await requireAdmin()
   const lesson = await recall.saveRecallLesson(input)
@@ -48,4 +49,11 @@ export async function adminDeleteRecallLesson(id: string) {
   await requireAdmin()
   await recall.deleteRecallLesson(id)
   refresh()
+}
+
+export async function adminUpdateRecallSettings(settings: RecallSettings) {
+  await requireAdmin()
+  const saved = await recall.updateRecallSettings(settings)
+  refresh()
+  return saved
 }

@@ -1,205 +1,384 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
-import { ArrowRight, Check, LockKeyhole, PenLine, RotateCcw } from 'lucide-react'
-import { markRecallLessonComplete } from '@/app/active-recall/actions'
-import type { HandwritingEditorHandle } from '@/components/handwriting/HandwritingEditor'
-import type { StudentRecallCourse, StudentRecallLesson } from '@/lib/active-recall/types'
+import { useRouter } from 'next/navigation'
+import { ArrowRight, CalendarDays, Check, CircleHelp, Loader2 } from 'lucide-react'
+import { markRecallSessionComplete, saveRecallPlan } from '@/app/active-recall/actions'
+import { buildRecallSchedule } from '@/lib/active-recall/scheduler'
+import type { RecallQuestion, RecallSettings, StudentRecallPlan, StudentRecallLesson } from '@/lib/active-recall/types'
 
-const HandwritingEditor = dynamic(
-  () => import('@/components/handwriting/HandwritingEditor').then((module) => module.HandwritingEditor),
-  { ssr: false, loading: () => <div className="grid h-56 place-items-center rounded-xl border bg-white text-sm text-muted-foreground">بيجهز دفتر الكتابة…</div> },
-)
+type Course = {
+  id: string
+  name: string
+  lessons: StudentRecallLesson[]
+  plan: StudentRecallPlan | null
+}
 
-export function RecallCourse({ course, startDateLabel }: { course: StudentRecallCourse; startDateLabel: string }) {
-  const boardRef = useRef<HandwritingEditorHandle>(null)
-  const availableLessons = course.lessons.filter((lesson) => lesson.available)
-  const todayLesson = availableLessons.find((lesson) => lesson.day === course.currentDay)
-  const [selectedId, setSelectedId] = useState(todayLesson?.id ?? availableLessons.at(-1)?.id ?? '')
-  const [completed, setCompleted] = useState(course.completedLessonIds)
-  const [mode, setMode] = useState<'keyboard' | 'handwriting'>('keyboard')
-  const [answerText, setAnswerText] = useState('')
-  const [choice, setChoice] = useState<number | null>(null)
-  const [checked, setChecked] = useState(false)
-  const [revealed, setRevealed] = useState(false)
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00.000Z`)
+  value.setUTCDate(value.getUTCDate() + days)
+  return value.toISOString().slice(0, 10)
+}
+
+function dayCount(start: string, end: string) {
+  return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1
+}
+
+function formatDate(date: string) {
+  return new Intl.DateTimeFormat('ar-EG', { timeZone: 'UTC', dateStyle: 'medium' }).format(new Date(`${date}T00:00:00Z`))
+}
+
+export function RecallCourse({ course, today, settings }: { course: Course; today: string; settings: RecallSettings }) {
+  const router = useRouter()
+  const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>(course.plan?.lessonIds ?? [])
+  const [durationDays, setDurationDays] = useState(() =>
+    course.plan && course.plan.endDate >= today ? Math.max(1, dayCount(today, course.plan.endDate)) : 30,
+  )
+  const [examDate, setExamDate] = useState(course.plan?.examDate ?? '')
+  const [editing, setEditing] = useState(!course.plan)
+  const [selectedSessionId, setSelectedSessionId] = useState('')
+  const [revealedQuestions, setRevealedQuestions] = useState<number[]>([])
+  const [answers, setAnswers] = useState<Record<number, string>>({})
+  const [choices, setChoices] = useState<Record<number, number>>({})
+  const [noAnswer, setNoAnswer] = useState<number[]>([])
+  const [selfAssessment, setSelfAssessment] = useState<'knew_it' | 'review_again' | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [savingCompletion, setSavingCompletion] = useState(false)
 
-  const lesson = course.lessons.find((item) => item.id === selectedId) ?? null
-  const resetAnswer = (next: StudentRecallLesson) => {
-    setSelectedId(next.id)
-    setMode('keyboard')
-    setAnswerText('')
-    setChoice(null)
-    setChecked(false)
-    setRevealed(false)
+  const endDate = useMemo(() => {
+    const proposed = addDays(today, durationDays - 1)
+    return examDate && examDate < proposed ? examDate : proposed
+  }, [today, durationDays, examDate])
+  const preview = useMemo(() => {
+    if (
+      !selectedLessonIds.length ||
+      !Number.isInteger(durationDays) ||
+      durationDays < 1 ||
+      durationDays > 366 ||
+      endDate < today
+    ) return null
+    return buildRecallSchedule({
+      lessonIds: selectedLessonIds,
+      startDate: today,
+      endDate,
+      intervals: settings.intervals,
+      dailyGoal: settings.dailyGoal,
+      restDay: settings.restDay,
+    })
+  }, [selectedLessonIds, today, endDate, durationDays, settings])
+
+  const dueSessions = useMemo(() => (course.plan?.sessions ?? [])
+    .filter((session) =>
+      (session.status === 'pending' || session.status === 'rescheduled') && session.scheduledDate <= today
+      || session.status === 'completed' && session.scheduledDate === today,
+    )
+    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.reviewNumber - b.reviewNumber), [course.plan, today])
+  const activeSessionId = dueSessions.some((session) => session.id === selectedSessionId)
+    ? selectedSessionId
+    : dueSessions.find((session) => session.status !== 'completed')?.id ?? dueSessions[0]?.id ?? ''
+  const activeSession = dueSessions.find((session) => session.id === activeSessionId) ?? null
+  const lesson = course.lessons.find((item) => item.id === activeSession?.lessonId) ?? null
+  const questions = lesson ? [lesson.question, lesson.additionalQuestion].filter((question): question is RecallQuestion => !!question) : []
+  const completedToday = dueSessions.filter((session) => session.scheduledDate === today && session.status === 'completed').length
+  const pendingToday = dueSessions.filter((session) => session.scheduledDate === today && session.status !== 'completed').length
+  const overdueCount = dueSessions.filter((session) => session.scheduledDate < today && session.status !== 'completed').length
+
+  const toggleLesson = (lessonId: string) => setSelectedLessonIds((current) =>
+    current.includes(lessonId) ? current.filter((id) => id !== lessonId) : [...current, lessonId],
+  )
+
+  const confirmPlan = async () => {
+    setBusy(true)
+    setError('')
     setNotice('')
-  }
-
-  const markComplete = async (id: string) => {
-    setSavingCompletion(true)
     try {
-      await markRecallLessonComplete(course.id, id)
-      const next = [...new Set([...completed, id])]
-      setCompleted(next)
-      setNotice('تم حفظ تقدمك في حسابك.')
-      return true
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'تعذر حفظ تقدمك. حاول مرة أخرى.')
-      return false
+      const result = await saveRecallPlan({
+        courseId: course.id,
+        lessonIds: selectedLessonIds,
+        durationDays,
+        examDate: examDate || null,
+      })
+      setNotice(`تم حفظ الخطة: ${result.sessions.length} جلسة مراجعة حتى ${formatDate(result.endDate)}.`)
+      setEditing(false)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر حفظ الخطة. حاول مرة أخرى.')
     } finally {
-      setSavingCompletion(false)
+      setBusy(false)
     }
   }
 
-  const submitOpenAnswer = () => {
-    const hasAnswer = mode === 'keyboard' ? !!answerText.trim() : !!boardRef.current?.hasContent()
-    if (!hasAnswer) {
-      setNotice('اكتب إجابتك الأول، سواء بالكيبورد أو بالقلم.')
-      return
-    }
-    setRevealed(true)
-    setNotice('')
+  const reveal = (index: number) => {
+    setRevealedQuestions((current) => current.includes(index) ? current : [...current, index])
   }
-
-  const question = lesson?.question
+  const finishSession = async () => {
+    if (!activeSession) return
+    setBusy(true)
+    setError('')
+    try {
+      await markRecallSessionComplete(course.id, activeSession.id, selfAssessment)
+      setNotice('تم إنهاء جلسة المراجعة وحفظها.')
+      setSelectedSessionId('')
+      setRevealedQuestions([])
+      setAnswers({})
+      setChoices({})
+      setNoAnswer([])
+      setSelfAssessment(null)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر حفظ الجلسة. حاول مرة أخرى.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="min-h-dvh bg-muted/40" dir="rtl">
       <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-3 py-3">
-          <Link href="/active-recall" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border text-muted-foreground hover:text-foreground" aria-label="العودة للدورات">
+          <Link href="/active-recall" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border text-muted-foreground hover:text-foreground" aria-label="العودة للمراجعة اليومية">
             <ArrowRight className="size-4" aria-hidden />
           </Link>
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-bold">{course.name}</h1>
-            <p className="text-xs text-muted-foreground">{course.currentDay > 0 ? `اليوم ${course.currentDay}` : 'الدورة لم تبدأ بعد'}</p>
+            <p className="text-xs text-muted-foreground">{course.plan ? `الخطة حتى ${formatDate(course.plan.endDate)}` : 'اختر الدروس التي سبق أن ذاكرتها'}</p>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-5xl gap-5 px-3 py-5 sm:px-4 sm:py-8 lg:grid-cols-[15rem_1fr]">
-        <aside className="flex flex-col gap-2">
-          <h2 className="px-1 text-sm font-semibold">أيام الدورة</h2>
-          {course.lessons.map((item) => {
-            const isComplete = item.available && completed.includes(item.id)
-            return (
-              <button
-                key={item.id}
-                type="button"
-                disabled={!item.available}
-                onClick={() => resetAnswer(item)}
-                className={`flex items-center gap-3 rounded-xl border p-3 text-start transition-colors ${
-                  !item.available ? 'cursor-not-allowed bg-muted/50 text-muted-foreground' :
-                  item.id === selectedId ? 'border-primary bg-primary/5' : 'bg-card hover:border-primary/40'
-                }`}
-              >
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-xs font-bold">
-                  {isComplete ? <Check className="size-4" aria-label="مكتمل" /> : item.available ? item.day : <LockKeyhole className="size-4" aria-label="مقفل" />}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-xs text-muted-foreground">اليوم {item.day}</span>
-                  <span className="block truncate text-sm font-semibold">{item.available ? item.title : 'يفتح في موعده'}</span>
-                </span>
-              </button>
-            )
-          })}
-          {course.lessons.length === 0 && <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">لم تتم إضافة دروس لهذه الدورة بعد.</p>}
-        </aside>
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-3 py-5 sm:px-4 sm:py-8">
+        {error && <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+        {notice && <p role="status" className="rounded-xl border bg-accent p-3 text-sm">{notice}</p>}
 
-        <section className="min-w-0 space-y-4">
-          {!lesson && (
-            <div className="rounded-2xl border bg-card p-6 text-center">
-              <h2 className="text-xl font-bold">
-                {course.lessons.length === 0 ? 'لا توجد دروس بعد' : course.currentDay < 1 ? 'الدورة ستبدأ قريبًا' : 'اكتملت دروس الدورة'}
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {course.lessons.length === 0
-                  ? 'لم تتم إضافة دروس لهذه الدورة بعد.'
-                  : course.currentDay < 1
-                  ? `تبدأ الدورة يوم ${startDateLabel}.`
-                  : 'يمكنك فتح الأيام السابقة من القائمة لمراجعتها.'}
-              </p>
+        {editing ? (
+          <section className="space-y-5 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
+            <div>
+              <h2 className="text-xl font-bold">{course.plan ? 'تعديل خطة المراجعة' : 'إنشاء خطة مراجعة'}</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">اختار الدروس اللي ذاكرتها بالفعل. هتتكرر مراجعتها تلقائيًا من غير ما تظهر دروس جديدة.</p>
             </div>
-          )}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="font-semibold">دروس المنهج <span className="text-sm text-muted-foreground">({selectedLessonIds.length} مختارة)</span></p>
+              <div className="flex gap-2">
+                <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => setSelectedLessonIds(course.lessons.map((item) => item.id))}>تحديد الكل</button>
+                <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => setSelectedLessonIds([])}>إلغاء التحديد</button>
+              </div>
+            </div>
+            {course.lessons.length ? (
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {course.lessons.map((item) => (
+                  <li key={item.id}>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl border p-3 hover:border-primary/40">
+                      <input type="checkbox" checked={selectedLessonIds.includes(item.id)} onChange={() => toggleLesson(item.id)} />
+                      <span className="min-w-0">
+                        <span className="block text-xs text-muted-foreground">الدرس {item.position}</span>
+                        <span className="block truncate font-medium">{item.title}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">لا توجد دروس منشورة في هذا المنهج بعد.</p>}
 
-          {lesson?.content && question && (
-            <>
-              <article className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
-                <p className="text-sm font-semibold text-primary">درس اليوم {lesson.day}</p>
-                <h2 className="mt-1 text-xl font-bold">{lesson.title}</h2>
-                <div className="mt-5 whitespace-pre-wrap text-base leading-8" dir="auto">{lesson.content}</div>
-              </article>
-
-              <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-7" aria-labelledby="recall-question-title">
-                <div>
-                  <p className="text-sm font-semibold text-primary">استدعِ المعلومة من ذاكرتك</p>
-                  <h2 id="recall-question-title" className="mt-1 text-lg font-bold" dir="auto">{question.prompt}</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-semibold">مدة المراجعة بالأيام
+                <div className="flex gap-2">
+                  <select className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2" value={[7, 14, 30].includes(durationDays) ? durationDays : 'custom'} onChange={(event) => setDurationDays(event.target.value === 'custom' ? 21 : Number(event.target.value))}>
+                    <option value={7}>أسبوع · 7 أيام</option>
+                    <option value={14}>أسبوعان · 14 يومًا</option>
+                    <option value={30}>شهر · 30 يومًا</option>
+                    <option value="custom">مدة مخصصة</option>
+                  </select>
+                  <input aria-label="عدد أيام المراجعة" className="w-24 rounded-lg border bg-background px-3 py-2" type="number" min={1} max={366} value={durationDays} onChange={(event) => setDurationDays(Number(event.target.value))} />
                 </div>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-semibold">موعد الامتحان (اختياري)
+                <input className="rounded-lg border bg-background px-3 py-2" type="date" min={today} value={examDate} onChange={(event) => setExamDate(event.target.value)} />
+              </label>
+            </div>
 
-                {question.type === 'mcq' ? (
-                  <div className="space-y-2">
-                    {question.options.map((option, index) => {
-                      const isCorrect = index === question.correctIndex
-                      const isWrongSelection = checked && choice === index && !isCorrect
-                      return (
-                        <label key={`${lesson.id}-${index}`} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors ${
-                          checked && isCorrect ? 'border-emerald-500 bg-emerald-50' :
-                          isWrongSelection ? 'border-destructive bg-destructive/5' :
-                          choice === index ? 'border-primary bg-primary/5' : 'hover:border-primary/40'
-                        }`}>
-                          <input type="radio" name={`recall-choice-${lesson.id}`} checked={choice === index} disabled={checked && choice === question.correctIndex} onChange={() => { setChoice(index); setChecked(false) }} />
-                          <span className="text-sm" dir="auto">{option}</span>
-                        </label>
-                      )
-                    })}
-                    {checked && <p role="status" className={choice === question.correctIndex ? 'text-sm font-semibold text-emerald-700' : 'text-sm font-semibold text-destructive'}>
-                      {choice === question.correctIndex ? 'إجابة صحيحة! أحسنت.' : `مش دي الإجابة الصحيحة. الإجابة: ${question.options[question.correctIndex]}`}
-                    </p>}
-                    <button type="button" disabled={choice === null || savingCompletion || checked && choice === question.correctIndex} onClick={async () => {
-                      if (choice === question.correctIndex) {
-                        if (await markComplete(lesson.id)) setChecked(true)
-                      } else {
-                        setChecked(true)
-                      }
-                    }} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">
-                      {savingCompletion ? 'بيحفظ تقدمك…' : checked && choice === question.correctIndex ? 'تمت المراجعة' : 'تأكيد الإجابة'}
+            <div className="rounded-xl border bg-muted/40 p-4">
+              <h3 className="font-bold">معاينة الخطة</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{selectedLessonIds.length} دروس · {dayCount(today, endDate)} يوم · {preview?.sessions.length ?? 0} جلسة متوقعة · الهدف {settings.dailyGoal} جلسة يوميًا{settings.restDay === null ? '' : ' · يتم تجنب يوم الراحة قدر الإمكان'}</p>
+              {preview && (
+                <>
+                  <p className="mt-1 text-sm text-muted-foreground">تكرار كل درس {settings.intervals.length} مرات. أول مراجعة {formatDate(today)} وآخر مراجعة متوقعة {formatDate(Object.keys(preview.dailyCounts).filter((date) => preview.dailyCounts[date] > 0).at(-1) ?? today)}.</p>
+                  <ul className="mt-3 grid max-h-40 grid-cols-2 gap-x-4 gap-y-1 overflow-auto text-xs sm:grid-cols-4">
+                    {Object.entries(preview.dailyCounts).filter(([, count]) => count > 0).map(([date, count]) => <li key={date}>{formatDate(date)}: {count} جلسة</li>)}
+                  </ul>
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-sm font-semibold">أول وآخر مراجعة لكل درس</summary>
+                    <ul className="mt-2 grid max-h-36 gap-1 overflow-auto text-xs sm:grid-cols-2">
+                      {selectedLessonIds.map((lessonId) => {
+                        const lesson = course.lessons.find((item) => item.id === lessonId)
+                        const dates = preview.sessions.filter((session) => session.lessonId === lessonId).map((session) => session.scheduledDate).sort()
+                        const firstDate = dates[0] ?? today
+                        const lastDate = dates.at(-1) ?? firstDate
+                        return <li key={lessonId}>{lesson?.title}: {formatDate(firstDate)} – {formatDate(lastDate)}</li>
+                      })}
+                    </ul>
+                  </details>
+                  {preview.overloadedDays.length > 0 && <p role="alert" className="mt-3 text-sm font-semibold text-amber-700">بعض الأيام تتجاوز الهدف اليومي؛ جرّب زيادة المدة أو تقليل الدروس.</p>}
+                  {examDate && dayCount(today, endDate) === 1 && <p role="alert" className="mt-2 text-sm font-semibold text-amber-700">موعد الامتحان قريب جدًا؛ ستُضغط الجلسات في يوم واحد.</p>}
+                </>
+              )}
+              {!preview && selectedLessonIds.length > 0 && <p role="alert" className="mt-2 text-sm text-destructive">تحقق من مدة الخطة وتاريخ الامتحان.</p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={busy || !selectedLessonIds.length || !preview} onClick={() => void confirmPlan()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50">
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CalendarDays className="size-4" aria-hidden />}
+                {busy ? 'جارٍ حفظ الخطة…' : 'تأكيد وإنشاء الخطة'}
+              </button>
+              {course.plan && <button type="button" disabled={busy} onClick={() => setEditing(false)} className="rounded-lg border px-4 py-2.5 font-semibold">رجوع للخطة الحالية</button>}
+            </div>
+          </section>
+        ) : course.plan ? (
+          <>
+            <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-bold">مراجعة اليوم</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{formatDate(today)} · {pendingToday + completedToday} جلسة مطلوبة · {completedToday} مكتملة · {pendingToday} متبقية</p>
+                  {overdueCount > 0 && <p className="mt-2 text-sm font-semibold text-amber-700">لديك {overdueCount} جلسة متأخرة، موزعة ضمن قائمة اليوم.</p>}
+                  {overdueCount > 0 && (
+                    <button type="button" disabled={busy} onClick={() => void confirmPlan()} className="mt-3 rounded-lg border border-amber-600/40 px-3 py-2 text-sm font-semibold text-amber-800 disabled:opacity-50">
+                      إعادة توزيع الجلسات المتأخرة حتى نهاية الخطة
                     </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => setMode('keyboard')} className={`rounded-lg border px-3 py-2 text-sm ${mode === 'keyboard' ? 'border-primary bg-primary/5 font-semibold' : ''}`}>الكتابة بالكيبورد</button>
-                      <button type="button" onClick={() => setMode('handwriting')} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${mode === 'handwriting' ? 'border-primary bg-primary/5 font-semibold' : ''}`}><PenLine className="size-4" aria-hidden /> الكتابة بالقلم</button>
-                    </div>
-                    {mode === 'keyboard' ? (
-                      <textarea value={answerText} onChange={(event) => setAnswerText(event.target.value)} placeholder="اكتب إجابتك هنا…" className="min-h-36 w-full resize-y rounded-xl border bg-background p-3 leading-7 outline-none focus:ring-2 focus:ring-ring" dir="auto" />
-                    ) : (
-                      <HandwritingEditor key={`${lesson.id}-handwriting`} ref={boardRef} maxPages={5} />
-                    )}
-                    {!revealed ? (
-                      <button type="button" onClick={submitOpenAnswer} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground">اعرض الإجابة النموذجية</button>
-                    ) : (
-                      <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                        <h3 className="font-bold">الإجابة النموذجية</h3>
-                        <p className="whitespace-pre-wrap leading-7" dir="auto">{question.answer}</p>
-                        <p className="text-sm text-muted-foreground">راجع إجابتك بنفسك، ثم اختر:</p>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <button type="button" disabled={savingCompletion} onClick={() => void markComplete(lesson.id)} className="rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"><Check className="me-1 inline size-4" aria-hidden /> {savingCompletion ? 'بيحفظ تقدمك…' : 'عرفت الإجابة'}</button>
-                          <button type="button" onClick={() => { setRevealed(false); setNotice('راجع الدرس وحاول الإجابة مرة أخرى.') }} className="rounded-lg border px-3 py-2.5 text-sm font-semibold"><RotateCcw className="me-1 inline size-4" aria-hidden /> محتاج أراجعها</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {notice && <p role="status" className="text-center text-sm text-muted-foreground">{notice}</p>}
+                  )}
+                </div>
+                <button type="button" onClick={() => setEditing(true)} className="rounded-lg border px-3 py-2 text-sm font-semibold">تعديل الدروس والمدة</button>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">إجمالي الخطة: {course.plan.sessions.filter((item) => item.status !== 'skipped').length} جلسة · {course.plan.lessonIds.length} دروس · تنتهي {formatDate(course.plan.endDate)}</p>
+            </section>
+
+            {dueSessions.length === 0 ? (
+              <section className="rounded-2xl border border-dashed bg-card p-8 text-center">
+                <Check className="mx-auto size-8 text-primary" aria-hidden />
+                <h2 className="mt-2 font-bold">لا توجد جلسات مستحقة الآن</h2>
+                <p className="mt-1 text-sm text-muted-foreground">ستظهر مراجعاتك هنا في موعدها. الجلسات المستقبلية لا تُعرض كمستحقة.</p>
               </section>
-            </>
-          )}
-        </section>
+            ) : (
+              <div className="grid gap-5 lg:grid-cols-[17rem_1fr]">
+                <aside className="space-y-2">
+                  <h2 className="px-1 text-sm font-bold">جلسات اليوم والمتأخرة</h2>
+                  {dueSessions.map((item) => (
+                    <button key={item.id} type="button" onClick={() => { setSelectedSessionId(item.id); setRevealedQuestions([]); setAnswers({}); setChoices({}); setNoAnswer([]); setSelfAssessment(null) }} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-start ${item.id === activeSessionId ? 'border-primary bg-primary/5' : 'bg-card'}`}>
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-xs font-bold">{item.status === 'completed' ? <Check className="size-4" aria-label="مكتملة" /> : item.reviewNumber}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{item.lessonTitle}</span>
+                        <span className="block text-xs text-muted-foreground">{item.scheduledDate < today ? `متأخرة · ${formatDate(item.scheduledDate)}` : `مراجعة رقم ${item.reviewNumber}`}</span>
+                      </span>
+                    </button>
+                  ))}
+                </aside>
+
+                <section className="min-w-0 space-y-4">
+                  {activeSession && lesson && activeSession.status === 'completed' ? (
+                    <div className="rounded-2xl border bg-card p-6 text-center">
+                      <Check className="mx-auto size-8 text-emerald-600" aria-hidden />
+                      <h2 className="mt-2 font-bold">اكتملت هذه الجلسة</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">{lesson.title} · المراجعة رقم {activeSession.reviewNumber}</p>
+                    </div>
+                  ) : activeSession && lesson ? (
+                    <>
+                      <article className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+                        <p className="text-sm font-semibold text-primary">مراجعة رقم {activeSession.reviewNumber}{activeSession.scheduledDate < today ? ' · جلسة متأخرة' : ''}</p>
+                        <h2 className="mt-1 text-xl font-bold">{lesson.title}</h2>
+                        <div className="mt-5 whitespace-pre-wrap text-base leading-8" dir="auto">{lesson.content}</div>
+                      </article>
+                      {questions.map((question, index) => (
+                        <QuestionCard
+                          key={`${activeSession.id}-${index}`}
+                          question={question}
+                          index={index}
+                          answer={answers[index] ?? ''}
+                          choice={choices[index]}
+                          revealed={revealedQuestions.includes(index)}
+                          markedNoAnswer={noAnswer.includes(index)}
+                          onAnswer={(value) => setAnswers((current) => ({ ...current, [index]: value }))}
+                          onChoice={(value) => setChoices((current) => ({ ...current, [index]: value }))}
+                          onNoAnswer={() => setNoAnswer((current) => current.includes(index) ? current : [...current, index])}
+                          onReveal={() => reveal(index)}
+                        />
+                      ))}
+                      <section className="rounded-xl border bg-card p-4">
+                        <p className="mb-2 text-sm font-semibold">تقييمك لنفسك (اختياري)</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => setSelfAssessment('knew_it')} className={`rounded-lg border px-3 py-2 text-sm ${selfAssessment === 'knew_it' ? 'border-primary bg-primary/5 font-semibold' : ''}`}>عرفت الإجابة</button>
+                          <button type="button" onClick={() => setSelfAssessment('review_again')} className={`rounded-lg border px-3 py-2 text-sm ${selfAssessment === 'review_again' ? 'border-primary bg-primary/5 font-semibold' : ''}`}>محتاج أراجعها</button>
+                        </div>
+                      </section>
+                      <button type="button" disabled={busy || revealedQuestions.length !== questions.length} onClick={() => void finishSession()} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">
+                        {busy ? 'بيحفظ الجلسة…' : 'إنهاء مراجعة الدرس'}
+                      </button>
+                      {revealedQuestions.length !== questions.length && <p className="text-center text-xs text-muted-foreground">حاول الإجابة أو اختر «مش عارف» ثم اكشف الإجابة قبل إنهاء الجلسة.</p>}
+                    </>
+                  ) : null}
+                </section>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="rounded-xl border border-dashed bg-card p-8 text-center text-sm text-muted-foreground">لا توجد دروس متاحة في هذا المنهج بعد.</p>
+        )}
       </main>
     </div>
+  )
+}
+
+function QuestionCard({
+  question,
+  index,
+  answer,
+  choice,
+  revealed,
+  markedNoAnswer,
+  onAnswer,
+  onChoice,
+  onNoAnswer,
+  onReveal,
+}: {
+  question: RecallQuestion
+  index: number
+  answer: string
+  choice: number | undefined
+  revealed: boolean
+  markedNoAnswer: boolean
+  onAnswer: (value: string) => void
+  onChoice: (value: number) => void
+  onNoAnswer: () => void
+  onReveal: () => void
+}) {
+  const canReveal = question.type === 'open' ? !!answer.trim() || markedNoAnswer : choice !== undefined || markedNoAnswer
+  return (
+    <section className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+      <p className="text-xs font-semibold text-primary">{index === 0 ? 'السؤال الأساسي' : 'سؤال إضافي (اختياري)'}</p>
+      <h3 className="text-lg font-bold" dir="auto">{question.prompt}</h3>
+      {question.type === 'mcq' ? (
+        <div className="space-y-2">
+          {question.options.map((option, optionIndex) => (
+            <label key={`${index}-${optionIndex}`} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${revealed && optionIndex === question.correctIndex ? 'border-emerald-500 bg-emerald-50' : choice === optionIndex ? 'border-primary bg-primary/5' : ''}`}>
+              <input type="radio" name={`question-${index}`} checked={choice === optionIndex} disabled={revealed} onChange={() => onChoice(optionIndex)} />
+              <span dir="auto">{option}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <textarea className="min-h-24 w-full rounded-xl border bg-background p-3 leading-7" value={answer} disabled={revealed} onChange={(event) => onAnswer(event.target.value)} placeholder="اكتب إجابتك قبل كشف الحل…" dir="auto" />
+      )}
+      {!revealed ? (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={!canReveal} onClick={onReveal} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">كشف الإجابة</button>
+          <button type="button" disabled={markedNoAnswer} onClick={onNoAnswer} className="inline-flex items-center gap-1 rounded-lg border px-4 py-2.5 text-sm"><CircleHelp className="size-4" aria-hidden /> مش عارف الإجابة</button>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <h4 className="font-bold">{question.type === 'mcq' ? 'الإجابة الصحيحة' : 'الإجابة النموذجية'}</h4>
+          <p className="mt-1 whitespace-pre-wrap leading-7" dir="auto">{question.type === 'mcq' ? question.options[question.correctIndex] : question.answer}</p>
+          {question.type === 'mcq' && choice !== undefined && <p className="mt-2 text-sm">{choice === question.correctIndex ? 'إجابة صحيحة، أحسنت!' : 'راجع الإجابة الصحيحة أعلاه.'}</p>}
+        </div>
+      )}
+    </section>
   )
 }

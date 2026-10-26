@@ -23,22 +23,50 @@ export type RecallLesson = {
   content: string
   position: number
   question: RecallQuestion
+  additionalQuestion: RecallQuestion | null
+}
+
+export type RecallSession = {
+  id: string
+  lessonId: string
+  lessonTitle: string
+  reviewNumber: number
+  scheduledDate: string
+  status: 'pending' | 'completed' | 'rescheduled' | 'skipped'
+  completedAt: string | null
+  selfAssessment: 'knew_it' | 'review_again' | null
 }
 
 export type StudentRecallLesson = {
   id: string
   title: string
-  day: number
-  available: boolean
-  content?: string
-  question?: RecallQuestion
+  position: number
+  content: string
+  question: RecallQuestion
+  additionalQuestion: RecallQuestion | null
 }
 
-export type StudentRecallCourse = {
+export type StudentRecallPlan = {
   id: string
-  name: string
+  courseId: string
   startDate: string
-  currentDay: number
-  completedLessonIds: string[]
-  lessons: StudentRecallLesson[]
+  endDate: string
+  examDate: string | null
+  lessonIds: string[]
+  intervals: number[]
+  dailyGoal: number
+  restDay: number | null
+  sessions: RecallSession[]
+}
+
+export type PlannedRecallSession = {
+  lessonId: string
+  reviewNumber: number
+  scheduledDate: string
+}
+
+export type RecallSettings = {
+  intervals: number[]
+  dailyGoal: number
+  restDay: number | null
 }
