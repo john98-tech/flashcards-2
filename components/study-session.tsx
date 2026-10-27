@@ -122,7 +122,10 @@ export function StudySession({ deck }: { deck: Deck }) {
     if (allRevealed && (key === 'arrowdown' || key === 'backspace' || key === '1')) return e.preventDefault(), rate(false)
     if (key === 't') return e.preventDefault(), switchMode(mode === 'tap' ? 'type' : 'tap')
     if (key === 's') return e.preventDefault(), toggleShuffle()
-    if (e.code === 'Space' || key === 'arrowdown') {
+    // ArrowDown is only the "لسه" rating shortcut when the rating buttons are visible.
+    // Never use it to reveal blanks; Space reveals the next blank and A reveals all.
+    if (key === 'arrowdown') return e.preventDefault()
+    if (e.code === 'Space') {
       e.preventDefault()
       if (mode === 'type') return revealAll()
       return allRevealed ? undefined : revealNext()
