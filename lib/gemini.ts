@@ -107,9 +107,15 @@ async function request(url: string, init?: RequestInit, provider: 'gemini' | 'gr
 /** Validates the key and returns the Gemini models it can use for text generation. */
 export async function listModels(apiKey: string, provider: 'gemini' | 'groq' = 'gemini'): Promise<string[]> {
   if (provider === 'groq') {
-    const json = await request(`${GROQ_API}/models`, { headers: { Authorization: `Bearer ${apiKey}` } }, 'groq')
-    const names: string[] = (json?.data ?? []).map((m: { id: string }) => m.id).filter((n: string) => !!n)
-    return names.length ? names : ['llama-3.3-70b-versatile']
+    const key = apiKey.trim().replace(/^['\"]|['\"]$/g, '')
+    const json = await request(`${GROQ_API}/models`, { headers: { Authorization: `Bearer ${key}` } }, 'groq')
+    // The models endpoint also returns audio, transcription, moderation and other
+    // models that cannot be used for ordinary chat completions. Keep those out of the picker.
+    const names: string[] = (json?.data ?? [])
+      .filter((m: { id: string; active?: boolean }) => m.active !== false)
+      .map((m: { id: string }) => m.id)
+      .filter((n: string) => !!n && !/(whisper|transcrib|speech|tts|guard|embedding|moderation|orpheus)/i.test(n))
+    return names.length ? names.sort((a, b) => a.localeCompare(b)) : ['llama-3.3-70b-versatile']
   }
   const json = await request(`${GEMINI_API}/models?pageSize=200&key=${encodeURIComponent(apiKey)}`)
   const names: string[] = (json?.models ?? [])
@@ -141,7 +147,8 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
     const content: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
     for (const img of opts.images ?? []) content.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } })
     messages.push({ role: 'user', content: opts.images?.length ? content : prompt })
-    const result = await request(`${GROQ_API}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2, ...(opts.json || opts.responseSchema ? { response_format: { type: 'json_object' } } : {}) }), signal: opts.signal }, 'groq')
+    const apiKey = config.apiKey.trim().replace(/^['\"]|['\"]$/g, '')
+    const result = await request(`${GROQ_API}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2, ...(opts.json || opts.responseSchema ? { response_format: { type: 'json_object' } } : {}) }), signal: opts.signal }, 'groq')
     const output = result?.choices?.[0]?.message?.content
     if (typeof output !== 'string' || !output.trim()) throw new GeminiError('Groq رجّع رد فاضي.')
     return output
