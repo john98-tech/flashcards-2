@@ -248,6 +248,50 @@ export function StudySession({ deck }: { deck: Deck }) {
               if (mode === 'type') return <TypedBlank key={card.id + '-' + seg.index} answer={seg.value} value={answers[seg.index] ?? ''} checked={isOpen} onChange={(v) => setAnswers((a) => ({ ...a, [seg.index]: v }))} onCheck={(correct) => { if (correct) sfx.correct(); else sfx.wrong(); setRevealed((r) => new Set(r).add(seg.index)) }} />
               return <button key={seg.index} type="button" data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => revealOne(seg.index)} aria-label={isOpen ? seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\u00A0'}</button>
             })
+            const HEADING_CLASS = [
+  'mt-3 text-2xl font-extrabold leading-snug sm:text-3xl',
+  'mt-2 text-xl font-bold leading-snug sm:text-2xl',
+  'mt-1 text-lg font-semibold leading-snug sm:text-xl',
+  'text-base font-semibold leading-snug text-muted-foreground sm:text-lg',
+]
+const renderLine = (line: { value: string; start: number; end: number }, key: number) => {
+  const lead = line.value.match(/^[ \t]*/)![0]
+  const rest = line.value.slice(lead.length)
+  const level = Math.min(Math.floor(lead.replace(/\t/g, '    ').length / 2), 6)
+  const indent = level ? { paddingInlineStart: `${level * 1.25}rem` } : undefined
+  const contentStart = line.start + lead.length
+
+  const crumb = rest.match(/^>>\s*/)
+  if (crumb) {
+    const parts = fullText.slice(contentStart + crumb[0].length, line.end)
+      .split(/\s*>\s*/).map((p) => p.trim()).filter(Boolean)
+    return (
+      <div key={key} dir="auto" className="mb-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-b pb-3 text-xs leading-normal text-muted-foreground sm:text-sm">
+        {parts.map((part, i) => (
+          <span key={i} className="flex items-center gap-1.5">
+            {i > 0 && <span aria-hidden className="opacity-50">›</span>}
+            <span className={i === parts.length - 1 ? 'font-semibold text-foreground/80' : undefined}>{part}</span>
+          </span>
+        ))}
+      </div>
+    )
+  }
+  const heading = rest.match(/^(#{1,4})\s+(?=\S)/)
+  if (heading) {
+    return <div key={key} className={HEADING_CLASS[heading[1].length - 1]} style={indent}>{renderRange(contentStart + heading[0].length, line.end)}</div>
+  }
+  const bullet = rest.match(/^([-*•]|\d+[.)])\s+(?=\S)/)
+  if (bullet) {
+    const marker = /^\d/.test(bullet[1]) ? bullet[1] : '•'
+    return (
+      <div key={key} className="flex gap-2" style={indent}>
+        <span aria-hidden className="select-none font-semibold text-primary">{marker}</span>
+        <span className="min-w-0 flex-1 whitespace-pre-wrap">{renderRange(contentStart + bullet[0].length, line.end)}</span>
+      </div>
+    )
+  }
+  return <div key={key} className="whitespace-pre-wrap" style={indent}>{renderRange(contentStart, line.end)}</div>
+}
             const blocks: { type: 'line' | 'table' | 'diagram'; lines: typeof lines }[] = []
             for (let i = 0; i < lines.length;) {
               if (i + 1 < lines.length && isTableRow(lines[i].value) && isDivider(lines[i + 1].value)) {
@@ -261,7 +305,7 @@ export function StudySession({ deck }: { deck: Deck }) {
                 blocks.push({ type: 'diagram', lines: rows })
               } else blocks.push({ type: 'line', lines: [lines[i++]] })
             }
-            return <div dir="auto" className="space-y-3 text-base leading-[2.3] sm:text-lg sm:leading-[2.4] md:text-xl">
+            return <div dir="auto" className="space-y-2 text-base leading-[2.3] sm:text-lg sm:leading-[2.4] md:text-xl">
               {blocks.map((block, bi) => block.type === 'table' ? <div key={bi} className="overflow-x-auto rounded-lg border"><table className="w-full border-collapse text-sm sm:text-base"><tbody>{block.lines.map((line, ri) => {
                 const cells = line.value.trim().replace(/^\|/, '').replace(/\|$/, '').split('|')
                 let cursor = line.value.indexOf(line.value.trim().replace(/^\|/, '').split('|')[0])
@@ -271,7 +315,7 @@ export function StudySession({ deck }: { deck: Deck }) {
                   cursor = (at >= 0 ? at : cursor) + cell.length + 1
                   return <td key={ci} className="border-e px-3 py-2 align-top last:border-e-0">{renderRange(cellStart, cellStart + cell.length)}</td>
                 })}</tr>
-              })}</tbody></table></div> : block.type === 'diagram' ? <pre key={bi} className="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{block.lines.map((line, i) => <span key={i}>{renderRange(line.start, line.end)}{i < block.lines.length - 1 ? '\n' : ''}</span>)}</pre> : <div key={bi} className="whitespace-pre-wrap">{renderRange(block.lines[0].start, block.lines[0].end)}</div>)}
+              })}</tbody></table></div> : block.type === 'diagram' ? <pre key={bi} className="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{block.lines.map((line, i) => <span key={i}>{renderRange(line.start, line.end)}{i < block.lines.length - 1 ? '\n' : ''}</span>)}</pre> : renderLine(block.lines[0], bi))}
             </div>
           })()}
 
