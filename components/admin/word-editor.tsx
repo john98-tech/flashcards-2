@@ -5,6 +5,7 @@ import { EditorContent, useEditor, useEditorState, type Editor, type JSONContent
 import StarterKit from '@tiptap/starter-kit'
 import { TableKit } from '@tiptap/extension-table'
 import TextAlign from '@tiptap/extension-text-align'
+import Paragraph from '@tiptap/extension-paragraph'
 import Highlight from '@tiptap/extension-highlight'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
@@ -241,6 +242,51 @@ const RichTextStyle = TextStyle.extend({
         parseHTML: (element) => (element as HTMLElement).style.fontFamily || null,
         renderHTML: (attributes) => attributes.fontFamily ? { style: `font-family: ${attributes.fontFamily}` } : {},
       },
+      backgroundColor: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.backgroundColor || null,
+        renderHTML: (attributes) => attributes.backgroundColor ? { style: `background-color: ${attributes.backgroundColor}` } : {},
+      },
+    }
+  },
+})
+
+// Word stores paragraph indentation and spacing as inline CSS. Preserve those
+// attributes when ProseMirror parses pasted HTML instead of silently dropping them.
+const RichParagraph = Paragraph.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      marginLeft: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.marginLeft || null,
+        renderHTML: (attributes) => attributes.marginLeft ? { style: `margin-left: ${attributes.marginLeft}` } : {},
+      },
+      marginRight: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.marginRight || null,
+        renderHTML: (attributes) => attributes.marginRight ? { style: `margin-right: ${attributes.marginRight}` } : {},
+      },
+      textIndent: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.textIndent || null,
+        renderHTML: (attributes) => attributes.textIndent ? { style: `text-indent: ${attributes.textIndent}` } : {},
+      },
+      marginTop: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.marginTop || null,
+        renderHTML: (attributes) => attributes.marginTop ? { style: `margin-top: ${attributes.marginTop}` } : {},
+      },
+      marginBottom: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.marginBottom || null,
+        renderHTML: (attributes) => attributes.marginBottom ? { style: `margin-bottom: ${attributes.marginBottom}` } : {},
+      },
+      lineHeight: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.lineHeight || null,
+        renderHTML: (attributes) => attributes.lineHeight ? { style: `line-height: ${attributes.lineHeight}` } : {},
+      },
     }
   },
 })
@@ -261,7 +307,8 @@ export function WordEditor({ onTextChange, resetKey = 0, placeholder, initialTex
     immediatelyRender: false,
     content: initialText ? textToHtml(initialText) : undefined,
     extensions: [
-      StarterKit,
+      StarterKit.configure({ paragraph: false }),
+      RichParagraph,
       TableKit.configure({ table: { resizable: true } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight,
