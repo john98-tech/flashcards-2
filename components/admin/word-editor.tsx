@@ -45,7 +45,14 @@ function inlineText(node: JSONContent): string {
     else if (mark.type === 'strike') value = `~~${value}~~`
     else if (mark.type === 'underline') value = `<u>${value}</u>`
     else if (mark.type === 'highlight') value = `==${value}==`
-    else if (mark.type === 'textStyle' && typeof mark.attrs?.color === 'string') value = `<span style="color:${mark.attrs.color}">${value}</span>`
+    else if (mark.type === 'textStyle') {
+      const styles: string[] = []
+      if (typeof mark.attrs?.color === 'string') styles.push(`color:${mark.attrs.color}`)
+      if (typeof mark.attrs?.fontSize === 'string') styles.push(`font-size:${mark.attrs.fontSize}`)
+      if (typeof mark.attrs?.fontFamily === 'string') styles.push(`font-family:${mark.attrs.fontFamily}`)
+      if (typeof mark.attrs?.backgroundColor === 'string') styles.push(`background-color:${mark.attrs.backgroundColor}`)
+      if (styles.length) value = `<span style="${styles.join(';')}">${value}</span>`
+    }
   }
   return value
 }
