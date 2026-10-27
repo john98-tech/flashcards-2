@@ -56,13 +56,54 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
     try {
       const { cards } = await getCards()
       if (!cards.length) throw new Error('المجموعة دي مفيهاش كروت.')
-      const compact = cards.map((c, i) => ({ index: i, text: c.cloze }))
-      const response = await generate(config, `نظّم كل بطاقات مجموعة "${groupName}" إلى مجموعات وdecks/دروس مناسبة حسب المحتوى. لا تغيّر نص أي بطاقة. أدرج كل index مرة واحدة بالضبط. البطاقات: ${JSON.stringify(compact)}`, { system: config.provider === 'groq' ? GROQ_SYSTEM : SYSTEM, json: true, temperature: 0.1 })
-      const next = parsePlan(response)
+      // Keep each request below Groq's on-demand TPM request-size ceiling.
+      const batches: Array<Array<{ index: number; text: string }>> = []
+      let batch: Array<{ index: number; text: string }> = []
+      let chars = 0
+      cards.forEach((card, index) => {
+        const text = String(card.cloze ?? '')
+        if (text.length > 6000) throw new Error(`البطاقة رقم ${index + 1} طويلة جدًا لطلب واحد. قصّر نصها ثم أعد المحاولة.`)
+        if (batch.length && (batch.length >= 8 || chars + text.length > 6000)) {
+          batches.push(batch)
+          batch = []
+          chars = 0
+        }
+        batch.push({ index, text })
+        chars += text.length
+      })
+      if (batch.length) batches.push(batch)
+      const merged: Plan = { groups: [], decks: [], explanation: '' }
+      const groupNames = new Set<string>()
+      const deckMap = new Map<string, PlanDeck>()
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        setNotice(`جاري تنظيم الدفعة ${batchIndex + 1} من ${batches.length}...`)
+        const current = batches[batchIndex]
+        const prompt = `نظّم الدفعة الحالية من بطاقات مجموعة "${groupName}" إلى مجموعات ودروس مناسبة. أرجع JSON حسب النظام، ووزّع كل index محلي مرة واحدة بالضبط. لا تغيّر النصوص. البطاقات: ${JSON.stringify(current.map((c, i) => ({ index: i, text: c.text })))}`
+        const response = await generate(config, prompt, { system: config.provider === 'groq' ? GROQ_SYSTEM : SYSTEM, json: true, temperature: 0.1 })
+        const part = parsePlan(response)
+        const used = part.decks.flatMap(deck => deck.cardIndexes)
+        if (used.some(i => !Number.isInteger(i) || i < 0 || i >= current.length) || new Set(used).size !== used.length || used.length !== current.length) {
+          throw new Error(`الدفعة ${batchIndex + 1}: لم يتم توزيع كل البطاقات مرة واحدة بالضبط. لم يتم تطبيق أي تغيير؛ أعد المحاولة.`)
+        }
+        for (const name of part.groups) {
+          const key = String(name).trim().toLowerCase()
+          if (key && !groupNames.has(key)) { groupNames.add(key); merged.groups.push(String(name).trim()) }
+        }
+        for (const deck of part.decks) {
+          const key = `${String(deck.groupName || '').trim().toLowerCase()}::${String(deck.title || '').trim().toLowerCase()}`
+          const indexes = deck.cardIndexes.map(i => current[i].index)
+          const existing = deckMap.get(key)
+          if (existing) existing.cardIndexes.push(...indexes)
+          else deckMap.set(key, { ...deck, cardIndexes: indexes })
+        }
+      }
+      merged.decks = Array.from(deckMap.values())
+      merged.explanation = `تم تنظيم ${cards.length} بطاقة على ${batches.length} دفعات لتفادي حد حجم طلب Groq.`
+      const next = merged
       const used = next.decks.flatMap(d => d.cardIndexes)
       if (used.some(i => !Number.isInteger(i) || i < 0 || i >= cards.length)) throw new Error('الخطة فيها أرقام بطاقات غير صحيحة.')
       if (new Set(used).size !== used.length) throw new Error('الخطة كررت بعض البطاقات. أعد المحاولة.')
-      if (used.length !== cards.length) throw new Error(`Gemini وزّع ${used.length} من أصل ${cards.length} بطاقة فقط. لم يتم تطبيق أي تغيير؛ جرّب مرة أخرى أو اطلب منه توزيع كل البطاقات.`)
+      if (used.length !== cards.length) throw new Error(`تم توزيع ${used.length} من أصل ${cards.length} بطاقة فقط. لم يتم تطبيق أي تغيير؛ أعد المحاولة.`)
       setPlan(next)
       setMessages([{ role: 'assistant', text: next.explanation || `اقترحت ${next.groups.length} مجموعات و${next.decks.length} دروس. راجع الخطة قبل التطبيق.` }])
     } catch (e) { setError(e instanceof Error ? e.message : 'حصل خطأ أثناء التنظيم.') }
