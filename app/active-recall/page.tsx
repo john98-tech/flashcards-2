@@ -14,12 +14,15 @@ function isValidDate(value: string) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
-export default async function ActiveRecallPage({ searchParams }: { searchParams: Promise<{ testDate?: string | string[] }> }) {
+export default async function ActiveRecallPage({ searchParams }: { searchParams: Promise<{ testDate?: string | string[]; testTime?: string | string[] }> }) {
   if (!(await getSession())) redirect('/login?next=%2Factive-recall')
   const query = await searchParams
   const actualToday = cairoDate()
+  const actualTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
   const requestedDate = Array.isArray(query.testDate) ? query.testDate[0] : query.testDate
   const selectedDate = requestedDate && isValidDate(requestedDate) ? requestedDate : actualToday
+  const requestedTime = Array.isArray(query.testTime) ? query.testTime[0] : query.testTime
+  const selectedTime = requestedTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime) ? requestedTime : actualTime
   let courses: Awaited<ReturnType<typeof getRecallCatalog>>['courses'] = []
   let loadFailed = false
   try {
@@ -32,7 +35,7 @@ export default async function ActiveRecallPage({ searchParams }: { searchParams:
   return (
     <div className="min-h-dvh" dir="rtl">
       <SiteHeader />
-      <div className="pt-4"><RecallTestDatePicker actualToday={actualToday} selectedDate={selectedDate} /></div>
+      <div className="pt-4"><RecallTestDatePicker actualToday={actualToday} selectedDate={selectedDate} actualTime={actualTime} selectedTime={selectedTime} /></div>
       <main className="mx-auto w-full max-w-5xl px-4 py-8">
         <Link href="/" className="mb-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground">
           <ArrowRight className="size-4" aria-hidden /> الرئيسية
@@ -51,7 +54,7 @@ export default async function ActiveRecallPage({ searchParams }: { searchParams:
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {courses.map((course) => (
               <li key={course.id}>
-                <Link href={selectedDate !== actualToday ? `/active-recall/${course.id}?testDate=${selectedDate}` : `/active-recall/${course.id}`} className="flex h-full flex-col gap-3 rounded-xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+                <Link href={(() => { const params = new URLSearchParams(); if (selectedDate !== actualToday) params.set("testDate", selectedDate); if (selectedTime !== actualTime) params.set("testTime", selectedTime); const queryString = params.toString(); return queryString ? `/active-recall/${course.id}?${queryString}` : `/active-recall/${course.id}` })()} className="flex h-full flex-col gap-3 rounded-xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
                   <BookOpen className="size-6 text-primary" aria-hidden />
                   <span className="text-lg font-bold">{course.name}</span>
                   <span className="text-sm text-muted-foreground">{course.lessonCount} درس متاح للاختيار</span>
