@@ -78,7 +78,15 @@ export async function saveCard(deckId: string, card: Card, position: number) {
 export async function deleteCards(deckId: string, ids: string[]) {
   await requireAdmin()
   if (!ids.length) return
-  const { error } = await db().from('cards').delete().eq('deck_id', deckId).in('id', ids)
+  const client = db()
+  const { data: cards, error: readError } = await client.from('cards').select('*').eq('deck_id', deckId).in('id', ids)
+  if (readError) throw new Error(readError.message)
+  if (!cards?.length) return
+  const { error: binError } = await client.from('recycle_bin').insert(cards.map(card => ({
+    entity_type: 'card', entity_id: `${deckId}:${card.id}`, payload: card,
+  })))
+  if (binError) throw new Error(binError.message)
+  const { error } = await client.from('cards').delete().eq('deck_id', deckId).in('id', ids)
   if (error) throw new Error(error.message)
 }
 
@@ -89,7 +97,58 @@ export async function finishDeckSave() {
 
 export async function deleteDeck(id: string) {
   await requireAdmin()
-  const { error } = await db().from('decks').delete().eq('id', id)
+  const client = db()
+  const { data: deck, error: deckError } = await client.from('decks').select('*').eq('id', id).maybeSingle()
+  if (deckError) throw new Error(deckError.message)
+  if (!deck) return
+  const { data: cards, error: cardsError } = await client.from('cards').select('*').eq('deck_id', id)
+  if (cardsError) throw new Error(cardsError.message)
+  const { error: binError } = await client.from('recycle_bin').insert([
+    { entity_type: 'deck', entity_id: id, payload: { deck, cards: cards ?? [] } },
+  ])
+  if (binError) throw new Error(binError.message)
+  const { error } = await client.from('decks').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/', 'layout')
+}
+
+export type RecycleBinItem = { id: string; entityType: string; entityId: string; payload: Record<string, unknown>; deletedAt: string }
+
+export async function listRecycleBin(): Promise<RecycleBinItem[]> {
+  await requireAdmin()
+  const { data, error } = await db().from('recycle_bin').select('id, entity_type, entity_id, payload, deleted_at').order('deleted_at', { ascending: false }).limit(500)
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(item => ({ id: item.id, entityType: item.entity_type, entityId: item.entity_id, payload: item.payload, deletedAt: item.deleted_at }))
+}
+
+export async function restoreRecycleBinItem(id: string) {
+  await requireAdmin()
+  const client = db()
+  const { data: item, error: readError } = await client.from('recycle_bin').select('*').eq('id', id).maybeSingle()
+  if (readError) throw new Error(readError.message)
+  if (!item) throw new Error('العنصر غير موجود في سلة المحذوفات.')
+  if (item.entity_type === 'deck') {
+    const payload = item.payload as { deck: Record<string, unknown>; cards: Record<string, unknown>[] }
+    const { error: deckError } = await client.from('decks').upsert(payload.deck)
+    if (deckError) throw new Error(deckError.message)
+    if (payload.cards?.length) {
+      const { error: cardsError } = await client.from('cards').upsert(payload.cards)
+      if (cardsError) throw new Error(cardsError.message)
+    }
+  } else if (item.entity_type === 'card') {
+    const { error } = await client.from('cards').upsert(item.payload)
+    if (error) throw new Error(error.message)
+  } else {
+    throw new Error('نوع العنصر غير مدعوم للاستعادة.')
+  }
+  const { error } = await client.from('recycle_bin').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/', 'layout')
+}
+
+export async function permanentlyDeleteRecycleBinItem(id: string) {
+  await requireAdmin()
+  const { error } = await db().from('recycle_bin').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/', 'layout')
 }
