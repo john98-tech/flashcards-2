@@ -48,7 +48,7 @@ export default async function ActiveRecallCoursePage({
   const requestedDate = Array.isArray(query.testDate) ? query.testDate[0] : query.testDate
   const today = requestedDate && isValidDate(requestedDate) ? requestedDate : actualToday
   const requestedTime = Array.isArray(query.testTime) ? query.testTime[0] : query.testTime
-  const selectedTime = requestedTime && /^([01]\\d|2[0-3]):[0-5]\\d$/.test(requestedTime) ? requestedTime : actualTime
+  const selectedTime = requestedTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime) ? requestedTime : actualTime
   const testMode = today !== actualToday || selectedTime !== actualTime
   return (
     <>
