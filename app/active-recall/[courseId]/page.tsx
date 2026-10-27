@@ -1,13 +1,27 @@
 import { notFound, redirect } from 'next/navigation'
 import { RecallCourse } from '@/components/active-recall/recall-course'
+import { RecallTestDatePicker } from '@/components/active-recall/test-date-picker'
 import { SiteHeader } from '@/components/site-header'
 import { getSession } from '@/lib/auth'
 import { cairoDate, getRecallSettings, getStudentRecallCourse } from '@/lib/active-recall/data'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ActiveRecallCoursePage({ params }: { params: Promise<{ courseId: string }> }) {
+function isValidDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+export default async function ActiveRecallCoursePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ courseId: string }>
+  searchParams: Promise<{ testDate?: string | string[] }>
+}) {
   const { courseId } = await params
+  const query = await searchParams
   const session = await getSession()
   if (!session) redirect(`/login?next=${encodeURIComponent(`/active-recall/${courseId}`)}`)
   const loaded = await Promise.all([
@@ -29,5 +43,16 @@ export default async function ActiveRecallCoursePage({ params }: { params: Promi
   }
   const [course, settings] = loaded
   if (!course) notFound()
-  return <RecallCourse course={course} today={cairoDate()} settings={settings} />
+  const actualToday = cairoDate()
+  const requestedDate = Array.isArray(query.testDate) ? query.testDate[0] : query.testDate
+  const today = requestedDate && isValidDate(requestedDate) ? requestedDate : actualToday
+  return (
+    <>
+      <SiteHeader />
+      <div className="pt-4">
+        <RecallTestDatePicker actualToday={actualToday} selectedDate={today} />
+        <RecallCourse course={course} today={today} settings={settings} />
+      </div>
+    </>
+  )
 }
