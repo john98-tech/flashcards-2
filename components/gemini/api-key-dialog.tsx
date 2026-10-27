@@ -113,7 +113,6 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
           dir="ltr"
           value={model}
           onFocus={async () => { if (apiKey.trim()) { try { const latest = await listModels(apiKey.trim(), provider); setModels(latest) } catch {} } }}
-          onFocus={async () => { if (apiKey.trim()) { try { const latest = await listModels(apiKey.trim(), provider); setModels(latest) } catch {} } }}
           onChange={(e) => setModel(e.target.value)}
           className="mb-3 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
         >
