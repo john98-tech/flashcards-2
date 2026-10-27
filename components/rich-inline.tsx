@@ -61,7 +61,7 @@ export function renderRichInline(
   const before = match.start > start ? renderPlain(start, match.start) : null
   const inside = renderRichInline(text, match.innerStart, match.innerEnd, renderPlain, keyPrefix + '-in')
   const after = match.end < end ? renderRichInline(text, match.end, end, renderPlain, keyPrefix + '-after') : null
-  let formatted: ReactNode
+  let formatted: ReactNode = inside
   switch (match.kind) {
     case 'bold': formatted = <strong>{inside}</strong>; break
     case 'italic': formatted = <em>{inside}</em>; break
