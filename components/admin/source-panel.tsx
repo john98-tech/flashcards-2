@@ -194,6 +194,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
 
       <div className="[&_.word-editor-content]:min-h-[480px]">
         <WordEditor
+          debounceMs={150}
           onTextChange={setText}
           resetKey={resetKey}
           placeholder="الصق النص أو جدول Word هنا؛ الجداول هتتحول لجدول منسق في الكارت…"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { EditorContent, useEditor, useEditorState, type Editor, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TableKit } from '@tiptap/extension-table'
@@ -261,6 +261,8 @@ type Props = {
   /** Bump this number to clear the editor. */
   resetKey?: number
   placeholder?: string
+  /** Delay serializing large documents while the user is typing. */
+  debounceMs?: number
   /** Plain text loaded into the editor when it mounts (blank lines separate paragraphs). */
   initialText?: string
 }
@@ -340,7 +342,17 @@ function textToHtml(text: string): string {
     .join('')
 }
 
-export function WordEditor({ onTextChange, resetKey = 0, placeholder, initialText }: Props) {
+export function WordEditor({ onTextChange, resetKey = 0, placeholder, debounceMs = 0, initialText }: Props) {
+  const updateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onTextChangeRef = useRef(onTextChange)
+  onTextChangeRef.current = onTextChange
+
+  const flushTextChange = (content: JSONContent) => {
+    if (updateTimer.current) clearTimeout(updateTimer.current)
+    updateTimer.current = null
+    onTextChangeRef.current(docToText(content))
+  }
+
   const editor = useEditor({
     immediatelyRender: false,
     content: initialText ? textToHtml(initialText) : undefined,
@@ -360,13 +372,38 @@ export function WordEditor({ onTextChange, resetKey = 0, placeholder, initialTex
         dir: 'auto',
         class: 'word-editor-content min-h-56 whitespace-pre-wrap p-4 text-sm leading-relaxed outline-none',
       },
+      handleDOMEvents: {
+        blur: (view) => {
+          flushTextChange(view.state.doc.toJSON())
+          return false
+        },
+      },
     },
-    onUpdate: ({ editor: e }) => onTextChange(docToText(e.getJSON())),
+    onUpdate: ({ editor: e }) => {
+      if (debounceMs <= 0) {
+        flushTextChange(e.getJSON())
+        return
+      }
+      if (updateTimer.current) clearTimeout(updateTimer.current)
+      updateTimer.current = setTimeout(() => {
+        updateTimer.current = null
+        onTextChangeRef.current(docToText(e.getJSON()))
+      }, debounceMs)
+    },
   })
 
   useEffect(() => {
-    if (resetKey > 0 && editor) editor.commands.clearContent(true)
+    if (resetKey > 0 && editor) {
+      if (updateTimer.current) clearTimeout(updateTimer.current)
+      updateTimer.current = null
+      onTextChangeRef.current('')
+      editor.commands.clearContent(true)
+    }
   }, [resetKey, editor])
+
+  useEffect(() => () => {
+    if (updateTimer.current) clearTimeout(updateTimer.current)
+  }, [])
 
   return (
     <div className="word-editor overflow-hidden rounded-lg border bg-background focus-within:ring-2 focus-within:ring-ring">
