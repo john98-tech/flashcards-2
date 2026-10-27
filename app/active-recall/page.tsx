@@ -32,7 +32,8 @@ export default async function ActiveRecallPage({ searchParams }: { searchParams:
   return (
     <div className="min-h-dvh" dir="rtl">
       <SiteHeader />
-      <div className="pt-4"><RecallTestDatePicker actualToday={actualToday} selectedDate={selectedDate} /></div>\n      <main className="mx-auto w-full max-w-5xl px-4 py-8">
+      <div className="pt-4"><RecallTestDatePicker actualToday={actualToday} selectedDate={selectedDate} /></div>
+      <main className="mx-auto w-full max-w-5xl px-4 py-8">
         <Link href="/" className="mb-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground">
           <ArrowRight className="size-4" aria-hidden /> الرئيسية
         </Link>
