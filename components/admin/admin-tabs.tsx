@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BookOpen, KeyRound, Layers, PenLine, Sparkles, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { RecallCourse, RecallLesson, RecallSettings } from '@/lib/active-recall/types'
@@ -65,6 +65,29 @@ export function AdminTabs({
 // The flashcards admin: Decks / Access codes / AI organization.
 function FlashcardsSection({ decks, groups }: { decks: DeckSummary[]; groups: DeckGroup[] }) {
   const [tab, setTab] = useState<Tab>('decks')
+  const [tabRestored, setTabRestored] = useState(false)
+
+  // Keep the selected flashcards sub-tab across server-action revalidation / remounts.
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem('admin-flashcards-tab')
+      if (saved === 'decks' || saved === 'codes' || saved === 'ai-organizer' || saved === 'recycle-bin') {
+        setTab(saved)
+      }
+    } catch {
+      // Storage may be unavailable; the tabs still work for this render.
+    }
+    setTabRestored(true)
+  }, [])
+
+  useEffect(() => {
+    if (!tabRestored) return
+    try {
+      window.sessionStorage.setItem('admin-flashcards-tab', tab)
+    } catch {
+      // Ignore unavailable session storage.
+    }
+  }, [tab, tabRestored])
 
   return (
     <div className="flex flex-col gap-6">
