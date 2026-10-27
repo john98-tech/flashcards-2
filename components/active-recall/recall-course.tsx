@@ -31,12 +31,18 @@ function formatDate(date: string) {
 
 export function RecallCourse({ course, today, settings, testMode = false }: { course: Course; today: string; settings: RecallSettings; testMode?: boolean }) {
   const router = useRouter()
-  const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>(course.plan?.lessonIds ?? [])
+  // Include lessons added by the admin after a student created their plan.
+  // When the catalog changes, open the editor so the student can regenerate the schedule.
+  const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>(() =>
+    course.plan ? Array.from(new Set([...course.plan.lessonIds, ...course.lessons.map((lesson) => lesson.id)])) : course.lessons.map((lesson) => lesson.id),
+  )
   const [durationDays, setDurationDays] = useState(() =>
     course.plan && course.plan.endDate >= today ? Math.max(1, dayCount(today, course.plan.endDate)) : 30,
   )
   const [examDate, setExamDate] = useState(course.plan?.examDate ?? '')
-  const [editing, setEditing] = useState(!course.plan)
+  const [editing, setEditing] = useState(
+    !course.plan || course.lessons.some((lesson) => !course.plan?.lessonIds.includes(lesson.id)),
+  )
   const [selectedSessionId, setSelectedSessionId] = useState('')
   const [revealedQuestions, setRevealedQuestions] = useState<number[]>([])
   const [answers, setAnswers] = useState<Record<number, string>>({})
