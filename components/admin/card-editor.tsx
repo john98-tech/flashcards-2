@@ -5,6 +5,7 @@ import { GripVertical, Merge, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { fromCloze, toCloze, type Card } from '@/lib/cloze'
+import { renderRichInline } from '@/components/rich-inline'
 
 type Props = {
   card: Card
@@ -102,7 +103,7 @@ export const CardEditor = memo(function CardEditor({
         }
         const isTableRow = (value: string) => /^\s*\|.*\|\s*$/.test(value)
         const isDivider = (value: string) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(value)
-        const renderRange = (start: number, end: number) => tokens.map((t, i) => {
+        const renderPlainRange = (start: number, end: number) => tokens.map((t, i) => {
           if (t.start < start || t.end > end) return null
           if (t.space) {
             const joined = chosen.has(i - 1) && chosen.has(i + 1)
@@ -111,6 +112,7 @@ export const CardEditor = memo(function CardEditor({
           const on = chosen.has(i)
           return <button key={i} type="button" aria-pressed={on} onClick={() => toggle(i)} className={cn('rounded-sm transition-colors', on ? 'bg-highlight font-semibold text-highlight-foreground' : 'hover:bg-accent')}>{t.text}</button>
         })
+        const renderRange = (start: number, end: number) => renderRichInline(text, start, end, renderPlainRange, `admin-${start}-${end}`)
         const blocks: { type: 'line' | 'table' | 'diagram'; lines: typeof lines }[] = []
         for (let i = 0; i < lines.length;) {
           if (i + 1 < lines.length && isTableRow(lines[i].value) && isDivider(lines[i + 1].value)) {
