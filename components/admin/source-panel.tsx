@@ -65,6 +65,30 @@ export function SourcePanel({ terms, onGenerate }: Props) {
   const [joinLines, setJoinLines] = useState(true)
   const [numbers, setNumbers] = useState(true)
   const [abbreviations, setAbbreviations] = useState(true)
+  const [draftReady, setDraftReady] = useState(false)
+  const sourceDraftKey = 'sammaa-admin-source-panel-draft-v1'
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(sourceDraftKey)
+      if (raw) {
+        const saved = JSON.parse(raw) as { text?: string; joinLines?: boolean; numbers?: boolean; abbreviations?: boolean }
+        if (typeof saved.text === 'string') setText(saved.text)
+        if (typeof saved.joinLines === 'boolean') setJoinLines(saved.joinLines)
+        if (typeof saved.numbers === 'boolean') setNumbers(saved.numbers)
+        if (typeof saved.abbreviations === 'boolean') setAbbreviations(saved.abbreviations)
+      }
+    } catch {}
+    setDraftReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!draftReady) return
+    try {
+      if (!text) localStorage.removeItem(sourceDraftKey)
+      else localStorage.setItem(sourceDraftKey, JSON.stringify({ text, joinLines, numbers, abbreviations, savedAt: Date.now() }))
+    } catch {}
+  }, [draftReady, text, joinLines, numbers, abbreviations])
 
   const { config, ready } = useGeminiConfig()
   const [keyOpen, setKeyOpen] = useState(false)
