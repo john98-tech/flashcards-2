@@ -192,14 +192,15 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
     const messageFields = message && typeof message === 'object' ? Object.keys(message).join(', ') : 'لا توجد'
     const hasReasoning = typeof message?.reasoning === 'string' && !!message.reasoning.trim()
     const refusal = typeof message?.refusal === 'string' && message.refusal.trim()
+    const completionTokens = result?.usage?.completion_tokens
     const detail = finishReason === 'length'
-      ? 'الرد غالبًا اتقطع بسبب حد التوكنات.'
+      ? `التوليد وصل لحد التوكنات${typeof completionTokens === 'number' ? ` (${completionTokens} توكن)` : ''}. تم رفع حد الإجابة إلى 8192 توكن؛ لو استمرت المشكلة فالموديل غالبًا بيستهلك الحد في التفكير أو المهمة أكبر من قدرته، فجرّب موديل محادثة عادي أو قسّم العملية.`
       : refusal
         ? `الموديل رفض الطلب: ${refusal}`
         : hasReasoning
           ? 'الاستجابة فيها reasoning لكن مفيهاش إجابة نهائية في content.'
           : 'الاستجابة لا تحتوي على نص نهائي قابل للعرض.'
-    throw new GeminiError(`Groq رجّع استجابة من غير نص نهائي. السبب: ${finishReason}. ${detail} حقول الرسالة: ${messageFields}. جرّب موديل محادثة عادي أو راجع سجل الطلب في Groq.`)
+    throw new GeminiError(`Groq رجّع استجابة من غير نص نهائي. الموديل: ${result?.model ?? config.model}. السبب: ${finishReason}. ${detail} حقول الرسالة: ${messageFields}.`)
   }
   const parts: unknown[] = [{ text: prompt }]
   for (const img of opts.images ?? []) parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } })
