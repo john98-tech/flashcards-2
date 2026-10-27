@@ -23,7 +23,7 @@ function parseInlineStyle(raw: string): CSSProperties {
 function firstMarkup(text: string, start: number, end: number): Match | null {
   const slice = text.slice(start, end)
   const patterns: { regex: RegExp; kind: Match['kind']; colorGroup?: number; innerGroup: number }[] = [
-    { regex: /<span\s+style=["']color\s*:\s*(#[\da-f]{3,8}|[a-z]+)["']\s*>([\s\S]*?)<\/span>/i, kind: 'color', colorGroup: 1, innerGroup: 2 },
+    { regex: /<span\s+style=["']([^"']+)["']\s*>([\s\S]*?)<\/span>/i, kind: 'style', colorGroup: 1, innerGroup: 2 },
     { regex: /\*\*([\s\S]+?)\*\*/, kind: 'bold', innerGroup: 1 },
     { regex: /~~([\s\S]+?)~~/, kind: 'strike', innerGroup: 1 },
     { regex: /<u>([\s\S]+?)<\/u>/i, kind: 'underline', innerGroup: 1 },
