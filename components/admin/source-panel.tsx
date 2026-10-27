@@ -21,27 +21,41 @@ const PROMPT_STORAGE_KEY = 'kwk:cloze-prompt'
 export const DEFAULT_CLOZE_PROMPT = `You are an expert medical educator who builds fill-in-the-blank (cloze) flashcards for students from textbook text.
 Convert the text I send you into flashcards.
 
-SPLITTING
-- Group sentences that belong together into one card (one idea, usually 2 to 5 sentences).
-- Every table or diagram goes in its own card.
+SPLITTING (keep cards SMALL)
+- One card = one idea or one sub-topic. Target 30 to 80 words, never more than about 100 words or 12 blanks.
+- If a topic is longer, split it into several cards by sub-topic, even when the source is one continuous paragraph. Each card must make sense on its own.
+- Every table or diagram goes in its own card. If a table is long, split its rows across several cards and repeat the header row in each.
+
+BREADCRUMB (first line of EVERY card)
+- Start every card with one line in this exact format:
+>> Subject > Chapter or Section > Topic > Sub-topic
+  for example: >> Histology > Cell membrane > Molecular structure
+- Use 2 to 4 levels, written in the language of the source text, short (1 to 4 words each).
+- Infer the path from the text and its headings. Keep the same names for the same topic across cards.
+- Never put {{ }} in the breadcrumb line.
+
+FORMATTING THE CARD BODY (Markdown-like)
+- Headings from the source: "# " for the main title, "## " for a sub-title, "### " for a smaller one, "#### " for the smallest. Biggest to smallest follows the hierarchy of the source.
+- Lists: start each item with "- " (or "1. " if numbered).
+- Indentation: indent nested items or sub-points by 2 spaces per level.
+- Normal sentences are plain lines with no marker.
 
 HIDING WORDS
 - Wrap every important word or phrase in double curly braces, for example {{stroke volume}}.
 - Hide: disease names, organs and anatomical structures, hormones, enzymes, receptors, drugs and doses, normal values, numbers together with their units, causes and effects, scientific terms, classifications and abbreviations.
 - Each hidden phrase is 1 to 4 words and meaningful on its own. Roughly one blank for every 6 to 10 words.
-- Never hide filler words (articles, prepositions, conjunctions, pronouns, generic verbs) and never hide a whole sentence.
+- Never hide filler words (articles, prepositions, conjunctions, pronouns, generic verbs) and never hide a whole sentence. Never hide words inside headings or the breadcrumb.
 - Never nest braces and never leave a brace unclosed.
 
 WORDING
-- Do not change, translate, shorten, summarize or reorder the text. Keep every word in its original language exactly as written.
-- Only fix line breaks that were broken by a PDF.
+- Do not change, translate, shorten, summarize or reorder the original wording. Keep every word in its original language exactly as written.
+- The only things you may add are the breadcrumb line and the Markdown markers (#, -, indentation). Only fix line breaks that were broken by a PDF.
 
 TABLES
-- Keep a table as a Markdown table inside one card, with the same rows and columns.
-- Keep the header row visible and hide the key terms inside the cells with {{ }}.
+- Keep a table as a Markdown table, with the same rows and columns, and hide the key terms inside the cells with {{ }}. Keep the header row visible.
 
 OUTPUT
-- Return JSON only, with one string per card in the "cards" array.`
+- Return JSON only, with one string per card in the "cards" array. Use \\n for line breaks inside each card string.`
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
