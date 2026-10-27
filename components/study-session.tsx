@@ -447,43 +447,78 @@ function WideTable({ children }: { children: React.ReactNode }) {
     const update = () => {
       const max = element.scrollWidth - element.clientWidth
       setCanScroll(max > 2)
+      // Use the browser's physical scroll position so the side controls always
+      // move toward the side the user clicked, including in RTL layouts.
       const rtl = getComputedStyle(element).direction === 'rtl'
-      const normalized = rtl ? Math.abs(element.scrollLeft) : element.scrollLeft
-      setCanGoLeft(normalized > 2)
-      setCanGoRight(normalized < max - 2)
+      const position = rtl
+        ? Math.max(0, Math.min(max, -element.scrollLeft))
+        : Math.max(0, Math.min(max, element.scrollLeft))
+      setCanGoLeft(position > 2)
+      setCanGoRight(position < max - 2)
     }
     update()
     const observer = new ResizeObserver(update)
     observer.observe(element)
     if (element.firstElementChild) observer.observe(element.firstElementChild)
     element.addEventListener('scroll', update, { passive: true })
-    return () => { observer.disconnect(); element.removeEventListener('scroll', update) }
+    return () => {
+      observer.disconnect()
+      element.removeEventListener('scroll', update)
+    }
   }, [children])
 
   const move = (direction: 'left' | 'right') => {
     const element = scroller.current
     if (!element) return
+    // Small repeated steps make wide tables easier to inspect without jumping
+    // across several columns at once.
+    const step = Math.min(180, Math.max(100, element.clientWidth * 0.28))
     const rtl = getComputedStyle(element).direction === 'rtl'
-    const amount = Math.max(220, element.clientWidth * 0.72)
-    element.scrollBy({ left: (direction === 'left' ? -1 : 1) * amount * (rtl ? -1 : 1), behavior: 'smooth' })
+    const physicalDirection = direction === 'left' ? -1 : 1
+    element.scrollBy({
+      left: physicalDirection * step * (rtl ? -1 : 1),
+      behavior: 'smooth',
+    })
   }
 
+  const sideButtonClass = 'pointer-events-auto flex size-10 shrink-0 items-center justify-center rounded-full border border-white/30 bg-background/65 text-foreground shadow-lg backdrop-blur-xl transition-all duration-200 hover:scale-105 hover:bg-background/90 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-0'
+
   return (
-    <div className="my-2 min-w-0 max-w-full overflow-hidden rounded-xl border bg-card/60 shadow-sm">
+    <div className="group/wide-table relative my-2 min-w-0 max-w-full overflow-hidden rounded-xl border bg-card/60 shadow-sm">
+      <div
+        ref={scroller}
+        className="max-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:thin]"
+      >
+        {children}
+      </div>
       {canScroll && (
-        <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-2 py-1.5 sm:px-3">
-          <span className="text-xs font-medium text-muted-foreground">حرّك الجدول</span>
-          <div className="flex items-center gap-1">
-            <button type="button" onClick={() => move('right')} disabled={!canGoRight} aria-label="حرّك الجدول لليمين" title="يمين" className="inline-flex size-8 items-center justify-center rounded-lg border bg-background text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-35">
-              <ChevronRight className="size-4" aria-hidden />
-            </button>
-            <button type="button" onClick={() => move('left')} disabled={!canGoLeft} aria-label="حرّك الجدول للشمال" title="شمال" className="inline-flex size-8 items-center justify-center rounded-lg border bg-background text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-35">
-              <ChevronLeft className="size-4" aria-hidden />
+        <>
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background/50 via-background/20 to-transparent px-1.5 sm:px-2">
+            <button
+              type="button"
+              onClick={() => move('left')}
+              disabled={!canGoLeft}
+              aria-label="حرّك الجدول للشمال خطوة"
+              title="تحريك خطوة للشمال"
+              className={sideButtonClass}
+            >
+              <ChevronLeft className="size-5" aria-hidden />
             </button>
           </div>
-        </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background/50 via-background/20 to-transparent px-1.5 sm:px-2">
+            <button
+              type="button"
+              onClick={() => move('right')}
+              disabled={!canGoRight}
+              aria-label="حرّك الجدول لليمين خطوة"
+              title="تحريك خطوة لليمين"
+              className={sideButtonClass}
+            >
+              <ChevronRight className="size-5" aria-hidden />
+            </button>
+          </div>
+        </>
       )}
-      <div ref={scroller} className="max-w-full overflow-x-auto overscroll-x-contain">{children}</div>
     </div>
   )
 }
