@@ -76,7 +76,7 @@ function blockIndent(node: JSONContent): string {
   const attrs = node.attrs ?? {}
   const cssLengthToPx = (value: unknown) => {
     if (typeof value !== 'string') return 0
-    const match = value.trim().match(/^(\\d+(?:\\.\\d+)?)(px|pt|em|rem|%)$/i)
+    const match = value.trim().match(/^(\d+(?:\.\d+)?)(px|pt|em|rem|%)$/i)
     if (!match) return 0
     const amount = Number(match[1])
     switch (match[2].toLowerCase()) {
@@ -121,8 +121,8 @@ function blockToText(node: JSONContent, prefix = ''): string[] {
 export function docToText(doc: JSONContent): string {
   return (doc.content ?? [])
     .flatMap((node) => blockToText(node))
-    .map((part) => part.trim())
-    .filter(Boolean)
+    .map((part) => part.replace(/[ \t]+$/gm, '').replace(/^\n+|\n+$/g, ''))
+    .filter((part) => part.trim().length > 0)
     .join('\n\n')
 }
 
