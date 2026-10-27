@@ -8,7 +8,7 @@ import { DEFAULT_MODEL, FALLBACK_MODELS, listModels, useGeminiConfig } from '@/l
 export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { config, save, clear } = useGeminiConfig()
   const [apiKey, setApiKey] = useState('')
-  const [model, setModel] = useState(DEFAULT_MODEL)
+  const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini')\n  const [model, setModel] = useState(DEFAULT_MODEL)
   const [models, setModels] = useState<string[]>(FALLBACK_MODELS)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -57,7 +57,7 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
         className="w-full max-w-md rounded-t-2xl border bg-card p-5 shadow-2xl sm:rounded-2xl"
         role="dialog"
         aria-modal="true"
-        aria-label="مفتاح Gemini"
+        aria-label="إعداد مزود الذكاء الاصطناعي"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -65,7 +65,7 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
               <KeyRound className="size-5" aria-hidden />
             </span>
             <div>
-              <h2 className="text-lg font-bold">مفتاح Gemini</h2>
+              <h2 className="text-lg font-bold">مفتاح المزوّد</h2>
               <p className="text-xs text-muted-foreground">علشان الذكاء الاصطناعي يصحح إجابتك</p>
             </div>
           </div>
@@ -74,15 +74,15 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
           </button>
         </div>
 
-        <ol className="mb-4 list-decimal space-y-1 ps-5 text-sm leading-relaxed text-muted-foreground">
+        <label className="mb-1 block text-sm font-medium" htmlFor="ai-provider">مزوّد الذكاء الاصطناعي</label>\n        <select id="ai-provider" value={provider} onChange={(e) => { const next = e.target.value as 'gemini' | 'groq'; setProvider(next); setModel(next === 'groq' ? 'llama-3.3-70b-versatile' : DEFAULT_MODEL); setModels(next === 'groq' ? ['llama-3.3-70b-versatile'] : FALLBACK_MODELS) }} className="mb-3 w-full rounded-lg border bg-background px-3 py-2 text-sm">\n          <option value="gemini">Google Gemini</option><option value="groq">Groq</option>\n        </select>\n        <ol className="mb-4 list-decimal space-y-1 ps-5 text-sm leading-relaxed text-muted-foreground">
           <li>
             افتح{' '}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline">
-              Google AI Studio <ExternalLink className="size-3" aria-hidden />
+            <a href={provider === 'groq' ? 'https://console.groq.com/keys' : 'https://aistudio.google.com/apikey'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline">
+              {provider === 'groq' ? 'Groq Console' : 'Google AI Studio'} <ExternalLink className="size-3" aria-hidden />
             </a>{' '}
             وسجّل بحساب جوجل.
           </li>
-          <li>اضغط Create API key وانسخ المفتاح (مجاني).</li>
+          <li>اضغط Create API key وانسخ المفتاح.</li>
           <li>الصقه هنا واضغط حفظ.</li>
         </ol>
 
@@ -95,7 +95,7 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
           spellCheck={false}
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="AIza..."
+          placeholder={provider === 'groq' ? 'gsk_...' : 'AIza...'}
           className="mb-3 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
         />
 
@@ -104,7 +104,7 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
           id="gemini-model"
           dir="ltr"
           value={model}
-          onChange={(e) => setModel(e.target.value)}
+          onFocus={async () => { if (apiKey.trim()) { try { const latest = await listModels(apiKey.trim(), provider); setModels(latest) } catch {} } }}\n          onChange={(e) => setModel(e.target.value)}
           className="mb-3 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
         >
           {[...new Set([model, ...models])].map((m) => (
@@ -114,7 +114,7 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
 
         <p className="mb-4 flex items-start gap-2 rounded-lg bg-success/10 p-2.5 text-xs leading-relaxed text-success">
           <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
-          المفتاح بيتحفظ على جهازك بس، والطلبات بتروح من متصفحك لجوجل مباشرة. مش بنخزنه ولا بنشوفه.
+          المفتاح بيتحفظ على جهازك بس، والطلبات بتروح من متصفحك لمزوّد الخدمة المختار مباشرة. مش بنخزنه ولا بنشوفه.
         </p>
 
         {error && <p role="alert" className="mb-3 rounded-lg bg-destructive/10 p-2.5 text-sm text-destructive">{error}</p>}
