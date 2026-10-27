@@ -9,6 +9,8 @@ export type SavedDeckProgress = {
   position?: number
   mode?: 'tap' | 'type'
   baseQueue?: string[] | null
+  revealed?: number[]
+  answers?: Record<number, string>
 }
 
 export async function loadStudentDeckProgress(deckId: string): Promise<SavedDeckProgress | null> {
@@ -36,7 +38,7 @@ export async function saveStudentDeckProgress(deckId: string, progress: SavedDec
   const { error } = await db().from('student_deck_progress').upsert({
     user_id: session.id,
     deck_id: deckId,
-    progress: { known, queue, position, mode, baseQueue },
+    progress: { known, queue, position, mode, baseQueue, revealed, answers },
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id,deck_id' })
   if (error) throw new Error(error.message)
