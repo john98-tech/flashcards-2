@@ -155,7 +155,7 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
       const systemIndex = messages.findIndex(message => message.role === 'system')
       const jsonInstruction = 'Return exactly one valid JSON object and nothing else. Do not use Markdown fences or commentary. Escape string contents correctly and close every bracket.'
       if (systemIndex >= 0) {
-        messages[systemIndex] = { ...messages[systemIndex], content: String(messages[systemIndex].content) + '\\n\\n' + jsonInstruction }
+        messages[systemIndex] = { ...messages[systemIndex], content: String(messages[systemIndex].content) + '\n\n' + jsonInstruction }
       } else {
         messages.unshift({ role: 'system', content: jsonInstruction })
       }
