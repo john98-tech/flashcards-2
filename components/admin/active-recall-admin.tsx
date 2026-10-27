@@ -76,6 +76,32 @@ export function ActiveRecallAdmin({ courses: initialCourses, lessons: initialLes
   const [dailyGoal, setDailyGoal] = useState(initialSettings?.dailyGoal ?? 12)
   const [restDay, setRestDay] = useState<number | null>(initialSettings?.restDay ?? null)
   const [schedulePreview, setSchedulePreview] = useState<Record<string, number> | null>(null)
+  const [draftReady, setDraftReady] = useState(false)
+  const draftStorageKey = 'sammaa-active-recall-admin-draft-v1'
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftStorageKey)
+      if (raw) {
+        const saved = JSON.parse(raw) as { selectedId?: string; courseName?: string; startDate?: string; draft?: Draft; intervalsText?: string; dailyGoal?: number; restDay?: number | null }
+        if (typeof saved.selectedId === 'string') setSelectedId(saved.selectedId)
+        if (typeof saved.courseName === 'string') setCourseName(saved.courseName)
+        if (typeof saved.startDate === 'string') setStartDate(saved.startDate)
+        if (saved.draft && typeof saved.draft === 'object') setDraft(saved.draft)
+        if (typeof saved.intervalsText === 'string') setIntervalsText(saved.intervalsText)
+        if (Number.isFinite(saved.dailyGoal)) setDailyGoal(saved.dailyGoal!)
+        if (saved.restDay === null || Number.isInteger(saved.restDay)) setRestDay(saved.restDay ?? null)
+      }
+    } catch {}
+    setDraftReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!draftReady) return
+    try {
+      localStorage.setItem(draftStorageKey, JSON.stringify({ selectedId, courseName, startDate, draft, intervalsText, dailyGoal, restDay, savedAt: Date.now() }))
+    } catch {}
+  }, [draftReady, selectedId, courseName, startDate, draft, intervalsText, dailyGoal, restDay])
 
   useEffect(() => setCourses(initialCourses), [initialCourses])
   useEffect(() => setLessons(initialLessons), [initialLessons])
