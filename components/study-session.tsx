@@ -51,7 +51,7 @@ export function StudySession({ deck }: { deck: Deck }) {
         }
       } catch {}
       try {
-        const remote = await loadStudentDeckProgress(deck.id)
+        const remote = await loadStudentDeckProgress(deck.id) as (Awaited<ReturnType<typeof loadStudentDeckProgress>> & { revealed?: number[]; answers?: Record<number, string> })
         if (cancelled) return
         if (remote) {
           // Merge known cards so a refresh during a slow network save never loses local progress.
