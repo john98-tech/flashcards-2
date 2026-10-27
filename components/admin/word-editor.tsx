@@ -93,28 +93,38 @@ function blockIndent(node: JSONContent): string {
   return ' '.repeat(levels * 2)
 }
 
-function blockToText(node: JSONContent, prefix = ''): string[] {
+function blockToText(node: JSONContent, prefix = '', depth = 0): string[] {
+  const indent = '  '.repeat(Math.min(depth, 12))
   switch (node.type) {
     case 'table':
       return [tableToText(node)]
     case 'bulletList':
-      return [(node.content ?? []).map((li) => blockToText(li, '• ').join('\n')).join('\n')]
+      return (node.content ?? []).flatMap((li) => blockToText(li, '• ', depth))
     case 'orderedList':
-      return [(node.content ?? []).map((li, i) => blockToText(li, `${i + 1}. `).join('\n')).join('\n')]
+      return (node.content ?? []).flatMap((li, i) => blockToText(li, `${i + 1}. `, depth))
     case 'listItem': {
-      const parts = (node.content ?? []).flatMap((child) => blockToText(child))
-      return [prefix + parts.join('\n')]
+      const children = node.content ?? []
+      const first = children[0]
+      const rest = children.slice(1)
+      const firstLines = first ? blockToText(first, '', depth) : ['']
+      const lines = firstLines.map((line, i) => i === 0 ? `${indent}${prefix}${line}` : `${indent}  ${line}`)
+      for (const child of rest) {
+        // Nested lists keep their hierarchy rather than being flattened beside siblings.
+        lines.push(...blockToText(child, '', depth + (child.type === 'bulletList' || child.type === 'orderedList' ? 1 : 0)))
+      }
+      return lines
     }
     case 'blockquote':
-      return (node.content ?? []).flatMap((child) => blockToText(child)).map((line) => `> ${line}`)
-    case 'heading': {
-      const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 1))
-      return [`${blockIndent(node)}${'#'.repeat(level)} ${inlineText(node)}`]
-    }
+      return (node.content ?? []).flatMap((child) => blockToText(child, '', depth)).map((line) => `${indent}> ${line.trimStart()}`)
+    case 'heading':
+      // Avoid injecting Markdown # characters that Gemini can mistake for source text.
+      return [`${indent}${blockIndent(node)}${inlineText(node)}`]
+    case 'paragraph':
+      return [`${indent}${blockIndent(node)}${prefix}${inlineText(node)}`]
     case 'horizontalRule':
       return ['---']
     default:
-      return [inlineText(node)]
+      return [`${indent}${prefix}${inlineText(node)}`]
   }
 }
 
