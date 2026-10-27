@@ -43,6 +43,7 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
   const [editing, setEditing] = useState(
     !course.plan || course.lessons.some((lesson) => !course.plan?.lessonIds.includes(lesson.id)),
   )
+  const [rescheduling, setRescheduling] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState('')
   const [revealedQuestions, setRevealedQuestions] = useState<number[]>([])
   const [answers, setAnswers] = useState<Record<number, string>>({})
@@ -109,6 +110,7 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
       })
       setNotice(`تم حفظ الخطة: ${result.sessions.length} جلسة مراجعة حتى ${formatDate(result.endDate)}.`)
       setEditing(false)
+      setRescheduling(false)
       router.refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر حفظ الخطة. حاول مرة أخرى.')
@@ -163,8 +165,8 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
         {editing ? (
           <section className="space-y-5 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
             <div>
-              <h2 className="text-xl font-bold">{course.plan ? 'تعديل خطة المراجعة' : 'إنشاء خطة مراجعة'}</h2>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">اختار الدروس اللي ذاكرتها بالفعل. هتتكرر مراجعتها تلقائيًا من غير ما تظهر دروس جديدة.</p>
+              <h2 className="text-xl font-bold">{rescheduling ? 'إعادة توزيع الجلسات المتأخرة' : course.plan ? 'تعديل خطة المراجعة' : 'إنشاء خطة مراجعة'}</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">{rescheduling ? 'اختار المدة الجديدة اللي تحب توزّع عليها الجلسات المتأخرة. راجع المدة وتاريخ الامتحان قبل تأكيد إعادة التوزيع.' : 'اختار الدروس اللي ذاكرتها بالفعل. هتتكرر مراجعتها تلقائيًا من غير ما تظهر دروس جديدة.'}</p>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="font-semibold">دروس المنهج <span className="text-sm text-muted-foreground">({selectedLessonIds.length} مختارة)</span></p>
@@ -237,9 +239,9 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={busy || !selectedLessonIds.length || !preview} onClick={() => void confirmPlan()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50">
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CalendarDays className="size-4" aria-hidden />}
-                {busy ? 'جارٍ حفظ الخطة…' : 'تأكيد وإنشاء الخطة'}
+                {busy ? 'جارٍ حفظ الخطة…' : rescheduling ? 'تأكيد إعادة التوزيع' : 'تأكيد وإنشاء الخطة'}
               </button>
-              {course.plan && <button type="button" disabled={busy} onClick={() => setEditing(false)} className="rounded-lg border px-4 py-2.5 font-semibold">رجوع للخطة الحالية</button>}
+              {course.plan && <button type="button" disabled={busy} onClick={() => { setEditing(false); setRescheduling(false) }} className="rounded-lg border px-4 py-2.5 font-semibold">رجوع للخطة الحالية</button>}
             </div>
           </section>
         ) : course.plan ? (
@@ -251,7 +253,7 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
                   <p className="mt-1 text-sm text-muted-foreground">{formatDate(today)}{testMode && testTime ? ` · ${testTime}` : ''} · {pendingToday + completedToday} جلسة مطلوبة · {completedToday} مكتملة · {pendingToday} متبقية</p>
                   {overdueCount > 0 && <p className="mt-2 text-sm font-semibold text-amber-700">لديك {overdueCount} جلسة متأخرة، موزعة ضمن قائمة اليوم.</p>}
                   {overdueCount > 0 && (
-                    <button type="button" disabled={busy} onClick={() => void confirmPlan()} className="mt-3 rounded-lg border border-amber-600/40 px-3 py-2 text-sm font-semibold text-amber-800 disabled:opacity-50">
+                    <button type="button" disabled={busy} onClick={() => { setRescheduling(true); setEditing(true); setNotice('') }} className="mt-3 rounded-lg border border-amber-600/40 px-3 py-2 text-sm font-semibold text-amber-800 disabled:opacity-50">
                       إعادة توزيع الجلسات المتأخرة حتى نهاية الخطة
                     </button>
                   )}
