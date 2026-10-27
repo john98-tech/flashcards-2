@@ -62,6 +62,23 @@ export async function createDeckGroup(name: string) {
   return data
 }
 
+export async function deleteDeckGroup(id: string) {
+  await requireAdmin()
+  if (!id || id === 'ungrouped') throw new Error('لا يمكن حذف المجموعة الافتراضية.')
+  const client = db()
+  const { data: group, error: readError } = await client.from('deck_groups').select('*').eq('id', id).maybeSingle()
+  if (readError) throw new Error(readError.message)
+  if (!group) return
+  const { count, error: countError } = await client.from('decks').select('id', { count: 'exact', head: true }).eq('group_id', id)
+  if (countError) throw new Error(countError.message)
+  if (count) throw new Error('انقل الدروس من المجموعة أولًا قبل حذفها.')
+  const { error: binError } = await client.from('recycle_bin').insert({ entity_type: 'deck_group', entity_id: id, payload: group })
+  if (binError) throw new Error(binError.message)
+  const { error } = await client.from('deck_groups').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/', 'layout')
+}
+
 export async function saveCard(deckId: string, card: Card, position: number) {
   await requireAdmin()
   if (!DECK_ID_RE.test(deckId) || !card.id || card.id.length > 64) throw new Error('Invalid card.')
@@ -137,6 +154,9 @@ export async function restoreRecycleBinItem(id: string) {
     }
   } else if (item.entity_type === 'card') {
     const { error } = await client.from('cards').upsert(item.payload)
+    if (error) throw new Error(error.message)
+  } else if (item.entity_type === 'deck_group') {
+    const { error } = await client.from('deck_groups').upsert(item.payload)
     if (error) throw new Error(error.message)
   } else {
     throw new Error('نوع العنصر غير مدعوم للاستعادة.')
