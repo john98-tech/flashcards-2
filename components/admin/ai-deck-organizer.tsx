@@ -110,7 +110,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
         await saveDeckMeta({ id, groupId, title, subject: (item.subject || groupName).slice(0, 100), description: (item.description || '').slice(0, 500), isFree: sourceDecks.some(d => d.isFree) })
         for (let position = 0; position < item.cardIndexes.length; position++) {
           const original = sourceCards[item.cardIndexes[position]]
-          if (original) await saveCard(id, { id: `ai-${original.id}`.slice(0, 64), cloze: original.cloze }, position)
+          if (original) await saveCard(id, { id: `ai-${position}-${original.id}`.slice(0, 64), cloze: original.cloze }, position)
         }
       }
       await finishDeckSave()
@@ -140,6 +140,6 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
       <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">{messages.map((m,i)=><div key={i} className={`max-w-full whitespace-pre-wrap rounded-lg p-3 text-sm ${m.role === 'user' ? 'self-start bg-muted' : 'self-stretch border'}`}>{m.role === 'assistant' && <Bot className="mb-1 inline size-4" />} {m.text}</div>)}</div>
       <div className="flex gap-2"><textarea value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="اكتب طلبك لتعديل الخطة أو اسأل Gemini..." rows={2} className="min-w-0 flex-1 resize-y rounded-lg border bg-background px-3 py-2 text-sm" /><Button onClick={sendChat} disabled={busy || !chatInput.trim()}>{busy ? <Loader2 className="size-4 animate-spin" /> : 'إرسال'}</Button></div>
     </section>
-    {showKey && <ApiKeyDialog open={showKey} onOpenChange={setShowKey} />}
+    {showKey && <ApiKeyDialog open={showKey} onClose={() => setShowKey(false)} />}
   </div>
 }
