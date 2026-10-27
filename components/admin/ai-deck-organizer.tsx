@@ -73,6 +73,13 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
     const history = [...messages, { role: 'user' as const, text: prompt }]
     setMessages(history); setChatInput(''); setBusy(true); setError(''); setNotice('')
     try {
+      // Load cards directly from persistent storage for every deck before asking Gemini.
+      // The chat must never depend on cards having been opened manually in the UI.
+      const cardsByDeck = await Promise.all(decks.map(async deck => {
+        const loaded = await loadDeck(deck.id)
+        return (loaded?.cards ?? []).map(card => ({ ...card, __sourceDeck: deck.id }))
+      }))
+      const availableCards = cardsByDeck.flat()
       const recycleBin = await listRecycleBin()
       const catalog = {
         groups: groups.map(g => ({ id: g.id, name: g.name })),
@@ -80,7 +87,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
         recycleBin: recycleBin.map(item => ({ id: item.id, entityType: item.entityType, entityId: item.entityId, deletedAt: item.deletedAt })),
         selectedGroup: { id: sourceGroupId, name: groupName },
         currentPlan: plan,
-        loadedCards: sourceCards.map((card, index) => ({ index, id: card.id, text: card.cloze, deckId: (card as Card & { __sourceDeck?: string }).__sourceDeck ?? '' }))
+        loadedCards: availableCards.map((card, index) => ({ index, id: card.id, text: card.cloze, deckId: card.__sourceDeck }))
       }
       const request = 'بيانات الإدارة الحالية بصيغة JSON: ' + JSON.stringify(catalog) + '\nسجل المحادثة السابقة: ' + JSON.stringify(history.slice(-12)) + '\nطلب المستخدم الحالي: ' + prompt + '\nأرجع JSON فقط حسب تعليمات النظام. إذا كان طلب إدارة فأنشئ actions دقيقة قابلة للتنفيذ.'
       const response = await generate(config, request, { system: SYSTEM, json: true, temperature: 0.1 })
