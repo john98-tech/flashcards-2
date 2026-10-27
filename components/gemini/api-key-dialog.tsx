@@ -8,7 +8,9 @@ import { DEFAULT_MODEL, FALLBACK_MODELS, listModels, useGeminiConfig } from '@/l
 export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { config, save, clear } = useGeminiConfig()
   const [apiKey, setApiKey] = useState('')
-  const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini')\n  const [model, setModel] = useState(DEFAULT_MODEL)
+  const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini')
+  const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini')
+  const [model, setModel] = useState(DEFAULT_MODEL)
   const [models, setModels] = useState<string[]>(FALLBACK_MODELS)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -16,7 +18,9 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
   useEffect(() => {
     if (!open) return
     setApiKey(config?.apiKey ?? '')
+    setProvider(config?.provider ?? 'gemini')
     setModel(config?.model ?? DEFAULT_MODEL)
+    setModels(config?.provider === 'groq' ? ['llama-3.3-70b-versatile'] : FALLBACK_MODELS)
     setError('')
   }, [open, config])
 
@@ -36,10 +40,11 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
     setBusy(true)
     setError('')
     try {
-      const available = await listModels(key)
+      const available = await listModels(key, provider)
       setModels(available)
-      const chosen = available.includes(model) ? model : available.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : available[0]
-      save({ apiKey: key, model: chosen })
+      const fallback = provider === 'groq' ? 'llama-3.3-70b-versatile' : DEFAULT_MODEL
+      const chosen = available.includes(model) ? model : available.includes(fallback) ? fallback : available[0]
+      save({ apiKey: key, model: chosen, provider })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'فشل التحقق من المفتاح.')
@@ -74,7 +79,11 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
           </button>
         </div>
 
-        <label className="mb-1 block text-sm font-medium" htmlFor="ai-provider">مزوّد الذكاء الاصطناعي</label>\n        <select id="ai-provider" value={provider} onChange={(e) => { const next = e.target.value as 'gemini' | 'groq'; setProvider(next); setModel(next === 'groq' ? 'llama-3.3-70b-versatile' : DEFAULT_MODEL); setModels(next === 'groq' ? ['llama-3.3-70b-versatile'] : FALLBACK_MODELS) }} className="mb-3 w-full rounded-lg border bg-background px-3 py-2 text-sm">\n          <option value="gemini">Google Gemini</option><option value="groq">Groq</option>\n        </select>\n        <ol className="mb-4 list-decimal space-y-1 ps-5 text-sm leading-relaxed text-muted-foreground">
+        <label className="mb-1 block text-sm font-medium" htmlFor="ai-provider">مزوّد الذكاء الاصطناعي</label>
+        <select id="ai-provider" value={provider} onChange={(e) => { const next = e.target.value as 'gemini' | 'groq'; setProvider(next); setModel(next === 'groq' ? 'llama-3.3-70b-versatile' : DEFAULT_MODEL); setModels(next === 'groq' ? ['llama-3.3-70b-versatile'] : FALLBACK_MODELS) }} className="mb-3 w-full rounded-lg border bg-background px-3 py-2 text-sm">
+          <option value="gemini">Google Gemini</option><option value="groq">Groq</option>
+        </select>
+        <ol className="mb-4 list-decimal space-y-1 ps-5 text-sm leading-relaxed text-muted-foreground">
           <li>
             افتح{' '}
             <a href={provider === 'groq' ? 'https://console.groq.com/keys' : 'https://aistudio.google.com/apikey'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline">
@@ -104,7 +113,9 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
           id="gemini-model"
           dir="ltr"
           value={model}
-          onFocus={async () => { if (apiKey.trim()) { try { const latest = await listModels(apiKey.trim(), provider); setModels(latest) } catch {} } }}\n          onChange={(e) => setModel(e.target.value)}
+          onFocus={async () => { if (apiKey.trim()) { try { const latest = await listModels(apiKey.trim(), provider); setModels(latest) } catch {} } }}
+          onFocus={async () => { if (apiKey.trim()) { try { const latest = await listModels(apiKey.trim(), provider); setModels(latest) } catch {} } }}
+          onChange={(e) => setModel(e.target.value)}
           className="mb-3 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
         >
           {[...new Set([model, ...models])].map((m) => (
