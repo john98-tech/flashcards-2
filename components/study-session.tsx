@@ -35,7 +35,7 @@ export function StudySession({ deck }: { deck: Deck }) {
   useEffect(() => {
     let cancelled = false
     const restore = async () => {
-      let local: { known?: string[]; queue?: string[]; position?: number; mode?: Mode; baseQueue?: string[] | null } | null = null
+      let local: { known?: string[]; queue?: string[]; position?: number; mode?: Mode; baseQueue?: string[] | null; revealed?: number[]; answers?: Record<number, string> } | null = null
       try {
         const raw = localStorage.getItem(storageKey)
         if (raw) {
@@ -46,6 +46,8 @@ export function StudySession({ deck }: { deck: Deck }) {
           if (Number.isInteger(local?.position)) setPosition(Math.max(0, Math.min(local!.position!, deck.cards.length)))
           if (local?.mode === 'type' || local?.mode === 'tap') setMode(local.mode)
           if (Array.isArray(local?.baseQueue)) setBaseQueue(local.baseQueue.filter((id) => validCardIds.has(id)))
+          if (Array.isArray(local?.revealed)) setRevealed(new Set(local.revealed.filter((n) => Number.isInteger(n) && n >= 0 && n < 500)))
+          if (local?.answers && typeof local.answers === 'object') setAnswers(local.answers)
         }
       } catch {}
       try {
@@ -58,6 +60,8 @@ export function StudySession({ deck }: { deck: Deck }) {
           if (!local || !Number.isInteger(local.position)) setPosition(Math.max(0, Math.min(remote.position ?? 0, deck.cards.length)))
           if (!local?.mode && remote.mode) setMode(remote.mode)
           if (!local?.baseQueue && remote.baseQueue) setBaseQueue(remote.baseQueue.filter((id) => validCardIds.has(id)))
+          if (!local?.revealed && remote.revealed) setRevealed(new Set(remote.revealed.filter((n) => Number.isInteger(n) && n >= 0 && n < 500)))
+          if (!local?.answers && remote.answers) setAnswers(remote.answers)
         }
       } catch (error) {
         console.error('[study-progress] Could not load saved progress:', error)
@@ -77,6 +81,8 @@ export function StudySession({ deck }: { deck: Deck }) {
       position,
       mode,
       baseQueue,
+      revealed: [...revealed],
+      answers,
     }
     try { localStorage.setItem(storageKey, JSON.stringify(snapshot)) } catch {}
     const timer = window.setTimeout(() => {
@@ -85,7 +91,7 @@ export function StudySession({ deck }: { deck: Deck }) {
       })
     }, 500)
     return () => window.clearTimeout(timer)
-  }, [progressLoaded, storageKey, deck.id, known, queue, position, mode, baseQueue, validCardIds])
+  }, [progressLoaded, storageKey, deck.id, known, queue, position, mode, baseQueue, revealed, answers, validCardIds])
 
   const cardsById = useMemo(() => new Map(deck.cards.map((c) => [c.id, c])), [deck.cards])
   const card = cardsById.get(queue[position])
