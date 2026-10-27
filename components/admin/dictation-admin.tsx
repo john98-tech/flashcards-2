@@ -93,6 +93,52 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
   const [contentError, setContentError] = useState('')
   const [editorSession, setEditorSession] = useState(0)
   const loadSeq = useRef(0)
+  const [draftReady, setDraftReady] = useState(false)
+  const draftStorageKey = 'sammaa-dictation-admin-draft-v1'
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftStorageKey)
+      if (raw) {
+        const saved = JSON.parse(raw) as Record<string, unknown>
+        if (saved.draft && typeof saved.draft === 'object') setDraft(saved.draft as Draft)
+        if (saved.savedDraft && typeof saved.savedDraft === 'object') setSavedDraft(saved.savedDraft as Draft)
+        if (typeof saved.active === 'boolean') setActive(saved.active)
+        if (typeof saved.selectedSubjectId === 'string') setSelectedSubjectId(saved.selectedSubjectId)
+        if (typeof saved.moveLessonId === 'string') setMoveLessonId(saved.moveLessonId)
+        if (typeof saved.moveTargetId === 'string') setMoveTargetId(saved.moveTargetId)
+        if (typeof saved.newLessonName === 'string') setNewLessonName(saved.newLessonName)
+        if (typeof saved.newSubjectName === 'string') setNewSubjectName(saved.newSubjectName)
+        if (typeof saved.content === 'string') setContent(saved.content)
+        if (typeof saved.savedContent === 'string') setSavedContent(saved.savedContent)
+        if (typeof saved.initialContent === 'string') setInitialContent(saved.initialContent)
+        if (typeof saved.prompt === 'string') setPrompt(saved.prompt)
+        if (typeof saved.savedPrompt === 'string') setSavedPrompt(saved.savedPrompt)
+        if (typeof saved.studentText === 'string') setStudentText(saved.studentText)
+        if (typeof saved.savedStudentText === 'string') setSavedStudentText(saved.savedStudentText)
+        if (Array.isArray(saved.studentImages)) setStudentImages(saved.studentImages as DictationStudentImage[])
+        if (typeof saved.savedStudentImages === 'string') setSavedStudentImages(saved.savedStudentImages)
+        if (saved.refKind === 'none' || saved.refKind === 'text' || saved.refKind === 'file') setRefKind(saved.refKind)
+      }
+    } catch {}
+    setDraftReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!draftReady) return
+    try {
+      const hasWork = active || !!draft.id || !!content || !!prompt || !!studentText || !!newLessonName || !!newSubjectName
+      if (!hasWork) {
+        localStorage.removeItem(draftStorageKey)
+        return
+      }
+      localStorage.setItem(draftStorageKey, JSON.stringify({
+        draft, savedDraft, active, selectedSubjectId, moveLessonId, moveTargetId, newLessonName, newSubjectName,
+        content, savedContent, initialContent, prompt, savedPrompt, studentText, savedStudentText,
+        studentImages, savedStudentImages, refKind, savedAt: Date.now(),
+      }))
+    } catch {}
+  }, [draftReady, draft, savedDraft, active, selectedSubjectId, moveLessonId, moveTargetId, newLessonName, newSubjectName, content, savedContent, initialContent, prompt, savedPrompt, studentText, savedStudentText, studentImages, savedStudentImages, refKind])
 
   // Keep local lists in step with the server after router.refresh().
   useEffect(() => setSubjects(initialSubjects), [initialSubjects])
