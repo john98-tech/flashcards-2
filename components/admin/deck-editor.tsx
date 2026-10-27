@@ -739,7 +739,7 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
                     <p className="text-sm text-muted-foreground">Edit each selected card below. Keep {'{{'} and {'}}'} around words you want to remain hidden. Click Done to return to word-selection mode.</p>
                   </div>
                   <div className="min-h-0 space-y-4 overflow-y-auto">
-                    {Object.entries(editingTexts).map(([id, value], index) => {
+                    {Object.entries(editingTexts).map(([id, value]) => {
                       const card = deck.cards.find((item) => item.id === id)
                       if (!card) return null
                       return <label key={id} className="flex flex-col gap-2 text-sm font-medium">Card {deck.cards.findIndex((item) => item.id === id) + 1}
