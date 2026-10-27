@@ -29,7 +29,7 @@ function formatDate(date: string) {
   return new Intl.DateTimeFormat('ar-EG', { timeZone: 'UTC', dateStyle: 'medium' }).format(new Date(`${date}T00:00:00Z`))
 }
 
-export function RecallCourse({ course, today, settings, testMode = false }: { course: Course; today: string; settings: RecallSettings; testMode?: boolean }) {
+export function RecallCourse({ course, today, settings, testMode = false, testTime }: { course: Course; today: string; settings: RecallSettings; testMode?: boolean; testTime?: string }) {
   const router = useRouter()
   // Include lessons added by the admin after a student created their plan.
   // When the catalog changes, open the editor so the student can regenerate the schedule.
@@ -157,7 +157,7 @@ export function RecallCourse({ course, today, settings, testMode = false }: { co
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-3 py-5 sm:px-4 sm:py-8">
-        {testMode && <p className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm font-semibold">وضع اختبار التاريخ مفعّل — المحتوى للمعاينة فقط، ولن يُسمح بحفظ خطة أو تسجيل جلسة مكتملة.</p>}
+        {testMode && <p className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm font-semibold">وضع اختبار التاريخ والوقت مفعّل ({formatDate(today)}{testTime ? ` — ${testTime}` : ''}) — المحتوى للمعاينة فقط، ولن يُسمح بحفظ خطة أو تسجيل جلسة مكتملة.</p>}
         {error && <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
         {notice && <p role="status" className="rounded-xl border bg-accent p-3 text-sm">{notice}</p>}
 
@@ -193,7 +193,8 @@ export function RecallCourse({ course, today, settings, testMode = false }: { co
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-2 text-sm font-semibold">مدة المراجعة بالأيام
                 <div className="flex gap-2">
-                  <select className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2" value={[7, 14, 30].includes(durationDays) ? durationDays : 'custom'} onChange={(event) => setDurationDays(event.target.value === 'custom' ? 21 : Number(event.target.value))}>
+                  <select className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2" value={[1, 7, 14, 30].includes(durationDays) ? durationDays : 'custom'} onChange={(event) => setDurationDays(event.target.value === 'custom' ? 21 : Number(event.target.value))}>
+                    <option value={1}>يوم واحد</option>
                     <option value={7}>أسبوع · 7 أيام</option>
                     <option value={14}>أسبوعان · 14 يومًا</option>
                     <option value={30}>شهر · 30 يومًا</option>
@@ -248,7 +249,7 @@ export function RecallCourse({ course, today, settings, testMode = false }: { co
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-bold">مراجعة اليوم</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{formatDate(today)} · {pendingToday + completedToday} جلسة مطلوبة · {completedToday} مكتملة · {pendingToday} متبقية</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{formatDate(today)}{testMode && testTime ? ` · ${testTime}` : ''} · {pendingToday + completedToday} جلسة مطلوبة · {completedToday} مكتملة · {pendingToday} متبقية</p>
                   {overdueCount > 0 && <p className="mt-2 text-sm font-semibold text-amber-700">لديك {overdueCount} جلسة متأخرة، موزعة ضمن قائمة اليوم.</p>}
                   {overdueCount > 0 && (
                     <button type="button" disabled={testMode || busy} onClick={() => void confirmPlan()} className="mt-3 rounded-lg border border-amber-600/40 px-3 py-2 text-sm font-semibold text-amber-800 disabled:opacity-50">

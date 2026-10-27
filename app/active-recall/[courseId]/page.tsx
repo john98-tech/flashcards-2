@@ -55,7 +55,7 @@ export default async function ActiveRecallCoursePage({
       <SiteHeader />
       <div className="pt-4">
         <RecallTestDatePicker actualToday={actualToday} selectedDate={today} actualTime={actualTime} selectedTime={selectedTime} />
-        <RecallCourse course={course} today={today} settings={settings} testMode={testMode} />
+        <RecallCourse course={course} today={today} settings={settings} testMode={testMode} testTime={selectedTime} />
       </div>
     </>
   )
