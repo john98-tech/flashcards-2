@@ -6,15 +6,16 @@ import { cn } from '@/lib/utils'
 import { sfx, unlockAudio, updateSoundSettings, useSoundSettings } from '@/lib/sound'
 
 const SHORTCUTS: [string, string][] = [
-  ['Space', 'Reveal next word'],
-  ['A', 'Reveal all words'],
-  ['Enter / 2', 'Got it (حفظتها)'],
-  ['Backspace / 1', 'Not yet (لسه)'],
-  ['→ / ←', 'Next / previous card'],
-  ['T', 'Switch tap / type mode'],
-  ['S', 'Shuffle cards'],
-  ['R', 'Reset current card'],
-  ['M', 'Mute / unmute'],
+  ['Space', 'اكشف الكلمة التالية (في وضع الضغط)'],
+  ['A', 'اكشف كل الكلمات'],
+  ['↑ / Enter / 2', 'حفظتها — بعد كشف الكل'],
+  ['↓ / Backspace / 1', 'لسه — بعد كشف الكل'],
+  ['→ / ←', 'الكارت التالي / السابق'],
+  ['N / P', 'التالي / السابق'],
+  ['T', 'التبديل بين الضغط والكتابة'],
+  ['S', 'خلط ترتيب الكروت / استعادة الترتيب'],
+  ['R', 'إعادة إخفاء إجابة الكارت الحالي'],
+  ['M', 'كتم / تشغيل الصوت'],
 ]
 
 export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton?: boolean }) {
@@ -108,7 +109,7 @@ export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton
           </div>
 
           <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Keyboard shortcuts
+            اختصارات لوحة المفاتيح
           </p>
           <dl data-tour="settings-shortcuts" className="flex flex-col gap-1.5 text-xs">
             {SHORTCUTS.map(([keys, label]) => (
