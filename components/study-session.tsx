@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { sfx } from '@/lib/sound'
 import { normalizeAnswer, parseCloze, type Deck } from '@/lib/cloze'
 import { renderRichInline } from '@/components/rich-inline'
+import { loadStudentDeckProgress, saveStudentDeckProgress } from '@/app/decks/progress-actions'
 
 type Mode = 'tap' | 'type'
 
@@ -28,12 +29,63 @@ export function StudySession({ deck }: { deck: Deck }) {
   const [revealed, setRevealed] = useState<Set<number>>(new Set())
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [baseQueue, setBaseQueue] = useState<string[] | null>(null)
+  const [progressLoaded, setProgressLoaded] = useState(false)
+  const validCardIds = useMemo(() => new Set(deck.cards.map((item) => item.id)), [deck.cards])
+
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[]
-      setKnown(new Set(saved))
-    } catch {}
-  }, [storageKey])
+    let cancelled = false
+    const restore = async () => {
+      let local: { known?: string[]; queue?: string[]; position?: number; mode?: Mode; baseQueue?: string[] | null } | null = null
+      try {
+        const raw = localStorage.getItem(storageKey)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          local = Array.isArray(parsed) ? { known: parsed } : parsed
+          if (local?.known) setKnown(new Set(local.known.filter((id) => validCardIds.has(id))))
+          if (local?.queue?.length) setQueue(local.queue.filter((id) => validCardIds.has(id)))
+          if (Number.isInteger(local?.position)) setPosition(Math.max(0, Math.min(local!.position!, deck.cards.length)))
+          if (local?.mode === 'type' || local?.mode === 'tap') setMode(local.mode)
+          if (Array.isArray(local?.baseQueue)) setBaseQueue(local.baseQueue.filter((id) => validCardIds.has(id)))
+        }
+      } catch {}
+      try {
+        const remote = await loadStudentDeckProgress(deck.id)
+        if (cancelled) return
+        if (remote) {
+          // Merge known cards so a refresh during a slow network save never loses local progress.
+          setKnown((current) => new Set([...current, ...(remote.known ?? []).filter((id) => validCardIds.has(id))]))
+          if (!local?.queue?.length && remote.queue?.length) setQueue(remote.queue.filter((id) => validCardIds.has(id)))
+          if (!local || !Number.isInteger(local.position)) setPosition(Math.max(0, Math.min(remote.position ?? 0, deck.cards.length)))
+          if (!local?.mode && remote.mode) setMode(remote.mode)
+          if (!local?.baseQueue && remote.baseQueue) setBaseQueue(remote.baseQueue.filter((id) => validCardIds.has(id)))
+        }
+      } catch (error) {
+        console.error('[study-progress] Could not load saved progress:', error)
+      } finally {
+        if (!cancelled) setProgressLoaded(true)
+      }
+    }
+    void restore()
+    return () => { cancelled = true }
+  }, [storageKey, deck.id, deck.cards.length, validCardIds])
+
+  useEffect(() => {
+    if (!progressLoaded) return
+    const snapshot = {
+      known: [...known],
+      queue: queue.filter((id) => validCardIds.has(id)),
+      position,
+      mode,
+      baseQueue,
+    }
+    try { localStorage.setItem(storageKey, JSON.stringify(snapshot)) } catch {}
+    const timer = window.setTimeout(() => {
+      void saveStudentDeckProgress(deck.id, snapshot).catch((error) => {
+        console.error('[study-progress] Could not save progress:', error)
+      })
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [progressLoaded, storageKey, deck.id, known, queue, position, mode, baseQueue, validCardIds])
 
   const cardsById = useMemo(() => new Map(deck.cards.map((c) => [c.id, c])), [deck.cards])
   const card = cardsById.get(queue[position])
