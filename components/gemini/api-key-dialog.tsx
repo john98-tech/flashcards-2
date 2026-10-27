@@ -9,7 +9,6 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
   const { config, save, clear } = useGeminiConfig()
   const [apiKey, setApiKey] = useState('')
   const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini')
-  const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini')
   const [model, setModel] = useState(DEFAULT_MODEL)
   const [models, setModels] = useState<string[]>(FALLBACK_MODELS)
   const [busy, setBusy] = useState(false)
