@@ -33,6 +33,40 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
   const [loadingDeck, setLoadingDeck] = useState(false)
   const [save, setSave] = useState<SaveState>({ status: 'idle' })
   const [move, setMove] = useState<MoveState>({ status: 'idle' })
+  const [draftReady, setDraftReady] = useState(false)
+  const draftStorageKey = 'sammaa-admin-deck-editor-draft-v1'
+
+  // Restore an unfinished editor session without writing it to the live database.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftStorageKey)
+      if (raw) {
+        const saved = JSON.parse(raw) as { deck?: Deck; terms?: string; page?: number; active?: boolean; selectedGroupId?: string }
+        if (saved.deck && Array.isArray(saved.deck.cards)) {
+          setDeck(saved.deck)
+          setTerms(typeof saved.terms === 'string' ? saved.terms : '')
+          setPage(Number.isInteger(saved.page) ? Math.max(0, saved.page!) : 0)
+          setActive(Boolean(saved.active))
+          if (typeof saved.selectedGroupId === 'string') setSelectedGroupId(saved.selectedGroupId)
+          if (saved.deck.id && saved.deck.cards.length) {
+            savedIds.current = { deckId: saved.deck.id, ids: saved.deck.cards.map((card) => card.id) }
+          }
+        }
+      }
+    } catch {}
+    setDraftReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!draftReady) return
+    try {
+      if (!active && !deck.id && !deck.cards.length && !terms) {
+        localStorage.removeItem(draftStorageKey)
+        return
+      }
+      localStorage.setItem(draftStorageKey, JSON.stringify({ deck, terms, page, active, selectedGroupId, savedAt: Date.now() }))
+    } catch {}
+  }, [draftReady, deck, terms, page, active, selectedGroupId])
   const savedIds = useRef<{ deckId: string; ids: string[] } | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -366,6 +400,7 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
       savedIds.current = { deckId: id, ids: [...current] }
       await finishDeckSave()
       setSave({ status: 'done' })
+      try { localStorage.removeItem(draftStorageKey) } catch {}
       router.refresh()
     } catch (e) {
       setSave({ status: 'error', message: e instanceof Error ? e.message : 'Save failed.' })
