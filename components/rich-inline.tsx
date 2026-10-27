@@ -1,8 +1,24 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
-type Match = { start: number; end: number; innerStart: number; innerEnd: number; kind: 'bold' | 'italic' | 'underline' | 'strike' | 'highlight' | 'color'; color?: string }
+type Match = { start: number; end: number; innerStart: number; innerEnd: number; kind: 'bold' | 'italic' | 'underline' | 'strike' | 'highlight' | 'style'; style?: CSSProperties }
+
+function parseInlineStyle(raw: string): CSSProperties {
+  const result: CSSProperties = {}
+  for (const declaration of raw.split(';')) {
+    const separator = declaration.indexOf(':')
+    if (separator < 0) continue
+    const property = declaration.slice(0, separator).trim().toLowerCase()
+    const value = declaration.slice(separator + 1).trim()
+    if (!value || /[<>]/.test(value)) continue
+    if (property === 'color') result.color = value
+    else if (property === 'background-color') result.backgroundColor = value
+    else if (property === 'font-size' && /^(\\d+(?:\\.\\d+)?(px|pt|em|rem|%))$/i.test(value)) result.fontSize = value
+    else if (property === 'font-family') result.fontFamily = value.replace(/["']/g, '')
+  }
+  return result
+}
 
 function firstMarkup(text: string, start: number, end: number): Match | null {
   const slice = text.slice(start, end)
@@ -24,7 +40,7 @@ function firstMarkup(text: string, start: number, end: number): Match | null {
       innerStart: start + found.index + found[0].indexOf(found[pattern.innerGroup]),
       innerEnd: start + found.index + found[0].indexOf(found[pattern.innerGroup]) + found[pattern.innerGroup].length,
       kind: pattern.kind,
-      color: pattern.colorGroup ? found[pattern.colorGroup] : undefined,
+      style: pattern.colorGroup ? parseInlineStyle(found[pattern.colorGroup]) : undefined,
     }
     if (!best || candidate.start < best.start || (candidate.start === best.start && candidate.end > best.end)) best = candidate
   }
@@ -51,7 +67,7 @@ export function renderRichInline(
     case 'underline': formatted = <u>{inside}</u>; break
     case 'strike': formatted = <s>{inside}</s>; break
     case 'highlight': formatted = <mark className="rounded px-0.5">{inside}</mark>; break
-    case 'color': formatted = <span style={{ color: match.color }}>{inside}</span>; break
+    case 'style': formatted = <span style={match.style}>{inside}</span>; break
   }
   return <>{before}{formatted}{after}</>
 }
