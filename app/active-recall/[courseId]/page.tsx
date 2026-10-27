@@ -46,12 +46,13 @@ export default async function ActiveRecallCoursePage({
   const actualToday = cairoDate()
   const requestedDate = Array.isArray(query.testDate) ? query.testDate[0] : query.testDate
   const today = requestedDate && isValidDate(requestedDate) ? requestedDate : actualToday
+  const testMode = today !== actualToday
   return (
     <>
       <SiteHeader />
       <div className="pt-4">
         <RecallTestDatePicker actualToday={actualToday} selectedDate={today} />
-        <RecallCourse course={course} today={today} settings={settings} />
+        <RecallCourse course={course} today={today} settings={settings} testMode={testMode} />
       </div>
     </>
   )
