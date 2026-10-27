@@ -118,16 +118,18 @@ export function StudySession({ deck }: { deck: Deck }) {
 
     if (key === forward || key === 'n') return e.preventDefault(), goTo(1)
     if (key === backward || key === 'p') return e.preventDefault(), goTo(-1)
-    if (allRevealed && (key === 'arrowup' || key === 'enter')) return e.preventDefault(), rate(true)
-    if (allRevealed && (key === 'arrowdown' || key === 'backspace')) return e.preventDefault(), rate(false)
+    if (allRevealed && (key === 'arrowup' || key === 'enter' || key === '2')) return e.preventDefault(), rate(true)
+    if (allRevealed && (key === 'arrowdown' || key === 'backspace' || key === '1')) return e.preventDefault(), rate(false)
+    if (key === 't') return e.preventDefault(), switchMode(mode === 'tap' ? 'type' : 'tap')
+    if (key === 's') return e.preventDefault(), toggleShuffle()
     if (e.code === 'Space' || key === 'arrowdown') {
       e.preventDefault()
       if (mode === 'type') return revealAll()
       return allRevealed ? undefined : revealNext()
     }
     if (key === 'arrowup') return e.preventDefault()
-    if (key === 'a') return revealAll()
-    if (key === 'r') return resetCard()
+    if (key === 'a') return e.preventDefault(), revealAll()
+    if (key === 'r') return e.preventDefault(), resetCard()
   })
 
   useEffect(() => {
@@ -335,8 +337,8 @@ const renderLine = (line: { value: string; start: number; end: number }, key: nu
               <>
                 <span className="hidden text-xs text-muted-foreground sm:block">
                   {mode === 'tap'
-                    ? 'Space تكشف الكلمة اللي بعدها · A تكشف الكل · ↑ حفظتها · ↓ لسه · ← → للتقليب'
-                    : 'اكتب واضغط Enter للتصحيح · Space لكشف الكل'}
+                    ? 'Space الكلمة التالية · A الكل · ↑ أو Enter أو 2 حفظتها · ↓ أو Backspace أو 1 لسه · الأسهم للتنقل · T الوضع · S خلط · R إعادة'
+                    : 'اكتب واضغط Enter للتصحيح · Space لكشف الكل · T لتغيير الوضع · S لخلط الكروت'}
                 </span>
                 <Button size="lg" className="w-full sm:w-auto" onClick={revealAll}>
                   <Eye aria-hidden /> اكشف الكل
