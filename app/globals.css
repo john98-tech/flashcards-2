@@ -633,21 +633,6 @@
 .word-editor-content .tableWrapper { overflow-x: auto; }
 .word-editor-content p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: inline-start; height: 0; pointer-events: none; color: var(--muted-foreground); }
 
-/* Recite (التسميع) writing sheet */
-.recite-prose {
-  font-size: 1.125rem;
-  line-height: 1.9;
-  caret-color: var(--primary);
-}
-.recite-prose p { margin: 0 0 0.35em; }
-.recite-prose p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  color: oklch(0.7 0 0);
-  float: inline-start;
-  height: 0;
-  pointer-events: none;
-}
-
 /* ---------- Home hub ---------- */
 .hub-wrap { display: flex; flex-direction: column; gap: 2.5rem; min-height: 62vh; justify-content: center; }
 .hub-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: .9rem; animation: hub-rise .8s cubic-bezier(.2,.8,.2,1) both; }

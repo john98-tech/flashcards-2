@@ -1,14 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { KeyRound, Layers, PenLine } from 'lucide-react'
+import { KeyRound, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
 import { DeckEditor } from './deck-editor'
 import { CodesPanel } from './codes-panel'
-import { RecitePanel } from './recite-panel'
 
-type Tab = 'decks' | 'codes' | 'recite'
+type Tab = 'decks' | 'codes'
 
 export function AdminTabs({ decks, groups }: { decks: DeckSummary[]; groups: DeckGroup[] }) {
   const [tab, setTab] = useState<Tab>('decks')
@@ -22,18 +21,12 @@ export function AdminTabs({ decks, groups }: { decks: DeckSummary[]; groups: Dec
         <TabButton active={tab === 'codes'} onClick={() => setTab('codes')} data-tour="admin-codes-tab" data-tour-action="open-admin-codes">
           <KeyRound className="size-4" aria-hidden /> Access codes
         </TabButton>
-        <TabButton active={tab === 'recite'} onClick={() => setTab('recite')}>
-          <PenLine className="size-4" aria-hidden /> Recite
-        </TabButton>
       </div>
       <div hidden={tab !== 'decks'}>
         <DeckEditor existingDecks={decks} existingGroups={groups} />
       </div>
       <div hidden={tab !== 'codes'}>
         <CodesPanel decks={decks} />
-      </div>
-      <div hidden={tab !== 'recite'}>
-        <RecitePanel decks={decks} />
       </div>
     </div>
   )

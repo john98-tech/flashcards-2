@@ -1,6 +1,5 @@
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
-import { SectionSwitcher } from '@/components/section-switcher'
 import { RedeemForm } from '@/components/redeem-form'
 import { GroupBrowser } from '@/components/group-browser'
 import { getDeckGroups, getDeckSummaries } from '@/lib/decks'
@@ -14,7 +13,6 @@ export default async function HomePage() {
     <div className="min-h-dvh flex flex-col">
       <SiteHeader />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
-        <SectionSwitcher active="cards" />
         <section className="mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-bold text-balance md:text-4xl">

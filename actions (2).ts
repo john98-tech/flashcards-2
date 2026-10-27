@@ -6,7 +6,6 @@ import { requireAdmin } from '@/lib/admin-auth'
 import { getDeck } from '@/lib/decks'
 import { db } from '@/lib/supabase/admin'
 import type { Card, Deck } from '@/lib/cloze'
-import { getReciteRef, type ReciteRef } from '@/lib/recite-server'
 
 const DECK_ID_RE = /^[a-z0-9-]+$/
 
@@ -160,28 +159,5 @@ export async function deleteCode(code: string) {
   await requireAdmin()
   const { error } = await db().from('access_codes').delete().eq('code', code)
   if (error) throw new Error(error.message)
-  revalidatePath('/', 'layout')
-}
-
-export async function loadReciteRef(deckId: string): Promise<ReciteRef> {
-  await requireAdmin()
-  if (!DECK_ID_RE.test(deckId)) throw new Error('Invalid deck.')
-  return getReciteRef(deckId)
-}
-
-export async function saveReciteRef(deckId: string, ref: ReciteRef) {
-  await requireAdmin()
-  if (!DECK_ID_RE.test(deckId)) throw new Error('Invalid deck.')
-  if (ref.referenceImage && (!ref.referenceImage.startsWith('data:image/') || ref.referenceImage.length > 3_000_000))
-    throw new Error('الصورة كبيرة أو صيغتها غير مدعومة.')
-  const { error } = await db().from('recite_refs').upsert({
-    deck_id: deckId,
-    outline: ref.outline.slice(0, 5000),
-    reference_text: ref.referenceText.slice(0, 60000),
-    reference_image: ref.referenceImage,
-    updated_at: new Date().toISOString(),
-  })
-  if (error)
-    throw new Error(/recite_refs/.test(error.message) ? 'الجدول recite_refs مش موجود. شغّل ملف الـ migration في Supabase الأول.' : error.message)
   revalidatePath('/', 'layout')
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { ArrowRight, BookOpen, KeyRound, Loader2, PenLine, Sparkles, Zap } from 'lucide-react'
-import { ApiKeyDialog } from '@/components/recite/api-key-dialog'
+import { ApiKeyDialog } from '@/components/gemini/api-key-dialog'
 import type { HandwritingEditorHandle } from '@/components/handwriting/HandwritingEditor'
 import { GeminiError, generate, useGeminiConfig } from '@/lib/gemini'
 import { DEFAULT_DICTATION_GRADING_PROMPT } from '@/lib/dictation/types'
@@ -374,7 +374,7 @@ function ScoreHero({ score, lessonTitle, onBack }: { score: number; lessonTitle:
       )}
       <div className="relative flex flex-col items-center gap-5 sm:flex-row sm:justify-between">
         <div className="text-center sm:text-start">
-          <p className="text-sm font-semibold text-white/70">تقرير التسميع الذكي</p>
+          <p className="text-sm font-semibold text-white/70">تقرير التصحيح</p>
           <h2 className="mt-1 text-2xl font-extrabold sm:text-3xl" dir="auto">نتيجة {lessonTitle}</h2>
           <p className="mt-2 text-sm font-bold" style={{ color: tone.color }}>{tone.label}</p>
           <button type="button" onClick={onBack} className="mt-4 rounded-xl border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/20 active:scale-95">العودة للكتابة</button>

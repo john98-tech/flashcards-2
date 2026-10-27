@@ -66,7 +66,7 @@ export function ApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => 
             </span>
             <div>
               <h2 className="text-lg font-bold">مفتاح Gemini</h2>
-              <p className="text-xs text-muted-foreground">علشان الذكاء الاصطناعي يصحح تسميعك</p>
+              <p className="text-xs text-muted-foreground">علشان الذكاء الاصطناعي يصحح إجابتك</p>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="إغلاق" className="rounded-full p-1.5 text-muted-foreground hover:bg-muted">

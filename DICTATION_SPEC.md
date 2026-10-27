@@ -23,20 +23,17 @@
 app/
   page.tsx                  الصفحة الرئيسية (الفلاش كاردس)
   decks/[id]/page.tsx       جلسة مذاكرة ديك
-  recite/page.tsx           قايمة دروس التسميع الحالي
-  recite/[id]/page.tsx      شاشة التسميع الحالي (ReciteWorkspace)
   admin/page.tsx            لوحة الأدمن (AdminTabs)
-  admin/actions.ts          server actions للأدمن (ديكات، كروت، أكواد، recite_sources)
+  admin/actions.ts          server actions للأدمن (ديكات، كروت، أكواد)
   actions.ts                completeOnboarding, redeemCode
   auth/, login/, contact/, about/, privacy/, terms/
 components/
-  admin/                    admin-tabs, deck-editor, card-editor, codes-panel, recitation-editor, ...
-  recite/                   recite-browser, recite-workspace, api-key-dialog
+  admin/                    admin-tabs, deck-editor, card-editor, codes-panel, ...
+  gemini/                   نافذة إعداد Gemini المشتركة
   fx/, auth/, ui/, ...      واجهة عامة
 lib/
   cloze.ts                  أنواع Deck/Card + تحليل الـ cloze
-  decks.ts                  قراءات الديكات (server-only) + getReciteSource
-  recite.ts, recite-server.ts   مرجع التسميع الحالي
+  decks.ts                  قراءات الديكات (server-only)
   access.ts                 صلاحيات الوصول (أكواد + is_free)
   auth.ts, admin-auth.ts    الجلسة و requireAdmin / isAdmin
   gemini.ts                 عميل Gemini (client-only)
@@ -51,18 +48,18 @@ supabase/migrations/        migrations SQL
 
 **الأدمن والطالب**
 
-- الأدمن: `/admin` ← `AdminTabs` بقسمين رئيسيين (الفلاش كاردس / التسميع بالكتابة، انظر الجزء 2). قسم الفلاش كاردس جواه تابات: Decks / التسميع الحالي / Access codes. كل mutation في `app/admin/actions.ts` بتبدأ بـ `await requireAdmin()`.
-- الطالب: `/recite` ← اختيار درس ← `/recite/[id]`.
+- الأدمن: `/admin` ← `AdminTabs` بأقسام الفلاش كاردس والتسميع بالكتابة والمراجعة اليومية.
+- الطالب: التسميع بالكتابة عبر `/` ثم `/dictation/[id]`.
 
-**ملاحظة مهمة: فيه تسميع بالكتابة موجود بالفعل** (`/recite`, `recite_sources`, `recite_refs`). هو مربوط بالـ `decks` (الدرس = ديك فلاش كاردس). الميزة الجديدة المعرّفة هنا **منفصلة تمامًا عنه** ومش بتلمس أي جدول أو ملف فيه. الدمج أو الاستبدال قرار لاحق.
+ميزة «التسميع الذكي» القديمة أزيلت من التطبيق، بما في ذلك مساراتها وإعداداتها وجداولها. نافذة إعداد Gemini في `components/gemini/` مشتركة وتُستخدم في التسميع بالكتابة.
 
 ---
 
 ## 2. الفصل عن الفلاش كاردس (قواعد ملزمة)
 
-1. كل جداول التسميع الجديدة بادئتها `dictation_`. مفيش foreign key من أو إلى `decks`, `cards`, `deck_groups`, `access_codes`, `recite_sources`, `recite_refs`.
-2. كل كود التسميع الجديد في `lib/dictation/` و `app/admin/dictation-actions.ts` وملفات جديدة بس. **ممنوع** استيراد `lib/decks.ts`, `lib/cloze.ts`, `lib/recite*.ts` أو `app/admin/actions.ts` من كود التسميع الجديد.
-3. ملفات الفلاش كاردس الموجودة ما اتعدلتش في الجزء 1. أي تعديل مطلوب لاحقًا على ملف موجود (زي إضافة تاب في `admin-tabs.tsx`) يتعمل في جزء الواجهة بتعديل صغير ومعلن.
+1. كل جداول التسميع الجديدة بادئتها `dictation_`. مفيش foreign key من أو إلى `decks`, `cards`, `deck_groups`, أو `access_codes`.
+2. كل كود التسميع الجديد في `lib/dictation/` و `app/admin/dictation-actions.ts`. **ممنوع** استيراد `lib/decks.ts`, `lib/cloze.ts` أو `app/admin/actions.ts` من كود التسميع الجديد.
+3. بيانات التسميع بالكتابة مستقلة عن بيانات الفلاش كاردس.
 4. ملفات PDF المرجعية وصور المحتوى الظاهر للطالب في Storage bucket مستقل: `dictation-references` (خاص).
 
 ---

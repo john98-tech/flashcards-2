@@ -142,15 +142,6 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
           href="/active-recall"
           n="03"
         />
-        <HubCard
-          tone="teal"
-          icon={<Sparkles className="size-8" aria-hidden />}
-          title="التسميع الذكي"
-          desc="اختار درسًا واكتب كل اللي فاكره، وبعدها شوف تقرير التصحيح والمعلومات الناقصة."
-          cta="ابدأ التسميع الذكي"
-          href="/recite"
-          n="04"
-        />
       </div>
     </div>
   )

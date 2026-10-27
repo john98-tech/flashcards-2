@@ -70,14 +70,3 @@ export async function getDeck(id: string): Promise<Deck | null> {
   if (error) throw error
   return { ...meta, cards: data }
 }
-
-
-export async function getReciteSource(deckId: string): Promise<string> {
-  const { data, error } = await db().from('recite_sources').select('source_text').eq('deck_id', deckId).maybeSingle()
-  if (error) {
-    // Before the migration is applied, preserve the existing cards-based reference fallback.
-    if (/recite_sources|schema cache|does not exist/i.test(error.message)) return ''
-    throw error
-  }
-  return data?.source_text ?? ''
-}
