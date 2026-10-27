@@ -29,7 +29,7 @@ function formatDate(date: string) {
   return new Intl.DateTimeFormat('ar-EG', { timeZone: 'UTC', dateStyle: 'medium' }).format(new Date(`${date}T00:00:00Z`))
 }
 
-export function RecallCourse({ course, today, settings }: { course: Course; today: string; settings: RecallSettings }) {
+export function RecallCourse({ course, today, settings, testMode = false }: { course: Course; today: string; settings: RecallSettings; testMode?: boolean }) {
   const router = useRouter()
   const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>(course.plan?.lessonIds ?? [])
   const [durationDays, setDurationDays] = useState(() =>
@@ -90,6 +90,7 @@ export function RecallCourse({ course, today, settings }: { course: Course; toda
   )
 
   const confirmPlan = async () => {
+    if (testMode) { setError('وضع الاختبار للمعاينة فقط. ارجع لليوم الحقيقي قبل حفظ أي تغييرات.'); return }
     setBusy(true)
     setError('')
     setNotice('')
@@ -114,6 +115,7 @@ export function RecallCourse({ course, today, settings }: { course: Course; toda
     setRevealedQuestions((current) => current.includes(index) ? current : [...current, index])
   }
   const finishSession = async () => {
+    if (testMode) { setError('وضع الاختبار للمعاينة فقط. ارجع لليوم الحقيقي قبل حفظ إنجاز الجلسة.'); return }
     if (!activeSession) return
     setBusy(true)
     setError('')
@@ -149,6 +151,7 @@ export function RecallCourse({ course, today, settings }: { course: Course; toda
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-3 py-5 sm:px-4 sm:py-8">
+        {testMode && <p className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm font-semibold">وضع اختبار التاريخ مفعّل — المحتوى للمعاينة فقط، ولن يُسمح بحفظ خطة أو تسجيل جلسة مكتملة.</p>}
         {error && <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
         {notice && <p role="status" className="rounded-xl border bg-accent p-3 text-sm">{notice}</p>}
 
@@ -226,7 +229,7 @@ export function RecallCourse({ course, today, settings }: { course: Course; toda
               {!preview && selectedLessonIds.length > 0 && <p role="alert" className="mt-2 text-sm text-destructive">تحقق من مدة الخطة وتاريخ الامتحان.</p>}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={busy || !selectedLessonIds.length || !preview} onClick={() => void confirmPlan()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50">
+              <button type="button" disabled={testMode || busy || !selectedLessonIds.length || !preview} onClick={() => void confirmPlan()} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50">
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CalendarDays className="size-4" aria-hidden />}
                 {busy ? 'جارٍ حفظ الخطة…' : 'تأكيد وإنشاء الخطة'}
               </button>
@@ -242,7 +245,7 @@ export function RecallCourse({ course, today, settings }: { course: Course; toda
                   <p className="mt-1 text-sm text-muted-foreground">{formatDate(today)} · {pendingToday + completedToday} جلسة مطلوبة · {completedToday} مكتملة · {pendingToday} متبقية</p>
                   {overdueCount > 0 && <p className="mt-2 text-sm font-semibold text-amber-700">لديك {overdueCount} جلسة متأخرة، موزعة ضمن قائمة اليوم.</p>}
                   {overdueCount > 0 && (
-                    <button type="button" disabled={busy} onClick={() => void confirmPlan()} className="mt-3 rounded-lg border border-amber-600/40 px-3 py-2 text-sm font-semibold text-amber-800 disabled:opacity-50">
+                    <button type="button" disabled={testMode || busy} onClick={() => void confirmPlan()} className="mt-3 rounded-lg border border-amber-600/40 px-3 py-2 text-sm font-semibold text-amber-800 disabled:opacity-50">
                       إعادة توزيع الجلسات المتأخرة حتى نهاية الخطة
                     </button>
                   )}
@@ -309,7 +312,7 @@ export function RecallCourse({ course, today, settings }: { course: Course; toda
                           <button type="button" onClick={() => setSelfAssessment('review_again')} className={`rounded-lg border px-3 py-2 text-sm ${selfAssessment === 'review_again' ? 'border-primary bg-primary/5 font-semibold' : ''}`}>محتاج أراجعها</button>
                         </div>
                       </section>
-                      <button type="button" disabled={busy || revealedQuestions.length !== questions.length} onClick={() => void finishSession()} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">
+                      <button type="button" disabled={testMode || busy || revealedQuestions.length !== questions.length} onClick={() => void finishSession()} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">
                         {busy ? 'بيحفظ الجلسة…' : 'إنهاء مراجعة الدرس'}
                       </button>
                       {revealedQuestions.length !== questions.length && <p className="text-center text-xs text-muted-foreground">حاول الإجابة أو اختر «مش عارف» ثم اكشف الإجابة قبل إنهاء الجلسة.</p>}
