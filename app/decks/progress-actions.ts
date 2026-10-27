@@ -35,6 +35,8 @@ export async function saveStudentDeckProgress(deckId: string, progress: SavedDec
   const position = Number.isInteger(progress.position) ? Math.max(0, Math.min(progress.position!, 5000)) : 0
   const mode = progress.mode === 'type' ? 'type' : 'tap'
   const baseQueue = Array.isArray(progress.baseQueue) ? progress.baseQueue.filter((id) => typeof id === 'string').slice(0, 5000) : null
+  const revealed = Array.isArray(progress.revealed) ? progress.revealed.filter((n) => Number.isInteger(n) && n >= 0 && n < 500).slice(0, 500) : []
+  const answers = progress.answers && typeof progress.answers === 'object' ? Object.fromEntries(Object.entries(progress.answers).filter(([key, value]) => /^\\d+$/.test(key) && typeof value === 'string').slice(0, 500)) : {}
   const { error } = await db().from('student_deck_progress').upsert({
     user_id: session.id,
     deck_id: deckId,
