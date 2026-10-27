@@ -725,3 +725,55 @@
   .hub-hero, .hub-card, .home-enter, .hub-icon, .hub-badge::after { animation: none !important; }
   .hub-card { transform: none; }
 }
+
+/* Launch polish: keyboard visibility, safe mobile layout, and motion accessibility. */
+html {
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+:where(a, button, input, textarea, select, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--ring) 78%, white);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: var(--primary-foreground);
+  background: color-mix(in oklch, var(--primary) 82%, black);
+}
+
+@media (max-width: 640px) {
+  .hub-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hub-card {
+    min-width: 0;
+  }
+
+  .hub-title {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
