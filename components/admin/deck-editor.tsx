@@ -736,7 +736,7 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
                 <section role="dialog" aria-modal="true" aria-labelledby="edit-card-text-title" className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-4 overflow-hidden rounded-xl border bg-card p-5 shadow-2xl">
                   <div>
                     <h3 id="edit-card-text-title" className="text-lg font-semibold">Edit card text</h3>
-                    <p className="text-sm text-muted-foreground">Edit each selected card below. Keep {{ and }} around words you want to remain hidden. Click Done to return to word-selection mode.</p>
+                    <p className="text-sm text-muted-foreground">Edit each selected card below. Keep {'{{'} and {'}}'} around words you want to remain hidden. Click Done to return to word-selection mode.</p>
                   </div>
                   <div className="min-h-0 space-y-4 overflow-y-auto">
                     {Object.entries(editingTexts).map(([id, value], index) => {
