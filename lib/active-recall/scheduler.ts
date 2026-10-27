@@ -101,6 +101,6 @@ export function buildRecallSchedule({
       a.scheduledDate.localeCompare(b.scheduledDate) || a.lessonId.localeCompare(b.lessonId) || a.reviewNumber - b.reviewNumber,
     ),
     dailyCounts,
-    overloadedDays: Object.keys(dailyCounts).filter((date) => dailyCounts[date] > effectiveDailyGoal),
+    overloadedDays: Object.keys(dailyCounts).filter((date) => dailyCounts[date] > dailyGoal),
   }
 }
