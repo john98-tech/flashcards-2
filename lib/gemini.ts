@@ -148,7 +148,40 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
     for (const img of opts.images ?? []) content.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } })
     messages.push({ role: 'user', content: opts.images?.length ? content : prompt })
     const apiKey = config.apiKey.trim().replace(/^['\"]|['\"]$/g, '')
-    const result = await request(`${GROQ_API}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2, ...(opts.json || opts.responseSchema ? { response_format: { type: 'json_object' } } : {}) }), signal: opts.signal }, 'groq')
+    const wantsJson = !!(opts.json || opts.responseSchema)
+    const requestBody = (requestMessages: Array<Record<string, unknown>>, jsonMode: boolean) => ({
+      model: config.model,
+      messages: requestMessages,
+      temperature: opts.temperature ?? 0.2,
+      ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+    })
+    let result: any
+    try {
+      result = await request(`${GROQ_API}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(requestBody(messages, wantsJson)),
+        signal: opts.signal,
+      }, 'groq')
+    } catch (error) {
+      // Some Groq models reject otherwise valid JSON-mode generations with
+      // json_validate_failed. Retry once without response_format and make the
+      // JSON-only requirement explicit in the prompt.
+      if (!(wantsJson && error instanceof GeminiError && error.status === 400 && /json_validate_failed|failed to generate json|failed_generation/i.test(error.message))) {
+        throw error
+      }
+      const retryMessages = messages.map(message => ({ ...message }))
+      retryMessages.push({
+        role: 'user',
+        content: 'Return exactly one valid JSON object. Do not include Markdown fences, comments, or any text before or after the JSON. Ensure all strings are escaped correctly and all brackets are closed.',
+      })
+      result = await request(`${GROQ_API}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(requestBody(retryMessages, false)),
+        signal: opts.signal,
+      }, 'groq')
+    }
     const output = result?.choices?.[0]?.message?.content
     if (typeof output !== 'string' || !output.trim()) throw new GeminiError('Groq رجّع رد فاضي.')
     return output
