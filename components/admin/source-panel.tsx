@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Copy, Plus, Wand2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { KeyRound, Loader2, RotateCcw, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ApiKeyDialog } from '@/components/gemini/api-key-dialog'
 import { WordEditor } from './word-editor'
-import { autoCloze, buildPrompt, parseTerms, prepareText, splitIntoCards, type Card } from '@/lib/cloze'
+import { autoCloze, parseTerms, splitIntoCards, type Card } from '@/lib/cloze'
+import { GeminiError, generate as geminiGenerate, useGeminiConfig } from '@/lib/gemini'
 
 type Props = {
   terms: string
@@ -14,94 +16,197 @@ type Props = {
 
 const newId = () => Math.random().toString(36).slice(2, 10)
 
-export function SourcePanel({ terms, onTermsChange, onGenerate }: Props) {
+const PROMPT_STORAGE_KEY = 'kwk:cloze-prompt'
+
+export const DEFAULT_CLOZE_PROMPT = `You are an expert medical educator who builds fill-in-the-blank (cloze) flashcards for students from textbook text.
+Convert the text I send you into flashcards.
+
+SPLITTING
+- Group sentences that belong together into one card (one idea, usually 2 to 5 sentences).
+- Every table or diagram goes in its own card.
+
+HIDING WORDS
+- Wrap every important word or phrase in double curly braces, for example {{stroke volume}}.
+- Hide: disease names, organs and anatomical structures, hormones, enzymes, receptors, drugs and doses, normal values, numbers together with their units, causes and effects, scientific terms, classifications and abbreviations.
+- Each hidden phrase is 1 to 4 words and meaningful on its own. Roughly one blank for every 6 to 10 words.
+- Never hide filler words (articles, prepositions, conjunctions, pronouns, generic verbs) and never hide a whole sentence.
+- Never nest braces and never leave a brace unclosed.
+
+WORDING
+- Do not change, translate, shorten, summarize or reorder the text. Keep every word in its original language exactly as written.
+- Only fix line breaks that were broken by a PDF.
+
+TABLES
+- Keep a table as a Markdown table inside one card, with the same rows and columns.
+- Keep the header row visible and hide the key terms inside the cells with {{ }}.
+
+OUTPUT
+- Return JSON only, with one string per card in the "cards" array.`
+
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: { cards: { type: 'ARRAY', items: { type: 'STRING' } } },
+  required: ['cards'],
+}
+
+export function SourcePanel({ terms, onGenerate }: Props) {
   const [text, setText] = useState('')
   const [resetKey, setResetKey] = useState(0)
-  const [aiReply, setAiReply] = useState('')
   const [joinLines, setJoinLines] = useState(true)
   const [numbers, setNumbers] = useState(true)
   const [abbreviations, setAbbreviations] = useState(true)
-  const [copied, setCopied] = useState(false)
 
-  const generate = () => {
-    const chunks = splitIntoCards(text, joinLines)
-    const termList = parseTerms(terms)
-    onGenerate(chunks.map((chunk) => ({ id: newId(), cloze: autoCloze(chunk, { numbers, abbreviations, terms: termList }) })))
+  const { config, ready } = useGeminiConfig()
+  const [keyOpen, setKeyOpen] = useState(false)
+  const [prompt, setPrompt] = useState(DEFAULT_CLOZE_PROMPT)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PROMPT_STORAGE_KEY)
+      if (saved) setPrompt(saved)
+    } catch {}
+  }, [])
+
+  const changePrompt = (value: string) => {
+    setPrompt(value)
+    try {
+      localStorage.setItem(PROMPT_STORAGE_KEY, value)
+    } catch {}
+  }
+
+  const resetPrompt = () => {
+    setPrompt(DEFAULT_CLOZE_PROMPT)
+    try {
+      localStorage.removeItem(PROMPT_STORAGE_KEY)
+    } catch {}
+  }
+
+  const clearEditor = () => {
     setText('')
     setResetKey((k) => k + 1)
   }
 
-  const copyPrompt = async () => {
-    await navigator.clipboard.writeText(buildPrompt(prepareText(text, joinLines)))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const generateLocal = () => {
+    const chunks = splitIntoCards(text, joinLines)
+    const termList = parseTerms(terms)
+    onGenerate(chunks.map((chunk) => ({ id: newId(), cloze: autoCloze(chunk, { numbers, abbreviations, terms: termList }) })))
+    clearEditor()
   }
 
-  const addAiTerms = () => {
-    const merged = parseTerms(`${terms}\n${aiReply}`)
-    onTermsChange(merged.join('\n'))
-    setAiReply('')
+  const generateWithAi = async () => {
+    if (!config) {
+      setKeyOpen(true)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const raw = await geminiGenerate(config, text.trim(), {
+        system: prompt,
+        responseSchema: RESPONSE_SCHEMA,
+        temperature: 0.2,
+      })
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { cards?: unknown }
+      const list = (Array.isArray(parsed.cards) ? parsed.cards : [])
+        .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+        .map((c) => c.trim())
+      if (list.length === 0) throw new GeminiError('Gemini مرجّعش كروت. جرّب تاني أو عدّل البرومبت.')
+
+      const termList = parseTerms(terms)
+      const cards: Card[] = list.map((cloze) => {
+        const opens = (cloze.match(/\{\{/g) ?? []).length
+        const closes = (cloze.match(/\}\}/g) ?? []).length
+        // Broken or missing blanks: fall back to the local auto-blanking for that card only.
+        if (opens === 0 || opens !== closes) {
+          const plain = cloze.replace(/\{\{|\}\}/g, '')
+          return { id: newId(), cloze: autoCloze(plain, { numbers, abbreviations, terms: termList }) }
+        }
+        return { id: newId(), cloze }
+      })
+      onGenerate(cards)
+      clearEditor()
+    } catch (err) {
+      setError(
+        err instanceof GeminiError
+          ? err.message
+          : err instanceof SyntaxError
+            ? 'رد Gemini مكانش بالشكل المطلوب. جرّب تاني.'
+            : 'حصل خطأ غير متوقع.',
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+    <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <label htmlFor="source" className="text-sm font-semibold">
-          1. الصق صفحة أو أكتر من الكتاب
+          الصق صفحة أو أكتر من الكتاب
         </label>
+        <button
+          type="button"
+          onClick={() => setKeyOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted"
+        >
+          <KeyRound className="size-3.5" aria-hidden />
+          {ready && config ? `Gemini متصل (${config.model})` : 'اربط مفتاح Gemini'}
+        </button>
+      </div>
+
+      <div className="[&_.word-editor-content]:min-h-[480px]">
         <WordEditor
           onTextChange={setText}
           resetKey={resetKey}
           placeholder="الصق النص أو جدول Word هنا؛ الجداول هتتحول لجدول منسق في الكارت…"
         />
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+      </div>
+
+      <details className="rounded-lg border bg-background p-3">
+        <summary className="cursor-pointer text-sm font-medium">برومبت Gemini (تقدر تعدّل عليه)</summary>
+        <textarea
+          dir="ltr"
+          value={prompt}
+          onChange={(e) => changePrompt(e.target.value)}
+          rows={16}
+          className="mt-3 w-full resize-y rounded-lg border bg-background p-2 font-mono text-xs leading-relaxed outline-none focus:ring-2 focus:ring-ring"
+        />
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">النص بيتبعت لـ Gemini مع البرومبت ده، والتعديل بيتحفظ تلقائي.</p>
+          <Button type="button" variant="outline" size="sm" onClick={resetPrompt}>
+            <RotateCcw aria-hidden /> رجّع الافتراضي
+          </Button>
+        </div>
+      </details>
+
+      {error && (
+        <p role="alert" className="rounded-lg bg-destructive/10 p-2.5 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="lg" onClick={generateWithAi} disabled={!text.trim() || busy}>
+          {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
+          {busy ? 'Gemini بيحوّل النص…' : 'حوّل لفلاش كاردس بـ Gemini'}
+        </Button>
+      </div>
+
+      <details className="text-sm">
+        <summary className="cursor-pointer text-muted-foreground">تقسيم وتفريغ يدوي بدون ذكاء اصطناعي</summary>
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
           <Toggle checked={joinLines} onChange={setJoinLines} label="صلّح سطور الـ PDF المكسورة" />
           <Toggle checked={numbers} onChange={setNumbers} label="فرّغ الأرقام ووحداتها" />
           <Toggle checked={abbreviations} onChange={setAbbreviations} label="فرّغ الاختصارات (ECG)" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="lg" onClick={generate} disabled={!text.trim()}>
+          <Button variant="outline" onClick={generateLocal} disabled={!text.trim()}>
             <Wand2 aria-hidden /> قسّم وفرّغ
           </Button>
-          <Button size="lg" variant="outline" onClick={copyPrompt} disabled={!text.trim()}>
-            {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
-            {copied ? 'اتنسخ' : 'انسخ برومبت للذكاء الاصطناعي'}
-          </Button>
         </div>
-      </div>
+      </details>
 
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
-        <label htmlFor="terms" className="text-sm font-semibold">
-          2. قائمة الكلمات المهمة
-        </label>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          كل كلمة هنا بتتفرّغ في أي مكان في الكتاب. القائمة بتكبر مع كل صفحة، فبعد كام صفحة مش هتحتاج الذكاء
-          الاصطناعي تقريباً.
-        </p>
-        <textarea
-          id="terms"
-          dir="auto"
-          value={terms}
-          onChange={(e) => onTermsChange(e.target.value)}
-          rows={6}
-          placeholder={'stroke volume\nsinoatrial node\n…'}
-          className="w-full resize-y rounded-lg border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        />
-        <label htmlFor="ai-reply" className="text-xs font-medium text-muted-foreground">
-          الصق قائمة الكلمات اللي رجّعها الذكاء الاصطناعي هنا
-        </label>
-        <textarea
-          id="ai-reply"
-          dir="auto"
-          value={aiReply}
-          onChange={(e) => setAiReply(e.target.value)}
-          rows={3}
-          className="w-full resize-y rounded-lg border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        />
-        <Button variant="secondary" onClick={addAiTerms} disabled={!aiReply.trim()}>
-          <Plus aria-hidden /> ضيفهم للقائمة
-        </Button>
-      </div>
+      <ApiKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} />
     </section>
   )
 }
