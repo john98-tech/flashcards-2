@@ -313,14 +313,14 @@ const renderLine = (line: { value: string; start: number; end: number }, key: nu
               } else blocks.push({ type: 'line', lines: [lines[i++]] })
             }
             return <div dir="auto" className="space-y-2 text-base leading-[2.3] sm:text-lg sm:leading-[2.4] md:text-xl">
-              {blocks.map((block, bi) => block.type === 'table' ? <div key={bi} className="overflow-x-auto rounded-lg border"><table className="w-full border-collapse text-sm sm:text-base"><tbody>{block.lines.map((line, ri) => {
+              {blocks.map((block, bi) => block.type === 'table' ? <div key={bi} className="max-w-full overflow-x-auto rounded-lg border"><table className="w-max min-w-full border-collapse text-sm sm:text-base"><tbody>{block.lines.map((line, ri) => {
                 const cells = line.value.trim().replace(/^\|/, '').replace(/\|$/, '').split('|')
                 let cursor = line.value.indexOf(line.value.trim().replace(/^\|/, '').split('|')[0])
                 return <tr key={ri} className={ri === 0 ? 'bg-muted/70 font-semibold' : 'border-t'}>{cells.map((cell, ci) => {
                   const at = line.value.indexOf(cell, cursor)
                   const cellStart = line.start + (at >= 0 ? at : 0)
                   cursor = (at >= 0 ? at : cursor) + cell.length + 1
-                  return <td key={ci} className="border-e px-3 py-2 align-top last:border-e-0">{renderRange(cellStart, cellStart + cell.length)}</td>
+                  return <td key={ci} className="border-e px-3 py-2 align-top whitespace-nowrap break-normal [overflow-wrap:normal] last:border-e-0">{renderRange(cellStart, cellStart + cell.length)}</td>
                 })}</tr>
               })}</tbody></table></div> : block.type === 'diagram' ? <pre key={bi} className="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{block.lines.map((line, i) => <span key={i}>{renderRange(line.start, line.end)}{i < block.lines.length - 1 ? '\n' : ''}</span>)}</pre> : renderLine(block.lines[0], bi))}
             </div>
