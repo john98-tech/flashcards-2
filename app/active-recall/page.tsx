@@ -3,12 +3,23 @@ import { redirect } from 'next/navigation'
 import { ArrowRight, BookOpen } from 'lucide-react'
 import { SiteHeader } from '@/components/site-header'
 import { getSession } from '@/lib/auth'
-import { getRecallCatalog } from '@/lib/active-recall/data'
+import { cairoDate, getRecallCatalog } from '@/lib/active-recall/data'
+import { RecallTestDatePicker } from '@/components/active-recall/test-date-picker'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ActiveRecallPage() {
+function isValidDate(value: string) {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+export default async function ActiveRecallPage({ searchParams }: { searchParams: Promise<{ testDate?: string | string[] }> }) {
   if (!(await getSession())) redirect('/login?next=%2Factive-recall')
+  const query = await searchParams
+  const actualToday = cairoDate()
+  const requestedDate = Array.isArray(query.testDate) ? query.testDate[0] : query.testDate
+  const selectedDate = requestedDate && isValidDate(requestedDate) ? requestedDate : actualToday
   let courses: Awaited<ReturnType<typeof getRecallCatalog>>['courses'] = []
   let loadFailed = false
   try {
@@ -21,7 +32,7 @@ export default async function ActiveRecallPage() {
   return (
     <div className="min-h-dvh" dir="rtl">
       <SiteHeader />
-      <main className="mx-auto w-full max-w-5xl px-4 py-8">
+      <div className="pt-4"><RecallTestDatePicker actualToday={actualToday} selectedDate={selectedDate} /></div>\n      <main className="mx-auto w-full max-w-5xl px-4 py-8">
         <Link href="/" className="mb-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground">
           <ArrowRight className="size-4" aria-hidden /> الرئيسية
         </Link>
@@ -39,7 +50,7 @@ export default async function ActiveRecallPage() {
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {courses.map((course) => (
               <li key={course.id}>
-                <Link href={`/active-recall/${course.id}`} className="flex h-full flex-col gap-3 rounded-xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+                <Link href={selectedDate !== actualToday ? `/active-recall/${course.id}?testDate=${selectedDate}` : `/active-recall/${course.id}`} className="flex h-full flex-col gap-3 rounded-xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
                   <BookOpen className="size-6 text-primary" aria-hidden />
                   <span className="text-lg font-bold">{course.name}</span>
                   <span className="text-sm text-muted-foreground">{course.lessonCount} درس متاح للاختيار</span>
