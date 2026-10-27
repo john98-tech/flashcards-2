@@ -35,6 +35,8 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
   const [move, setMove] = useState<MoveState>({ status: 'idle' })
   const [draftReady, setDraftReady] = useState(false)
   const draftStorageKey = 'sammaa-admin-deck-editor-draft-v1'
+  const savedIds = useRef<{ deckId: string; ids: string[] } | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   // Restore an unfinished editor session without writing it to the live database.
   useEffect(() => {
@@ -65,8 +67,6 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
       localStorage.setItem(draftStorageKey, JSON.stringify({ deck, terms, page, active, selectedGroupId, savedIds: savedIds.current, savedAt: Date.now() }))
     } catch {}
   }, [draftReady, deck, terms, page, active, selectedGroupId])
-  const savedIds = useRef<{ deckId: string; ids: string[] } | null>(null)
-  const fileInput = useRef<HTMLInputElement>(null)
 
   const pageCount = Math.max(1, Math.ceil(deck.cards.length / PAGE_SIZE))
   const visible = deck.cards.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
