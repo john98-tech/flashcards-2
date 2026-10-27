@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { sfx } from '@/lib/sound'
 import { normalizeAnswer, parseCloze, type Deck } from '@/lib/cloze'
+import { renderRichInline } from '@/components/rich-inline'
 
 type Mode = 'tap' | 'type'
 
@@ -237,7 +238,7 @@ export function StudySession({ deck }: { deck: Deck }) {
             }
             const isTableRow = (value: string) => /^\s*\|.*\|\s*$/.test(value)
             const isDivider = (value: string) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(value)
-            const renderRange = (start: number, end: number) => positioned.filter((item) => item.end > start && item.start < end).map(({ seg, start: segStart, end: segEnd }, i) => {
+            const renderPlainRange = (start: number, end: number) => positioned.filter((item) => item.end > start && item.start < end).map(({ seg, start: segStart, end: segEnd }, i) => {
               if (seg.type === 'text') {
                 const from = Math.max(start, segStart) - segStart
                 const to = Math.min(end, segEnd) - segStart
@@ -246,8 +247,9 @@ export function StudySession({ deck }: { deck: Deck }) {
               if (segStart < start || segEnd > end) return <span key={'b-' + seg.index}>{seg.value}</span>
               const isOpen = revealed.has(seg.index)
               if (mode === 'type') return <TypedBlank key={card.id + '-' + seg.index} answer={seg.value} value={answers[seg.index] ?? ''} checked={isOpen} onChange={(v) => setAnswers((a) => ({ ...a, [seg.index]: v }))} onCheck={(correct) => { if (correct) sfx.correct(); else sfx.wrong(); setRevealed((r) => new Set(r).add(seg.index)) }} />
-              return <button key={seg.index} type="button" data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => revealOne(seg.index)} aria-label={isOpen ? seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\u00A0'}</button>
+              return <button key={seg.index} type="button" data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => revealOne(seg.index)} aria-label={isOpen ? seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\\u00A0'}</button>
             })
+            const renderRange = (start: number, end: number) => renderRichInline(fullText, start, end, renderPlainRange, `study-${start}-${end}`)
             const HEADING_CLASS = [
   'mt-3 text-2xl font-extrabold leading-snug sm:text-3xl',
   'mt-2 text-xl font-bold leading-snug sm:text-2xl',
