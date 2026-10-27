@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRightLeft, ClipboardPaste, CloudUpload, Copy, Download, Eraser, ListChecks, Loader2, Scissors, Upload } from 'lucide-react'
+import { ArrowRightLeft, ClipboardPaste, CloudUpload, Copy, Download, Eraser, FilePenLine, ListChecks, Loader2, Scissors, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { applyTerms, countBlanks, parseTerms, type Card, type Deck } from '@/lib/cloze'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
@@ -73,6 +73,7 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
   const [dragIds, setDragIds] = useState<string[] | null>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
   const [hasClip, setHasClip] = useState(false)
+  const [editingTexts, setEditingTexts] = useState<Record<string, string> | null>(null)
   const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const listRef = useRef<HTMLOListElement>(null)
 
@@ -244,6 +245,7 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
     { label: 'Cut', icon: Scissors, keys: 'Ctrl+X', run: () => copyPicked(true), off: !picked.size },
     { label: 'Paste', icon: ClipboardPaste, keys: 'Ctrl+V', run: paste, off: !hasClip },
     { label: 'Select all', icon: ListChecks, keys: 'Ctrl+A', run: selectAll, off: !deck.cards.length },
+    { label: 'Edit text', icon: FilePenLine, keys: '', run: () => setEditingTexts(Object.fromEntries(deck.cards.filter((c) => picked.has(c.id)).map((c) => [c.id, c.cloze]))), off: !picked.size },
   ]
 
   const applyTermsToAll = () => {
@@ -726,6 +728,33 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
                     <span className="text-xs text-muted-foreground">{keys}</span>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {editingTexts && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" role="presentation">
+                <section role="dialog" aria-modal="true" aria-labelledby="edit-card-text-title" className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-4 overflow-hidden rounded-xl border bg-card p-5 shadow-2xl">
+                  <div>
+                    <h3 id="edit-card-text-title" className="text-lg font-semibold">Edit card text</h3>
+                    <p className="text-sm text-muted-foreground">Edit each selected card below. Keep {{ and }} around words you want to remain hidden. Click Done to return to word-selection mode.</p>
+                  </div>
+                  <div className="min-h-0 space-y-4 overflow-y-auto">
+                    {Object.entries(editingTexts).map(([id, value], index) => {
+                      const card = deck.cards.find((item) => item.id === id)
+                      if (!card) return null
+                      return <label key={id} className="flex flex-col gap-2 text-sm font-medium">Card {deck.cards.findIndex((item) => item.id === id) + 1}
+                        <textarea dir="auto" rows={5} value={value} onChange={(e) => setEditingTexts((current) => current ? { ...current, [id]: e.target.value } : current)} className="w-full rounded-lg border bg-background p-3 font-normal leading-relaxed outline-none focus:ring-2 focus:ring-ring" />
+                      </label>
+                    })}
+                  </div>
+                  <div className="flex justify-end gap-2 border-t pt-3">
+                    <Button variant="outline" onClick={() => setEditingTexts(null)}>Cancel</Button>
+                    <Button onClick={() => {
+                      setDeck((current) => ({ ...current, cards: current.cards.map((card) => Object.prototype.hasOwnProperty.call(editingTexts, card.id) ? { ...card, cloze: editingTexts[card.id] } : card) }))
+                      setEditingTexts(null)
+                    }}>Done</Button>
+                  </div>
+                </section>
               </div>
             )}
 
