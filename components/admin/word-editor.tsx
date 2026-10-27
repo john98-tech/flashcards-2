@@ -34,9 +34,19 @@ import { cn } from '@/lib/utils'
 // ---- editor document -> plain text (tables become Markdown tables, as the card renderer expects) ----
 
 function inlineText(node: JSONContent): string {
-  if (node.type === 'text') return node.text ?? ''
   if (node.type === 'hardBreak') return '\n'
-  return (node.content ?? []).map(inlineText).join('')
+  if (node.type !== 'text') return (node.content ?? []).map(inlineText).join('')
+
+  let value = node.text ?? ''
+  for (const mark of node.marks ?? []) {
+    if (mark.type === 'bold') value = `**${value}**`
+    else if (mark.type === 'italic') value = `*${value}*`
+    else if (mark.type === 'strike') value = `~~${value}~~`
+    else if (mark.type === 'underline') value = `<u>${value}</u>`
+    else if (mark.type === 'highlight') value = `==${value}==`
+    else if (mark.type === 'textStyle' && typeof mark.attrs?.color === 'string') value = `<span style="color:${mark.attrs.color}">${value}</span>`
+  }
+  return value
 }
 
 function tableToText(table: JSONContent): string {
@@ -67,9 +77,13 @@ function blockToText(node: JSONContent, prefix = ''): string[] {
       return [prefix + parts.join('\n')]
     }
     case 'blockquote':
-      return (node.content ?? []).flatMap((child) => blockToText(child))
+      return (node.content ?? []).flatMap((child) => blockToText(child)).map((line) => `> ${line}`)
+    case 'heading': {
+      const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 1))
+      return [`${'#'.repeat(level)} ${inlineText(node)}`]
+    }
     case 'horizontalRule':
-      return []
+      return ['---']
     default:
       return [inlineText(node)]
   }
