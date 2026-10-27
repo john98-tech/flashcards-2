@@ -15,6 +15,9 @@ type Message = { role: 'user' | 'assistant'; text: string }
 
 const SYSTEM = `أنت وكيل إدارة فعلي داخل لوحة أدمن فلاش كاردس. تتلقى بيانات المجموعات والدروس والكروت وسلة المحذوفات. أرجع JSON صالحًا فقط دائمًا. لتنظيم بطاقات المجموعة استخدم الشكل { "groups": [], "decks": [{ "title":"", "subject":"", "description":"", "groupName":"", "cardIndexes":[] }], "explanation":"" } ووزع كل بطاقة مرة واحدة دون تغيير نصها. لأي طلب إدارة آخر استخدم الشكل { "actions": [{"type":"..."}], "explanation":"..." }. أنواع الإجراءات المسموحة: create_group {type,name}; create_deck {type,title,subject,description,groupName,isFree}; rename_deck {type,deckId,title,subject,description,isFree}; move_deck {type,deckId,groupName}; delete_deck {type,deckId}; delete_group {type,groupName}; delete_cards {type,deckId,cardIds}; edit_card {type,deckId,cardId,cloze}; restore_deleted {type,recycleBinId}. استخدم IDs الموجودة حرفيًا من السياق. في إنشاء مجموعة أو درس لا تخترع IDs؛ التطبيق ينشئها. عند تعديل أو حذف كروت استخدم IDs الموجودة فقط. احذف الدروس أو المجموعات أو الكروت فقط إذا طلب المستخدم ذلك صراحة. إذا لم تكن البيانات كافية لتنفيذ الطلب، أرجع actions فارغة واشرح ما ينقص. أجب بالعربية. لا تدّع تنفيذ شيء؛ التطبيق هو الذي ينفذ الإجراءات بعد موافقة المستخدم.`
 
+// Groq gets its own prompt because its JSON mode differs from Gemini's structured-output mode.
+const GROQ_SYSTEM = `${systemText.slice(systemText.indexOf('`')+1, -1)}\n\nمهم لمزوّد Groq: أرجع كائن JSON واحدًا فقط دون Markdown أو سياج كود أو أي نص خارجه. لا تستخدم null بدل القيم المطلوبة، والتزم بمفاتيح الشكل المطلوب. إذا كان الطلب تنظيم بطاقات فاستخدم groups وdecks، وإذا كان طلب إدارة فاستخدم actions وexplanation.`
+
 function parsePlan(text: string): Plan {
   const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
   const parsed = JSON.parse(cleaned)
@@ -54,7 +57,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
       const { cards } = await getCards()
       if (!cards.length) throw new Error('المجموعة دي مفيهاش كروت.')
       const compact = cards.map((c, i) => ({ index: i, text: c.cloze }))
-      const response = await generate(config, `نظّم كل بطاقات مجموعة "${groupName}" إلى مجموعات وdecks/دروس مناسبة حسب المحتوى. لا تغيّر نص أي بطاقة. أدرج كل index مرة واحدة بالضبط. البطاقات: ${JSON.stringify(compact)}`, { system: SYSTEM, json: true, temperature: 0.1 })
+      const response = await generate(config, `نظّم كل بطاقات مجموعة "${groupName}" إلى مجموعات وdecks/دروس مناسبة حسب المحتوى. لا تغيّر نص أي بطاقة. أدرج كل index مرة واحدة بالضبط. البطاقات: ${JSON.stringify(compact)}`, { system: config.provider === 'groq' ? GROQ_SYSTEM : SYSTEM, json: true, temperature: 0.1 })
       const next = parsePlan(response)
       const used = next.decks.flatMap(d => d.cardIndexes)
       if (used.some(i => !Number.isInteger(i) || i < 0 || i >= cards.length)) throw new Error('الخطة فيها أرقام بطاقات غير صحيحة.')
