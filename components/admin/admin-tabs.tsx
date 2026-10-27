@@ -1,17 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { BookOpen, KeyRound, Layers, PenLine } from 'lucide-react'
+import { BookOpen, KeyRound, Layers, PenLine, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { RecallCourse, RecallLesson, RecallSettings } from '@/lib/active-recall/types'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
 import { DeckEditor } from './deck-editor'
+import { AiDeckOrganizer } from './ai-deck-organizer'
 import { CodesPanel } from './codes-panel'
 import { DictationAdmin, type DictationAdminData } from './dictation-admin'
 import { ActiveRecallAdmin } from './active-recall-admin'
 
 type Section = 'flashcards' | 'dictation' | 'active-recall'
-type Tab = 'decks' | 'codes'
+type Tab = 'decks' | 'codes' | 'ai-organizer'
 
 const noDictation: DictationAdminData = { subjects: [], lessons: [], loadError: null }
 const noActiveRecall = { courses: [], lessons: [], settings: null, loadError: null } satisfies {
