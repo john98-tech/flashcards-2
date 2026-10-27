@@ -72,6 +72,27 @@ function tableToText(table: JSONContent): string {
   return [normalized[0], divider, ...normalized.slice(1)].map((row) => '| ' + row.join(' | ') + ' |').join('\n')
 }
 
+function blockIndent(node: JSONContent): string {
+  const attrs = node.attrs ?? {}
+  const cssLengthToPx = (value: unknown) => {
+    if (typeof value !== 'string') return 0
+    const match = value.trim().match(/^(\\d+(?:\\.\\d+)?)(px|pt|em|rem|%)$/i)
+    if (!match) return 0
+    const amount = Number(match[1])
+    switch (match[2].toLowerCase()) {
+      case 'px': return amount
+      case 'pt': return amount * 4 / 3
+      case 'em':
+      case 'rem': return amount * 16
+      case '%': return amount * 0.16
+      default: return 0
+    }
+  }
+  const pixels = cssLengthToPx(attrs.marginLeft) + cssLengthToPx(attrs.textIndent)
+  const levels = Math.min(12, Math.max(0, Math.round(pixels / 20)))
+  return ' '.repeat(levels * 2)
+}
+
 function blockToText(node: JSONContent, prefix = ''): string[] {
   switch (node.type) {
     case 'table':
@@ -88,7 +109,7 @@ function blockToText(node: JSONContent, prefix = ''): string[] {
       return (node.content ?? []).flatMap((child) => blockToText(child)).map((line) => `> ${line}`)
     case 'heading': {
       const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 1))
-      return [`${'#'.repeat(level)} ${inlineText(node)}`]
+      return [`${blockIndent(node)}${'#'.repeat(level)} ${inlineText(node)}`]
     }
     case 'horizontalRule':
       return ['---']
@@ -327,7 +348,7 @@ export function WordEditor({ onTextChange, resetKey = 0, placeholder, initialTex
       attributes: {
         id: 'source',
         dir: 'auto',
-        class: 'word-editor-content min-h-56 p-4 text-sm leading-relaxed outline-none',
+        class: 'word-editor-content min-h-56 whitespace-pre-wrap p-4 text-sm leading-relaxed outline-none',
       },
     },
     onUpdate: ({ editor: e }) => onTextChange(docToText(e.getJSON())),
