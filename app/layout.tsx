@@ -16,10 +16,11 @@ const plex = IBM_Plex_Sans_Arabic({
 })
 
 export const metadata: Metadata = {
-  title: 'Kart w Ketab | Medical Flashcards',
+  title: 'كارت وكتاب | فلاش كاردز طبية وتسميع ذكي',
   description:
-    'Memorize medical textbooks word for word with fill-in-the-blank flashcards and test yourself.',
-  generator: 'v0.app',
+    'ذاكر المواد الطبية بذكاء مع الفلاش كاردز، والتسميع بالكتابة، والمراجعة اليومية، وتقارير تساعدك تثبّت المعلومات.',
+  applicationName: 'Kart w Ketab',
+  generator: 'Next.js',
   icons: {
     icon: [{ url: '/logo.png', type: 'image/png' }],
     apple: '/logo.png',
@@ -35,7 +36,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const session = await getSession()
 
   return (
-    <html lang="en" dir="ltr" className={plex.variable}>
+    <html lang="ar" dir="rtl" className={plex.variable}>
       <body className="font-sans antialiased">
         <AmbientBackground />
         {children}
