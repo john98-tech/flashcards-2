@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
  * (localStorage) and requests go straight from the browser to Google. Nothing is
  * sent to or stored on our servers.
  */
-const STORAGE_KEY = 'kwk:ai-provider'
+const STORAGE_KEY = 'kwk:gemini'
 const EVENT = 'kwk:gemini-change'
 const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta'
 const GROQ_API = 'https://api.groq.com/openai/v1'
@@ -97,8 +97,13 @@ async function request(url: string, init?: RequestInit) {
 }
 
 /** Validates the key and returns the Gemini models it can use for text generation. */
-export async function listModels(apiKey: string): Promise<string[]> {
-  const json = await request(`${API}/models?pageSize=200&key=${encodeURIComponent(apiKey)}`)
+export async function listModels(apiKey: string, provider: 'gemini' | 'groq' = 'gemini'): Promise<string[]> {
+  if (provider === 'groq') {
+    const json = await request(`${GROQ_API}/models`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    const names: string[] = (json?.data ?? []).map((m: { id: string }) => m.id).filter((n: string) => !!n)
+    return names.length ? names : ['llama-3.3-70b-versatile']
+  }
+  const json = await request(`${GEMINI_API}/models?pageSize=200&key=${encodeURIComponent(apiKey)}`)
   const names: string[] = (json?.models ?? [])
     .filter(
       (m: { name: string; supportedGenerationMethods?: string[] }) =>
