@@ -9,7 +9,8 @@ import { useCallback, useEffect, useState } from 'react'
  */
 const STORAGE_KEY = 'kwk:ai-provider'
 const EVENT = 'kwk:gemini-change'
-const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta'\nconst GROQ_API = 'https://api.groq.com/openai/v1'
+const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta'
+const GROQ_API = 'https://api.groq.com/openai/v1'
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash'
 export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
@@ -121,6 +122,17 @@ export type GenerateOptions = {
 }
 
 export async function generate(config: GeminiConfig, prompt: string, opts: GenerateOptions = {}): Promise<string> {
+  if (config.provider === 'groq') {
+    const messages: Array<Record<string, unknown>> = []
+    if (opts.system) messages.push({ role: 'system', content: opts.system })
+    const content: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
+    for (const img of opts.images ?? []) content.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } })
+    messages.push({ role: 'user', content: opts.images?.length ? content : prompt })
+    const result = await request(`${GROQ_API}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2, ...(opts.json || opts.responseSchema ? { response_format: { type: 'json_object' } } : {}) }), signal: opts.signal })
+    const output = result?.choices?.[0]?.message?.content
+    if (typeof output !== 'string' || !output.trim()) throw new GeminiError('Groq رجّع رد فاضي.')
+    return output
+  }
   const parts: unknown[] = [{ text: prompt }]
   for (const img of opts.images ?? []) parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } })
 
