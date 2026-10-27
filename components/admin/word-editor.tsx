@@ -226,6 +226,25 @@ type Props = {
   initialText?: string
 }
 
+// Preserve common inline formatting when content is pasted from Word, Google Docs, or web pages.
+const RichTextStyle = TextStyle.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      fontSize: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.fontSize || null,
+        renderHTML: (attributes) => attributes.fontSize ? { style: `font-size: ${attributes.fontSize}` } : {},
+      },
+      fontFamily: {
+        default: null,
+        parseHTML: (element) => (element as HTMLElement).style.fontFamily || null,
+        renderHTML: (attributes) => attributes.fontFamily ? { style: `font-family: ${attributes.fontFamily}` } : {},
+      },
+    }
+  },
+})
+
 const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 function textToHtml(text: string): string {
@@ -246,7 +265,7 @@ export function WordEditor({ onTextChange, resetKey = 0, placeholder, initialTex
       TableKit.configure({ table: { resizable: true } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight,
-      TextStyle,
+      RichTextStyle,
       Color,
       Placeholder.configure({ placeholder: placeholder ?? '' }),
     ],
