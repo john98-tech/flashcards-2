@@ -61,18 +61,21 @@ export function AdminTabs({
   )
 }
 
-// The flashcards admin: Decks / Access codes.
+// The flashcards admin: Decks / Access codes / AI organization.
 function FlashcardsSection({ decks, groups }: { decks: DeckSummary[]; groups: DeckGroup[] }) {
   const [tab, setTab] = useState<Tab>('decks')
 
   return (
     <div className="flex flex-col gap-6">
-      <div role="tablist" aria-label="Admin sections" className="flex w-fit gap-1 rounded-lg border bg-card p-1">
+      <div role="tablist" aria-label="Flashcards admin sections" className="flex w-fit max-w-full flex-wrap gap-1 rounded-lg border bg-card p-1">
         <TabButton active={tab === 'decks'} onClick={() => setTab('decks')}>
           <Layers className="size-4" aria-hidden /> Decks
         </TabButton>
         <TabButton active={tab === 'codes'} onClick={() => setTab('codes')} data-tour="admin-codes-tab" data-tour-action="open-admin-codes">
           <KeyRound className="size-4" aria-hidden /> Access codes
+        </TabButton>
+        <TabButton active={tab === 'ai-organizer'} onClick={() => setTab('ai-organizer')}>
+          <Sparkles className="size-4" aria-hidden /> تنظيم بالذكاء الاصطناعي
         </TabButton>
       </div>
       <div hidden={tab !== 'decks'}>
@@ -80,6 +83,9 @@ function FlashcardsSection({ decks, groups }: { decks: DeckSummary[]; groups: De
       </div>
       <div hidden={tab !== 'codes'}>
         <CodesPanel decks={decks} />
+      </div>
+      <div hidden={tab !== 'ai-organizer'}>
+        <AiDeckOrganizer decks={decks} groups={groups} />
       </div>
     </div>
   )
