@@ -117,9 +117,12 @@ export function StudySession({ deck }: { deck: Deck }) {
 
     if (key === forward || key === 'n') return e.preventDefault(), goTo(1)
     if (key === backward || key === 'p') return e.preventDefault(), goTo(-1)
-    if (allRevealed && (key === 'arrowup' || key === 'enter')) return e.preventDefault(), rate(true)
-    if (allRevealed && (key === 'arrowdown' || key === 'backspace')) return e.preventDefault(), rate(false)
-    if (e.code === 'Space' || key === 'arrowdown') {
+    if (allRevealed && (key === 'arrowup' || key === 'enter' || key === '2')) return e.preventDefault(), rate(true)
+    if (allRevealed && (key === 'arrowdown' || key === 'backspace' || key === '1')) return e.preventDefault(), rate(false)
+    // ArrowDown must never reveal hidden blanks. Before rating is available it does nothing;
+    // once all words are revealed, it selects "لسه" via the rating handler above.
+    if (key === 'arrowdown') return e.preventDefault()
+    if (e.code === 'Space') {
       e.preventDefault()
       if (mode === 'type') return revealAll()
       return allRevealed ? undefined : revealNext()
