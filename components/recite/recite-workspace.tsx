@@ -57,8 +57,8 @@ function ProgressRing({ words, target = 100 }: { words: number; target?: number 
   )
 }
 
-export function ReciteWorkspace({ lesson, reference, outline, referenceImage }: {
-  lesson: Lesson; reference: string; outline: string; referenceImage: string | null
+export function ReciteWorkspace({ lesson, reference, outline = '', referenceImage = null }: {
+  lesson: Lesson; reference: string; outline?: string; referenceImage?: string | null
 }) {
   const [keyOpen, setKeyOpen] = useState(false)
   const [save, setSave] = useState<SaveState>('idle')
