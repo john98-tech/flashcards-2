@@ -7,13 +7,13 @@ import { ApiKeyDialog } from '@/components/gemini/api-key-dialog'
 import { GeminiError, generate, useGeminiConfig } from '@/lib/gemini'
 import type { Deck, Card } from '@/lib/cloze'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
-import { createDeckGroup, finishDeckSave, loadDeck, saveCard, saveDeckMeta } from '@/app/admin/actions'
+import { createDeckGroup, deleteCards, deleteDeck, deleteDeckGroup, finishDeckSave, listRecycleBin, loadDeck, moveDeckToGroup, restoreRecycleBinItem, saveCard, saveDeckMeta } from '@/app/admin/actions'
 
 type PlanDeck = { title: string; subject?: string; description?: string; groupName: string; cardIndexes: number[] }
 type Plan = { groups: string[]; decks: PlanDeck[]; explanation?: string }
 type Message = { role: 'user' | 'assistant'; text: string }
 
-const SYSTEM = `أنت مساعد لتنظيم منهج دراسي داخل تطبيق فلاش كاردس. مهمتك تنظيم البطاقات الموجودة فقط حسب موضوعها وتسلسل المنهج، واقتراح أسماء واضحة للمجموعات والـdecks والدروس. لا تعِد كتابة محتوى البطاقات ولا تخترع بطاقات. عندما يُطلب منك إنشاء خطة تنظيم، أرجع JSON فقط بالشكل: { "groups": ["اسم المجموعة"], "decks": [{ "title":"اسم الدرس", "subject":"المادة", "description":"وصف مختصر", "groupName":"اسم المجموعة", "cardIndexes":[0,1] }], "explanation":"ملخص" }. استخدم أرقام البطاقات من القائمة كما هي، ووزع كل بطاقة مرة واحدة فقط. لا تحذف ولا تستبدل أي بطاقة موجودة. في المحادثة العادية أجب بالعربية بوضوح، وإذا طلب المستخدم تعديل الخطة فأعد JSON بنفس الشكل.`
+const SYSTEM = `أنت وكيل إدارة فعلي داخل لوحة أدمن فلاش كاردس. تتلقى بيانات المجموعات والدروس والكروت وسلة المحذوفات. أرجع JSON صالحًا فقط دائمًا. لتنظيم بطاقات المجموعة استخدم الشكل { "groups": [], "decks": [{ "title":"", "subject":"", "description":"", "groupName":"", "cardIndexes":[] }], "explanation":"" } ووزع كل بطاقة مرة واحدة دون تغيير نصها. لأي طلب إدارة آخر استخدم الشكل { "actions": [{"type":"..."}], "explanation":"..." }. أنواع الإجراءات المسموحة: create_group {type,name}; create_deck {type,title,subject,description,groupName,isFree}; rename_deck {type,deckId,title,subject,description,isFree}; move_deck {type,deckId,groupName}; delete_deck {type,deckId}; delete_group {type,groupName}; delete_cards {type,deckId,cardIds}; edit_card {type,deckId,cardId,cloze}; restore_deleted {type,recycleBinId}. استخدم IDs الموجودة حرفيًا من السياق. في إنشاء مجموعة أو درس لا تخترع IDs؛ التطبيق ينشئها. عند تعديل أو حذف كروت استخدم IDs الموجودة فقط. احذف الدروس أو المجموعات أو الكروت فقط إذا طلب المستخدم ذلك صراحة. إذا لم تكن البيانات كافية لتنفيذ الطلب، أرجع actions فارغة واشرح ما ينقص. أجب بالعربية. لا تدّع تنفيذ شيء؛ التطبيق هو الذي ينفذ الإجراءات بعد موافقة المستخدم.`
 
 function parsePlan(text: string): Plan {
   const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
@@ -71,20 +71,121 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
     if (!prompt) return
     if (!config) { setShowKey(true); return }
     const history = [...messages, { role: 'user' as const, text: prompt }]
-    setMessages(history); setChatInput(''); setBusy(true); setError('')
+    setMessages(history); setChatInput(''); setBusy(true); setError(''); setNotice('')
     try {
-      const context = plan ? `الخطة الحالية: ${JSON.stringify(plan)}` : 'لا توجد خطة بعد.'
-      const response = await generate(config, `${context}\nطلب المستخدم: ${prompt}\nإذا كان الطلب تعديلًا للخطة، أرجع JSON كاملًا مطابقًا للمخطط، مع الحفاظ على كل البطاقات وتوزيع كل index مرة واحدة. وإذا كان سؤالًا فقط، أجب نصيًا.`, { system: SYSTEM, temperature: 0.2 })
-      try {
-        const next = parsePlan(response)
+      const recycleBin = await listRecycleBin()
+      const catalog = {
+        groups: groups.map(g => ({ id: g.id, name: g.name })),
+        decks: decks.map(d => ({ id: d.id, title: d.title, subject: d.subject, description: d.description, groupId: d.groupId, groupName: groups.find(g => g.id === d.groupId)?.name ?? '', isFree: d.isFree, cardCount: d.cardCount })),
+        recycleBin: recycleBin.map(item => ({ id: item.id, entityType: item.entityType, entityId: item.entityId, deletedAt: item.deletedAt })),
+        selectedGroup: { id: sourceGroupId, name: groupName },
+        currentPlan: plan,
+        loadedCards: sourceCards.map((card, index) => ({ index, id: card.id, text: card.cloze, deckId: (card as Card & { __sourceDeck?: string }).__sourceDeck ?? '' }))
+      }
+      const request = 'بيانات الإدارة الحالية بصيغة JSON: ' + JSON.stringify(catalog) + '\nسجل المحادثة السابقة: ' + JSON.stringify(history.slice(-12)) + '\nطلب المستخدم الحالي: ' + prompt + '\nأرجع JSON فقط حسب تعليمات النظام. إذا كان طلب إدارة فأنشئ actions دقيقة قابلة للتنفيذ.'
+      const response = await generate(config, request, { system: SYSTEM, json: true, temperature: 0.1 })
+      const cleaned = response.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+      const parsed = JSON.parse(cleaned) as { actions?: Array<Record<string, unknown>>; explanation?: string; groups?: string[]; decks?: PlanDeck[] }
+      if (Array.isArray(parsed.actions)) {
+        const actions = parsed.actions
+        if (!actions.length) {
+          setMessages([...history, { role: 'assistant', text: parsed.explanation || 'مفيش تغييرات مطلوبة.' }])
+          return
+        }
+        const labels: Record<string, string> = { create_group: 'إنشاء مجموعة', create_deck: 'إنشاء درس', rename_deck: 'تعديل بيانات درس', move_deck: 'نقل درس', delete_deck: 'حذف درس', delete_group: 'حذف مجموعة', delete_cards: 'حذف كروت', edit_card: 'تعديل كارت', restore_deleted: 'استعادة عنصر محذوف' }
+        const summary = actions.map((a, i) => (i + 1) + '. ' + (labels[String(a.type)] || String(a.type))).join('\n')
+        if (!confirm('Gemini اقترح الإجراءات التالية:\n' + summary + '\n\n' + (parsed.explanation || '') + '\n\nهل تريد تنفيذها؟ الحذف يذهب إلى سلة المحذوفات حيث تدعم العملية ذلك.')) {
+          setMessages([...history, { role: 'assistant', text: 'تمام، لم أنفّذ أي تغيير لأنك ألغيت التأكيد.' }])
+          return
+        }
+        setApplying(true)
+        const knownDecks = new Map(decks.map(d => [d.id, d]))
+        const knownGroups = new Map(groups.map(g => [g.name.toLowerCase(), g]))
+        let completed = 0
+        try {
+          for (const action of actions) {
+            const type = String(action.type || '')
+            if (type === 'create_group') {
+              const name = String(action.name || '').trim()
+              if (!name) throw new Error('اسم المجموعة الجديدة ناقص.')
+              if (!knownGroups.has(name.toLowerCase())) { const created = await createDeckGroup(name); knownGroups.set(created.name.toLowerCase(), created) }
+            } else if (type === 'create_deck') {
+              const title = String(action.title || '').trim()
+              if (!title) throw new Error('اسم الدرس الجديد ناقص.')
+              const groupNameForDeck = String(action.groupName || groupName || '').trim()
+              let group = knownGroups.get(groupNameForDeck.toLowerCase())
+              if (!group && groupNameForDeck) { group = await createDeckGroup(groupNameForDeck); knownGroups.set(group.name.toLowerCase(), group) }
+              if (!group) throw new Error('حدد مجموعة للدرس الجديد.')
+              const base = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'lesson'
+              let id = base; let suffix = 2
+              while (knownDecks.has(id)) { id = base + '-ai-' + suffix; suffix++ }
+              const meta = { id, groupId: group.id, title, subject: String(action.subject || groupNameForDeck).slice(0, 100), description: String(action.description || '').slice(0, 500), isFree: Boolean(action.isFree) }
+              await saveDeckMeta(meta); knownDecks.set(id, { ...meta, cardCount: 0 } as DeckSummary)
+            } else if (type === 'rename_deck') {
+              const id = String(action.deckId || ''); const deck = knownDecks.get(id)
+              if (!deck) throw new Error('الدرس المطلوب تعديله غير موجود: ' + id)
+              await saveDeckMeta({ id, groupId: deck.groupId, title: String(action.title || deck.title).slice(0, 200), subject: String(action.subject ?? deck.subject ?? '').slice(0, 100), description: String(action.description ?? deck.description ?? '').slice(0, 500), isFree: action.isFree === undefined ? Boolean(deck.isFree) : Boolean(action.isFree) })
+            } else if (type === 'move_deck') {
+              const id = String(action.deckId || ''); const deck = knownDecks.get(id)
+              if (!deck) throw new Error('الدرس المطلوب نقله غير موجود: ' + id)
+              const targetName = String(action.groupName || '').trim(); const target = knownGroups.get(targetName.toLowerCase())
+              if (!target) throw new Error('المجموعة المستهدفة غير موجودة: ' + targetName)
+              await moveDeckToGroup(id, target.id); knownDecks.set(id, { ...deck, groupId: target.id })
+            } else if (type === 'delete_deck') {
+              const id = String(action.deckId || '')
+              if (!knownDecks.has(id)) throw new Error('الدرس المطلوب حذفه غير موجود: ' + id)
+              await deleteDeck(id); knownDecks.delete(id)
+            } else if (type === 'delete_group') {
+              const name = String(action.groupName || '').trim(); const group = knownGroups.get(name.toLowerCase())
+              if (!group) throw new Error('المجموعة المطلوب حذفها غير موجودة: ' + name)
+              await deleteDeckGroup(group.id); knownGroups.delete(name.toLowerCase())
+            } else if (type === 'delete_cards') {
+              const deckId = String(action.deckId || '')
+              const ids = Array.isArray(action.cardIds) ? action.cardIds.map(String) : []
+              if (!knownDecks.has(deckId) || !ids.length) throw new Error('حدد درسًا ومعرّفات الكروت المراد حذفها.')
+              const loaded = await loadDeck(deckId)
+              const validIds = ids.filter(id => loaded?.cards.some(card => card.id === id))
+              if (validIds.length !== ids.length) throw new Error('بعض معرّفات الكروت غير موجودة في الدرس ' + deckId)
+              await deleteCards(deckId, validIds)
+            } else if (type === 'edit_card') {
+              const deckId = String(action.deckId || ''); const cardId = String(action.cardId || '')
+              const cloze = String(action.cloze ?? '')
+              const loaded = await loadDeck(deckId)
+              const card = loaded?.cards.find(c => c.id === cardId)
+              if (!card) throw new Error('الكارت المطلوب تعديله غير موجود: ' + cardId)
+              if (!cloze.trim()) throw new Error('نص الكارت لا يمكن أن يكون فارغًا.')
+              const position = loaded!.cards.findIndex(c => c.id === cardId)
+              await saveCard(deckId, { ...card, cloze }, position)
+            } else if (type === 'restore_deleted') {
+              const recycleBinId = String(action.recycleBinId || '')
+              if (!recycleBin.some(item => item.id === recycleBinId)) throw new Error('عنصر سلة المحذوفات غير موجود: ' + recycleBinId)
+              await restoreRecycleBinItem(recycleBinId)
+            } else { throw new Error('إجراء غير مدعوم: ' + type) }
+            completed++
+          }
+          await finishDeckSave()
+          setNotice('تم تنفيذ ' + completed + ' إجراء من Gemini بنجاح.')
+          setMessages([...history, { role: 'assistant', text: (parsed.explanation || 'تم تنفيذ طلبك.') + '\n\nتم تنفيذ ' + completed + ' إجراء فعليًا. حدّثت البيانات على الموقع.' }])
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : 'خطأ غير معروف'
+          setError('تم تنفيذ ' + completed + ' من ' + actions.length + ' إجراء قبل حدوث مشكلة: ' + detail + '. راجع البيانات قبل إعادة الطلب.')
+        } finally { setApplying(false) }
+        return
+      }
+      if (Array.isArray(parsed.groups) && Array.isArray(parsed.decks)) {
+        const next = parsed as Plan
         const used = next.decks.flatMap(d => d.cardIndexes)
-        if (sourceCards.length && used.length === sourceCards.length && new Set(used).size === used.length && used.every(i => Number.isInteger(i) && i >= 0 && i < sourceCards.length)) {
-          setPlan(next)
-          setMessages([...history, { role: 'assistant', text: next.explanation || 'عدّلت الخطة. راجعها قبل التطبيق.' }])
-        } else setMessages([...history, { role: 'assistant', text: response }])
-      } catch { setMessages([...history, { role: 'assistant', text: response }]) }
-    } catch (e) { setError(e instanceof GeminiError ? e.message : e instanceof Error ? e.message : 'فشل الاتصال بـ Gemini.') }
-    finally { setBusy(false) }
+        if (!sourceCards.length || used.length !== sourceCards.length || new Set(used).size !== used.length || !used.every(i => Number.isInteger(i) && i >= 0 && i < sourceCards.length)) {
+          setMessages([...history, { role: 'assistant', text: 'الخطة لا توزّع كل الكروت مرة واحدة بالضبط، لذلك لم أغيّر الخطة. جرّب طلبًا أوضح.' }])
+          return
+        }
+        setPlan(next)
+        setMessages([...history, { role: 'assistant', text: next.explanation || 'عدّلت الخطة. راجعها ثم اضغط تطبيق الخطة.' }])
+      } else {
+        setMessages([...history, { role: 'assistant', text: parsed.explanation || 'لم أستطع تحديد إجراء قابل للتنفيذ من الرد.' }])
+      }
+    } catch (e) { setError(e instanceof GeminiError ? e.message : e instanceof Error ? e.message : 'فشل الاتصال بـ Gemini أو قراءة رد JSON.') }
+    finally { setBusy(false); setApplying(false) }
   }
 
   const applyPlan = async () => {
@@ -136,9 +237,9 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
     </section>}
     <section className="rounded-xl border bg-card p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2"><MessageCircle className="size-5" /><h3 className="font-semibold">شات مع Gemini</h3></div>
-      <p className="text-sm text-muted-foreground">اطلب منه مثلًا: «قسّم درس الظهارة لوحده»، «سمّي الدروس بأسماء أقصر»، أو «رتّب الدروس حسب تسلسل الكتاب». لو طلبت تعديل الخطة، راجعها ثم طبّقها.</p>
+      <p className="text-sm text-muted-foreground">الشات يقدر ينفّذ أوامر فعلية بعد تأكيدك: إنشاء/تعديل/نقل/حذف المجموعات والدروس، تعديل أو حذف الكروت، واستعادة المحذوفات. اكتب طلبك بوضوح، وسيعرض الإجراءات قبل تنفيذها.</p>
       <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">{messages.map((m,i)=><div key={i} className={`max-w-full whitespace-pre-wrap rounded-lg p-3 text-sm ${m.role === 'user' ? 'self-start bg-muted' : 'self-stretch border'}`}>{m.role === 'assistant' && <Bot className="mb-1 inline size-4" />} {m.text}</div>)}</div>
-      <div className="flex gap-2"><textarea value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="اكتب طلبك لتعديل الخطة أو اسأل Gemini..." rows={2} className="min-w-0 flex-1 resize-y rounded-lg border bg-background px-3 py-2 text-sm" /><Button onClick={sendChat} disabled={busy || !chatInput.trim()}>{busy ? <Loader2 className="size-4 animate-spin" /> : 'إرسال'}</Button></div>
+      <div className="flex gap-2"><textarea value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="مثال: أنشئ مجموعة جديدة باسم الجهاز الهضمي، وانقل درس كذا إليها..." rows={2} className="min-w-0 flex-1 resize-y rounded-lg border bg-background px-3 py-2 text-sm" /><Button onClick={sendChat} disabled={busy || !chatInput.trim()}>{busy ? <Loader2 className="size-4 animate-spin" /> : 'إرسال'}</Button></div>
     </section>
     {showKey && <ApiKeyDialog open={showKey} onClose={() => setShowKey(false)} />}
   </div>
