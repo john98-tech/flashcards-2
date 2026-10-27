@@ -16,7 +16,9 @@ type Props = {
 
 const newId = () => Math.random().toString(36).slice(2, 10)
 
-const PROMPT_STORAGE_KEY = 'kwk:cloze-prompt'
+const GEMINI_PROMPT_STORAGE_KEY = 'kwk:cloze-prompt:gemini'
+const GROQ_PROMPT_STORAGE_KEY = 'kwk:cloze-prompt:groq'
+const getPromptStorageKey = (provider?: 'gemini' | 'groq') => provider === 'groq' ? GROQ_PROMPT_STORAGE_KEY : GEMINI_PROMPT_STORAGE_KEY
 
 export const DEFAULT_CLOZE_PROMPT = `You are an expert medical educator creating concise cloze flashcards from textbook content.
 
@@ -66,28 +68,33 @@ export function SourcePanel({ terms, onGenerate }: Props) {
 
   const { config, ready } = useGeminiConfig()
   const [keyOpen, setKeyOpen] = useState(false)
-  const [prompt, setPrompt] = useState(DEFAULT_CLOZE_PROMPT)
+  const [geminiPrompt, setGeminiPrompt] = useState(DEFAULT_CLOZE_PROMPT)
+  const [groqPrompt, setGroqPrompt] = useState(DEFAULT_CLOZE_PROMPT)
+  const activePrompt = config?.provider === 'groq' ? groqPrompt : geminiPrompt
+  const setActivePrompt = config?.provider === 'groq' ? setGroqPrompt : setGeminiPrompt
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(PROMPT_STORAGE_KEY)
-      if (saved) setPrompt(saved)
+      const savedGemini = localStorage.getItem(GEMINI_PROMPT_STORAGE_KEY)
+      const savedGroq = localStorage.getItem(GROQ_PROMPT_STORAGE_KEY)
+      if (savedGemini) setGeminiPrompt(savedGemini)
+      if (savedGroq) setGroqPrompt(savedGroq)
     } catch {}
   }, [])
 
   const changePrompt = (value: string) => {
-    setPrompt(value)
+    setActivePrompt(value)
     try {
-      localStorage.setItem(PROMPT_STORAGE_KEY, value)
+      localStorage.setItem(getPromptStorageKey(config?.provider), value)
     } catch {}
   }
 
   const resetPrompt = () => {
-    setPrompt(DEFAULT_CLOZE_PROMPT)
+    setActivePrompt(DEFAULT_CLOZE_PROMPT)
     try {
-      localStorage.removeItem(PROMPT_STORAGE_KEY)
+      localStorage.removeItem(getPromptStorageKey(config?.provider))
     } catch {}
   }
 
@@ -137,7 +144,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
       for (let i = 0; i < chunks.length; i++) {
         setError(chunks.length > 1 ? `Gemini بيحوّل الجزء ${i + 1} من ${chunks.length}…` : '')
         const raw = await geminiGenerate(config, chunks[i], {
-          system: prompt,
+          system: activePrompt,
           responseSchema: RESPONSE_SCHEMA,
           temperature: 0.2,
         })
@@ -188,7 +195,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
           className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted"
         >
           <KeyRound className="size-3.5" aria-hidden />
-          {ready && config ? `Gemini متصل (${config.model})` : 'اربط مفتاح Gemini'}
+          {ready && config ? `${config.provider === 'groq' ? 'Groq' : 'Gemini'} متصل (${config.model})` : 'اربط مفتاح الذكاء الاصطناعي'}
         </button>
       </div>
 
@@ -202,16 +209,16 @@ export function SourcePanel({ terms, onGenerate }: Props) {
       </div>
 
       <details className="rounded-lg border bg-background p-3">
-        <summary className="cursor-pointer text-sm font-medium">برومبت Gemini (تقدر تعدّل عليه)</summary>
+        <summary className="cursor-pointer text-sm font-medium">برومبت {config?.provider === 'groq' ? 'Groq' : 'Gemini'} (منفصل لكل مزوّد)</summary>
         <textarea
           dir="ltr"
-          value={prompt}
+          value={activePrompt}
           onChange={(e) => changePrompt(e.target.value)}
           rows={16}
           className="mt-3 w-full resize-y rounded-lg border bg-background p-2 font-mono text-xs leading-relaxed outline-none focus:ring-2 focus:ring-ring"
         />
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">النص بيتبعت لـ Gemini مع البرومبت ده، والتعديل بيتحفظ تلقائي.</p>
+          <p className="text-xs text-muted-foreground">البرومبت ده خاص بـ {config?.provider === 'groq' ? 'Groq' : 'Gemini'} فقط، والتعديلات بتتحفظ بشكل مستقل لكل مزوّد.</p>
           <Button type="button" variant="outline" size="sm" onClick={resetPrompt}>
             <RotateCcw aria-hidden /> رجّع الافتراضي
           </Button>
@@ -227,7 +234,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
       <div className="flex flex-wrap gap-2">
         <Button size="lg" onClick={generateWithAi} disabled={!text.trim() || busy}>
           {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
-          {busy ? 'Gemini بيحوّل النص…' : 'حوّل لفلاش كاردس بـ Gemini'}
+          {busy ? `${config?.provider === 'groq' ? 'Groq' : 'Gemini'} بيحوّل النص…` : `حوّل لفلاش كاردس بـ ${config?.provider === 'groq' ? 'Groq' : 'Gemini'}`}
         </Button>
       </div>
 
