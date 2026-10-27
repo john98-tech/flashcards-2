@@ -205,6 +205,38 @@ export function ReciteWorkspace({ lesson, reference, outline, referenceImage }: 
           background-size: 200% 100%;
           animation: gradientShift 3s ease infinite;
         }
+        @keyframes reciteDrift {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33%      { transform: translate(4%, 6%) scale(1.08); }
+          66%      { transform: translate(-3%, -4%) scale(0.95); }
+        }
+        .recite-orb {
+          position: absolute;
+          border-radius: 9999px;
+          filter: blur(60px);
+          opacity: 0.35;
+          animation: reciteDrift 14s ease-in-out infinite;
+          pointer-events: none;
+        }
+        @keyframes reciteShine {
+          0%   { transform: translateX(-120%) skewX(-20deg); }
+          100% { transform: translateX(220%) skewX(-20deg); }
+        }
+        .recite-shine {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          border-radius: inherit;
+        }
+        .recite-shine::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 35%;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+          animation: reciteShine 3.2s ease-in-out infinite;
+        }
       `}</style>
 
       <div className={cn('flex h-dvh flex-col', reciteFontVars)}
@@ -212,6 +244,13 @@ export function ReciteWorkspace({ lesson, reference, outline, referenceImage }: 
 
         <div className="pointer-events-none fixed inset-0 hidden dark:block"
           style={{ background: 'linear-gradient(160deg,#0c0a1a 0%,#0a0f1e 40%,#150a1a 100%)' }} />
+
+        {/* ── Ambient orbs ── */}
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div className="recite-orb" style={{ top: '-6%', insetInlineStart: '-4%', width: 260, height: 260, background: 'radial-gradient(circle,#818cf8,transparent 70%)' }} />
+          <div className="recite-orb" style={{ bottom: '-8%', insetInlineEnd: '-6%', width: 320, height: 320, background: 'radial-gradient(circle,#f472b6,transparent 70%)', animationDelay: '-5s' }} />
+          <div className="recite-orb" style={{ top: '40%', insetInlineStart: '45%', width: 220, height: 220, background: 'radial-gradient(circle,#34d399,transparent 70%)', animationDelay: '-9s' }} />
+        </div>
 
         {/* ── Header ── */}
         <header
@@ -284,6 +323,7 @@ export function ReciteWorkspace({ lesson, reference, outline, referenceImage }: 
           <button type="button" onClick={finish} disabled={busy}
             className={cn('relative flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-60 recite-submit-btn', submitFlash && 'recite-submit-flash')}
             style={{ boxShadow: '0 4px 20px rgba(99,102,241,0.5)' }}>
+            {!busy && <span className="recite-shine" aria-hidden />}
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
             <span className="hidden sm:inline">{busy ? 'بيصحح...' : 'خلصت، صحّح ✨'}</span>
             <span className="sm:hidden">{busy ? '...' : 'صحّح'}</span>

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
-import { Check, Copy, X } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Check, Copy, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { reportToText, type Report } from '@/lib/grade'
 
@@ -178,10 +178,39 @@ function Markdown({ source }: { source: string }) {
 
 /* ---------- نافذة عرض رد Gemini ---------- */
 
+function Confetto({ delay, x, rotate, color }: { delay: number; x: number; rotate: number; color: string }) {
+  return (
+    <span
+      className="pointer-events-none absolute top-0 block h-2.5 w-1.5 rounded-sm opacity-0"
+      style={{
+        left: `${x}%`,
+        background: color,
+        transform: `rotate(${rotate}deg)`,
+        animation: `reciteConfetti 1.1s ease-out ${delay}s forwards`,
+      }}
+    />
+  )
+}
+
 export function ReportPanel({ report, onClose }: { report: Report; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
+  const [visible, setVisible] = useState(false)
   // تقارير قديمة (قبل التعديل) شكلها مختلف ومفيهاش text.
   const text = typeof report?.text === 'string' ? report.text : ''
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
+  const confetti = text
+    ? Array.from({ length: 16 }, (_, i) => ({
+        delay: i * 0.035,
+        x: 4 + ((i * 61) % 92),
+        rotate: (i * 47) % 360,
+        color: ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][i % 5],
+      }))
+    : []
 
   const copy = async () => {
     await navigator.clipboard.writeText(reportToText({ text }))
@@ -190,18 +219,74 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4" role="dialog" aria-modal aria-label="رد Gemini" dir="rtl" onClick={onClose}>
-      <div className="flex max-h-[94dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-background shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 border-b p-4">
-          <h2 className="min-w-0 flex-1 text-lg font-bold">رد Gemini</h2>
-          <button type="button" onClick={copy} aria-label="انسخ الرد" className="flex size-9 items-center justify-center rounded-lg hover:bg-accent">
-            {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
+    <div
+      className={cn(
+        'fixed inset-0 z-50 flex items-end justify-center bg-black/55 backdrop-blur-sm transition-opacity duration-200 sm:items-center sm:p-4',
+        visible ? 'opacity-100' : 'opacity-0',
+      )}
+      role="dialog"
+      aria-modal
+      aria-label="رد Gemini"
+      dir="rtl"
+      onClick={onClose}
+    >
+      <style>{`
+        @keyframes reciteConfetti {
+          0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(90px) rotate(360deg); opacity: 0; }
+        }
+        @keyframes reciteReportIn {
+          0%   { transform: translateY(24px) scale(0.97); opacity: 0; }
+          100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes reciteShimmer {
+          0%,100% { background-position: 0% 50%; }
+          50%     { background-position: 100% 50%; }
+        }
+      `}</style>
+      <div
+        className="relative flex max-h-[94dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-background shadow-2xl sm:rounded-3xl"
+        style={{ animation: visible ? 'reciteReportIn 0.35s cubic-bezier(.2,.8,.2,1)' : undefined, boxShadow: '0 20px 60px rgba(99,102,241,0.25), 0 0 0 1px rgba(99,102,241,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-28 overflow-hidden">
+          {confetti.map((c, i) => <Confetto key={i} {...c} />)}
+        </div>
+
+        <div
+          className="relative flex items-center gap-3 p-4 text-white"
+          style={{
+            background: 'linear-gradient(120deg,#6366f1,#8b5cf6,#ec4899,#6366f1)',
+            backgroundSize: '300% 300%',
+            animation: 'reciteShimmer 6s ease infinite',
+          }}
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+            <Sparkles className="size-4.5" aria-hidden />
+          </span>
+          <h2 className="min-w-0 flex-1 text-lg font-extrabold drop-shadow-sm">رد Gemini</h2>
+          <button
+            type="button"
+            onClick={copy}
+            aria-label="انسخ الرد"
+            className="flex size-9 items-center justify-center rounded-xl bg-white/15 transition-all hover:scale-110 hover:bg-white/25 active:scale-95"
+          >
+            {copied ? <Check className="size-4" style={{ animation: 'reciteReportIn 0.25s ease' }} /> : <Copy className="size-4" />}
           </button>
-          <button type="button" onClick={onClose} aria-label="اقفل" className="flex size-9 items-center justify-center rounded-lg hover:bg-accent">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="اقفل"
+            className="flex size-9 items-center justify-center rounded-xl bg-white/15 transition-all hover:scale-110 hover:bg-white/25 active:scale-95"
+          >
             <X className="size-5" />
           </button>
         </div>
-        <div className="overflow-y-auto p-4">
+
+        <div
+          className="overflow-y-auto p-4"
+          style={{ background: 'linear-gradient(180deg,rgba(99,102,241,0.04),transparent 140px)' }}
+        >
           {text ? <Markdown source={text} /> : <p className="text-sm text-muted-foreground">التقرير ده قديم. اضغط "خلصت، صحّح" تاني.</p>}
         </div>
       </div>
