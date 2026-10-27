@@ -41,16 +41,14 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
     try {
       const raw = localStorage.getItem(draftStorageKey)
       if (raw) {
-        const saved = JSON.parse(raw) as { deck?: Deck; terms?: string; page?: number; active?: boolean; selectedGroupId?: string }
+        const saved = JSON.parse(raw) as { deck?: Deck; terms?: string; page?: number; active?: boolean; selectedGroupId?: string; savedIds?: { deckId: string; ids: string[] } | null }
         if (saved.deck && Array.isArray(saved.deck.cards)) {
           setDeck(saved.deck)
           setTerms(typeof saved.terms === 'string' ? saved.terms : '')
           setPage(Number.isInteger(saved.page) ? Math.max(0, saved.page!) : 0)
           setActive(Boolean(saved.active))
           if (typeof saved.selectedGroupId === 'string') setSelectedGroupId(saved.selectedGroupId)
-          if (saved.deck.id && saved.deck.cards.length) {
-            savedIds.current = { deckId: saved.deck.id, ids: saved.deck.cards.map((card) => card.id) }
-          }
+          savedIds.current = saved.savedIds ?? null
         }
       }
     } catch {}
@@ -64,7 +62,7 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
         localStorage.removeItem(draftStorageKey)
         return
       }
-      localStorage.setItem(draftStorageKey, JSON.stringify({ deck, terms, page, active, selectedGroupId, savedAt: Date.now() }))
+      localStorage.setItem(draftStorageKey, JSON.stringify({ deck, terms, page, active, selectedGroupId, savedIds: savedIds.current, savedAt: Date.now() }))
     } catch {}
   }, [draftReady, deck, terms, page, active, selectedGroupId])
   const savedIds = useRef<{ deckId: string; ids: string[] } | null>(null)
