@@ -72,16 +72,24 @@ export class GeminiError extends Error {
   }
 }
 
-function friendlyError(status: number, message: string) {
+function friendlyError(status: number, message: string, provider: 'gemini' | 'groq' = 'gemini') {
+  if (provider === 'groq') {
+    if (status === 400 && /model/i.test(message)) return `موديل Groq غير صالح أو غير متاح: ${message}`
+    if (status === 401) return 'مفتاح Groq غير صحيح أو منتهي الصلاحية. أنشئ مفتاحًا جديدًا من Groq Console وانسخه كاملًا.'
+    if (status === 403) return `Groq رفض الطلب بسبب الصلاحيات أو إعدادات الحساب${message ? `: ${message}` : '.'}`
+    if (status === 404) return `الموديل أو المسار غير متاح في Groq${message ? `: ${message}` : '.'}`
+    if (status === 429) return 'وصلت لحد الاستخدام أو معدل الطلبات في Groq. راجع حدود حسابك وحاول لاحقًا.'
+    if (status >= 500) return 'خدمة Groq فيها مشكلة مؤقتة. جرّب بعد شوية.'
+    return message || 'حصل خطأ غير متوقع من Groq.'
+  }
   if (status === 400 && /api key/i.test(message)) return 'المفتاح غير صحيح. تأكد إنك نسخته كامل من Google AI Studio.'
-  if (status === 401 || status === 403) return 'المفتاح مرفوض أو مش مسموح له يستخدم الموديل ده.'
+  if (status === 401 || status === 403) return 'مفتاح Gemini مرفوض أو مش مسموح له يستخدم الموديل ده.'
   if (status === 404) return 'الموديل ده مش متاح لمفتاحك. جرّب موديل تاني.'
   if (status === 429) return 'وصلت للحد المجاني من Google مؤقتًا. استنى دقيقة وجرّب تاني.'
   if (status >= 500) return 'خدمة Gemini فيها مشكلة دلوقتي. جرّب بعد شوية.'
   return message || 'حصل خطأ غير متوقع من Gemini.'
 }
-
-async function request(url: string, init?: RequestInit) {
+async function request(url: string, init?: RequestInit, provider: 'gemini' | 'groq' = 'gemini') {
   let res: Response
   try {
     res = await fetch(url, init)
@@ -91,7 +99,7 @@ async function request(url: string, init?: RequestInit) {
   const json = await res.json().catch(() => null)
   if (!res.ok) {
     const message = json?.error?.message ?? ''
-    throw new GeminiError(friendlyError(res.status, message), res.status)
+    throw new GeminiError(friendlyError(res.status, message, provider), res.status)
   }
   return json
 }
@@ -99,7 +107,7 @@ async function request(url: string, init?: RequestInit) {
 /** Validates the key and returns the Gemini models it can use for text generation. */
 export async function listModels(apiKey: string, provider: 'gemini' | 'groq' = 'gemini'): Promise<string[]> {
   if (provider === 'groq') {
-    const json = await request(`${GROQ_API}/models`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    const json = await request(`${GROQ_API}/models`, { headers: { Authorization: `Bearer ${apiKey}` } }, 'groq')
     const names: string[] = (json?.data ?? []).map((m: { id: string }) => m.id).filter((n: string) => !!n)
     return names.length ? names : ['llama-3.3-70b-versatile']
   }
@@ -133,7 +141,7 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
     const content: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
     for (const img of opts.images ?? []) content.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } })
     messages.push({ role: 'user', content: opts.images?.length ? content : prompt })
-    const result = await request(`${GROQ_API}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2, ...(opts.json || opts.responseSchema ? { response_format: { type: 'json_object' } } : {}) }), signal: opts.signal })
+    const result = await request(`${GROQ_API}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2, ...(opts.json || opts.responseSchema ? { response_format: { type: 'json_object' } } : {}) }), signal: opts.signal }, 'groq')
     const output = result?.choices?.[0]?.message?.content
     if (typeof output !== 'string' || !output.trim()) throw new GeminiError('Groq رجّع رد فاضي.')
     return output
