@@ -209,7 +209,7 @@ export function RecallCourse({ course, today, settings, testMode = false }: { co
 
             <div className="rounded-xl border bg-muted/40 p-4">
               <h3 className="font-bold">معاينة الخطة</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{selectedLessonIds.length} دروس · {dayCount(today, endDate)} يوم · {preview?.sessions.length ?? 0} جلسة متوقعة · الهدف {settings.dailyGoal} جلسة يوميًا{settings.restDay === null ? '' : ' · يتم تجنب يوم الراحة قدر الإمكان'}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{selectedLessonIds.length} دروس · {dayCount(today, endDate)} يوم · {preview?.sessions.length ?? 0} جلسة متوقعة · الهدف اليومي المقترح {preview?.recommendedDailyGoal ?? settings.dailyGoal} جلسة{settings.restDay === null ? '' : ' · يتم تجنب يوم الراحة قدر الإمكان'}</p>
               {preview && (
                 <>
                   <p className="mt-1 text-sm text-muted-foreground">تكرار كل درس {settings.intervals.length} مرات. أول مراجعة {formatDate(today)} وآخر مراجعة متوقعة {formatDate(Object.keys(preview.dailyCounts).filter((date) => preview.dailyCounts[date] > 0).at(-1) ?? today)}.</p>
