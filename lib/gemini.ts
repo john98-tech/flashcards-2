@@ -166,9 +166,40 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
       body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2 }),
       signal: opts.signal,
     }, 'groq')
-    const output = result?.choices?.[0]?.message?.content
-    if (typeof output !== 'string' || !output.trim()) throw new GeminiError('Groq رجّع رد فاضي.')
-    return output
+    const choice = result?.choices?.[0]
+    const message = choice?.message
+    const rawContent = message?.content
+    // OpenAI-compatible providers may return content as a string or as text parts.
+    const output = typeof rawContent === 'string'
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent.map((part: unknown) => {
+            if (typeof part === 'string') return part
+            if (part && typeof part === 'object' && 'text' in part) {
+              const text = (part as { text?: unknown }).text
+              return typeof text === 'string' ? text : ''
+            }
+            return ''
+          }).join('')
+        : ''
+
+    if (output.trim()) return output
+
+    // Avoid misreporting a successful HTTP request as a generic empty response.
+    // The completion metadata tells us whether the model stopped early or returned
+    // a refusal/reasoning-only payload.
+    const finishReason = typeof choice?.finish_reason === 'string' ? choice.finish_reason : 'غير متاح'
+    const messageFields = message && typeof message === 'object' ? Object.keys(message).join(', ') : 'لا توجد'
+    const hasReasoning = typeof message?.reasoning === 'string' && !!message.reasoning.trim()
+    const refusal = typeof message?.refusal === 'string' && message.refusal.trim()
+    const detail = finishReason === 'length'
+      ? 'الرد غالبًا اتقطع بسبب حد التوكنات.'
+      : refusal
+        ? `الموديل رفض الطلب: ${refusal}`
+        : hasReasoning
+          ? 'الاستجابة فيها reasoning لكن مفيهاش إجابة نهائية في content.'
+          : 'الاستجابة لا تحتوي على نص نهائي قابل للعرض.'
+    throw new GeminiError(`Groq رجّع استجابة من غير نص نهائي. السبب: ${finishReason}. ${detail} حقول الرسالة: ${messageFields}. جرّب موديل محادثة عادي أو راجع سجل الطلب في Groq.`)
   }
   const parts: unknown[] = [{ text: prompt }]
   for (const img of opts.images ?? []) parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } })
