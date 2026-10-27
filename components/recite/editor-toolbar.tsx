@@ -206,7 +206,7 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
 
   return (
     <div className="relative z-20 shrink-0 border-b bg-white">
-      <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: 'linear-gradient(90deg,#6366f1,#8b5cf6,#ec4899)' }} aria-hidden />
+      <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: 'var(--brand-grad)' }} aria-hidden />
       <div className="flex items-center gap-0.5 overflow-x-auto px-2 py-1 lg:flex-wrap">
         <Btn label="تراجع" disabled={!s.canUndo} onClick={() => run().undo().run()}><Undo2 className="size-4" aria-hidden /></Btn>
         <Btn label="إعادة" disabled={!s.canRedo} onClick={() => run().redo().run()}><Redo2 className="size-4" aria-hidden /></Btn>

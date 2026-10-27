@@ -186,7 +186,7 @@ function Confetto({ delay, x, rotate, color }: { delay: number; x: number; rotat
         left: `${x}%`,
         background: color,
         transform: `rotate(${rotate}deg)`,
-        animation: `reciteConfetti 1.1s ease-out ${delay}s forwards`,
+        animation: `ux-confetti 1.1s ease-out ${delay}s forwards`,
       }}
     />
   )
@@ -208,7 +208,7 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
         delay: i * 0.035,
         x: 4 + ((i * 61) % 92),
         rotate: (i * 47) % 360,
-        color: ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][i % 5],
+        color: ['#14b8a6', '#8b5cf6', '#fb7185', '#f59e0b', '#10b981'][i % 5],
       }))
     : []
 
@@ -221,7 +221,7 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-end justify-center bg-black/55 backdrop-blur-sm transition-opacity duration-200 sm:items-center sm:p-4',
+        'fixed inset-0 z-50 flex items-end justify-center bg-black/50 transition-opacity duration-200 sm:items-center sm:p-4',
         visible ? 'opacity-100' : 'opacity-0',
       )}
       role="dialog"
@@ -230,23 +230,9 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
       dir="rtl"
       onClick={onClose}
     >
-      <style>{`
-        @keyframes reciteConfetti {
-          0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(90px) rotate(360deg); opacity: 0; }
-        }
-        @keyframes reciteReportIn {
-          0%   { transform: translateY(24px) scale(0.97); opacity: 0; }
-          100% { transform: translateY(0) scale(1); opacity: 1; }
-        }
-        @keyframes reciteShimmer {
-          0%,100% { background-position: 0% 50%; }
-          50%     { background-position: 100% 50%; }
-        }
-      `}</style>
       <div
         className="relative flex max-h-[94dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-background shadow-2xl sm:rounded-3xl"
-        style={{ animation: visible ? 'reciteReportIn 0.35s cubic-bezier(.2,.8,.2,1)' : undefined, boxShadow: '0 20px 60px rgba(99,102,241,0.25), 0 0 0 1px rgba(99,102,241,0.08)' }}
+        style={{ animation: visible ? 'ux-pop 0.35s ease' : undefined, boxShadow: '0 24px 60px -20px color-mix(in oklch, var(--primary) 55%, transparent)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-28 overflow-hidden">
@@ -255,11 +241,7 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
 
         <div
           className="relative flex items-center gap-3 p-4 text-white"
-          style={{
-            background: 'linear-gradient(120deg,#6366f1,#8b5cf6,#ec4899,#6366f1)',
-            backgroundSize: '300% 300%',
-            animation: 'reciteShimmer 6s ease infinite',
-          }}
+          style={{ background: 'var(--brand-grad)' }}
         >
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
             <Sparkles className="size-4.5" aria-hidden />
@@ -271,7 +253,7 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
             aria-label="انسخ الرد"
             className="flex size-9 items-center justify-center rounded-xl bg-white/15 transition-all hover:scale-110 hover:bg-white/25 active:scale-95"
           >
-            {copied ? <Check className="size-4" style={{ animation: 'reciteReportIn 0.25s ease' }} /> : <Copy className="size-4" />}
+            {copied ? <Check className="size-4" style={{ animation: 'ux-pop 0.25s ease' }} /> : <Copy className="size-4" />}
           </button>
           <button
             type="button"
@@ -285,7 +267,7 @@ export function ReportPanel({ report, onClose }: { report: Report; onClose: () =
 
         <div
           className="overflow-y-auto p-4"
-          style={{ background: 'linear-gradient(180deg,rgba(99,102,241,0.04),transparent 140px)' }}
+          style={{ background: 'linear-gradient(180deg, color-mix(in oklch, var(--primary) 6%, transparent), transparent 140px)' }}
         >
           {text ? <Markdown source={text} /> : <p className="text-sm text-muted-foreground">التقرير ده قديم. اضغط "خلصت، صحّح" تاني.</p>}
         </div>

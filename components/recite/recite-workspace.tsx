@@ -36,23 +36,14 @@ function outlineToDoc(outline: string) {
   return { type: 'doc', content } as JSONContent
 }
 
-function FloatingParticle({ delay, x, size, color }: { delay: number; x: number; size: number; color: string }) {
-  return (
-    <div
-      className="pointer-events-none absolute bottom-0 rounded-full opacity-0"
-      style={{ left: `${x}%`, width: size, height: size, background: color, animation: `floatUp 4s ease-in ${delay}s infinite` }}
-    />
-  )
-}
-
 function ProgressRing({ words, target = 100 }: { words: number; target?: number }) {
   const pct = Math.min(words / target, 1)
   const r = 16, circ = 2 * Math.PI * r, dash = circ * pct
   return (
     <svg width="40" height="40" viewBox="0 0 40 40" className="shrink-0 -rotate-90">
-      <circle cx="20" cy="20" r={r} fill="none" stroke="currentColor" strokeWidth="3" className="text-neutral-200 dark:text-neutral-700" />
+      <circle cx="20" cy="20" r={r} fill="none" stroke="currentColor" strokeWidth="3" className="text-border" />
       <circle cx="20" cy="20" r={r} fill="none" strokeWidth="3" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-        className="transition-all duration-500" style={{ stroke: pct >= 1 ? '#10b981' : pct > 0.5 ? '#6366f1' : '#f59e0b' }} />
+        className="transition-all duration-500" style={{ stroke: pct >= 1 ? '#059669' : pct > 0.5 ? 'var(--primary)' : '#d97706' }} />
     </svg>
   )
 }
@@ -137,285 +128,134 @@ export function ReciteWorkspace({ lesson, reference, outline = '', referenceImag
     } finally { setBusy(false) }
   }
 
-  const particles = useMemo(() => Array.from({ length: 8 }, (_, i) => ({
-    delay: i * 0.6, x: 10 + i * 10, size: 4 + (i % 3) * 3,
-    color: ['#818cf8','#34d399','#f472b6','#fb923c','#38bdf8','#a78bfa','#4ade80','#facc15'][i],
-  })), [])
-
   return (
-    <>
-      <style>{`
-        @keyframes floatUp {
-          0%   { transform: translateY(0) scale(1);   opacity: 0; }
-          10%  { opacity: 0.7; }
-          90%  { opacity: 0.3; }
-          100% { transform: translateY(-120px) scale(0.4); opacity: 0; }
-        }
-        @keyframes gradientShift {
-          0%,100% { background-position: 0% 50%; }
-          50%     { background-position: 100% 50%; }
-        }
-        @keyframes slideDown {
-          from { opacity:0; transform: translateY(-8px); }
-          to   { opacity:1; transform: translateY(0); }
-        }
-        @keyframes bounceIn {
-          0%   { transform: scale(0.92); opacity: 0; }
-          60%  { transform: scale(1.02); opacity: 1; }
-          100% { transform: scale(1); }
-        }
-        @keyframes flashSubmit {
-          0%,100% { opacity:1; }
-          50%     { opacity:0.6; }
-        }
-        .recite-submit-flash { animation: flashSubmit 0.3s ease; }
-        .recite-gradient-text {
-          background: linear-gradient(135deg, #6366f1, #8b5cf6, #ec4899);
-          background-size: 200% 200%;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          animation: gradientShift 4s ease infinite;
-        }
-        .recite-card-paper {
-          background: white;
-          box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06), 0 20px 48px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
-        }
-        .dark .recite-card-paper {
-          background: #0f0f12;
-          box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.4), 0 20px 48px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
-        }
-        .recite-submit-btn {
-          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
-          background-size: 200% 200%;
-          animation: gradientShift 3s ease infinite;
-          transition: filter 0.2s, transform 0.15s;
-        }
-        .recite-submit-btn:hover:not(:disabled) { filter: brightness(1.15); }
-        .recite-submit-btn:active:not(:disabled) { transform: scale(0.96); }
-        .word-badge {
-          background: linear-gradient(135deg, #6366f1, #8b5cf6);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          font-weight: 800;
-        }
-        .top-accent-bar {
-          background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899, #6366f1);
-          background-size: 200% 100%;
-          animation: gradientShift 3s ease infinite;
-        }
-        @keyframes reciteDrift {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33%      { transform: translate(4%, 6%) scale(1.08); }
-          66%      { transform: translate(-3%, -4%) scale(0.95); }
-        }
-        .recite-orb {
-          position: absolute;
-          border-radius: 9999px;
-          filter: blur(60px);
-          opacity: 0.35;
-          animation: reciteDrift 14s ease-in-out infinite;
-          pointer-events: none;
-        }
-        @keyframes reciteShine {
-          0%   { transform: translateX(-120%) skewX(-20deg); }
-          100% { transform: translateX(220%) skewX(-20deg); }
-        }
-        .recite-shine {
-          position: absolute;
-          inset: 0;
-          overflow: hidden;
-          border-radius: inherit;
-        }
-        .recite-shine::after {
-          content: '';
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 35%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
-          animation: reciteShine 3.2s ease-in-out infinite;
-        }
-      `}</style>
+    <div className={cn('flex h-dvh flex-col', reciteFontVars)}>
+      {/* ── Header ── */}
+      <header className="ux-glass relative z-30 flex shrink-0 items-center gap-2 px-3 py-2">
+        <Link href="/recite" aria-label="رجوع"
+          className="flex size-9 items-center justify-center rounded-xl text-primary transition hover:scale-110 hover:bg-accent active:scale-95">
+          <ArrowRight className="size-5" aria-hidden />
+        </Link>
 
-      <div className={cn('flex h-dvh flex-col', reciteFontVars)}
-        style={{ background: 'linear-gradient(160deg,#f8f7ff 0%,#f0f4ff 40%,#fdf2f8 100%)' }}>
-
-        <div className="pointer-events-none fixed inset-0 hidden dark:block"
-          style={{ background: 'linear-gradient(160deg,#0c0a1a 0%,#0a0f1e 40%,#150a1a 100%)' }} />
-
-        {/* ── Ambient orbs ── */}
-        <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="recite-orb" style={{ top: '-6%', insetInlineStart: '-4%', width: 260, height: 260, background: 'radial-gradient(circle,#818cf8,transparent 70%)' }} />
-          <div className="recite-orb" style={{ bottom: '-8%', insetInlineEnd: '-6%', width: 320, height: 320, background: 'radial-gradient(circle,#f472b6,transparent 70%)', animationDelay: '-5s' }} />
-          <div className="recite-orb" style={{ top: '40%', insetInlineStart: '45%', width: 220, height: 220, background: 'radial-gradient(circle,#34d399,transparent 70%)', animationDelay: '-9s' }} />
+        <div className="min-w-0 flex-1" dir="rtl">
+          <p className="truncate text-xs font-semibold text-primary" dir="auto">{lesson.subject}</p>
+          <h1 className="ux-grad-text truncate text-sm font-extrabold sm:text-base" dir="auto">{lesson.title}</h1>
         </div>
 
-        {/* ── Header ── */}
-        <header
-          className="relative z-30 flex shrink-0 items-center gap-2 px-3 py-2 backdrop-blur-xl"
-          style={{ background: 'rgba(255,255,255,0.88)', borderBottom: '1px solid rgba(99,102,241,0.18)', boxShadow: '0 1px 24px rgba(99,102,241,0.12)' }}
-        >
-          <div className="pointer-events-none absolute inset-0 hidden dark:block"
-            style={{ background: 'rgba(10,8,25,0.92)', borderBottom: '1px solid rgba(99,102,241,0.22)' }} />
-
-          <Link href="/recite" aria-label="رجوع"
-            className="relative flex size-9 items-center justify-center rounded-xl text-indigo-500 transition-all hover:bg-indigo-50 hover:text-indigo-700 hover:scale-110 active:scale-95 dark:hover:bg-indigo-950/50">
-            <ArrowRight className="size-5" aria-hidden />
-          </Link>
-
-          <div className="relative min-w-0 flex-1" dir="rtl">
-            <p className="truncate text-xs font-semibold" style={{ color: '#6366f1' }} dir="auto">{lesson.subject}</p>
-            <h1 className="truncate text-sm font-bold sm:text-base recite-gradient-text" dir="auto">{lesson.title}</h1>
-          </div>
-
-          {/* Mode toggle */}
-          <div className="relative flex gap-0.5 rounded-xl p-1"
-            style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
-            {([
-              ['type', 'كتابة', <Type className="size-3.5" aria-hidden />],
-              ['pen',  'قلم',   <PenTool className="size-3.5" aria-hidden />],
-            ] as const).map(([m, label, icon]) => (
-              <button key={m} type="button" onClick={() => setMode(m as Mode)} aria-pressed={mode === m}
-                className={cn(
-                  'relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200',
-                  mode === m ? 'recite-submit-btn text-white shadow-lg' : 'text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40',
-                )}>
-                {icon} {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Save indicator */}
-          <span className="relative hidden items-center gap-1.5 text-xs lg:flex" aria-live="polite">
-            {save === 'saving' && <span className="flex items-center gap-1 text-amber-500"><Loader2 className="size-3.5 animate-spin" aria-hidden />حفظ...</span>}
-            {save === 'saved'  && <span className="flex items-center gap-1 text-emerald-500" style={{ animation: 'bounceIn 0.3s ease' }}><CheckCheck className="size-3.5" aria-hidden />اتحفظ ✓</span>}
-          </span>
-
-          {/* Outline toggle */}
-          {headings.length > 0 && (
-            <button type="button" onClick={() => setShowOutline((v) => !v)} title="العناوين" aria-label="العناوين"
-              className={cn('relative flex size-9 items-center justify-center rounded-xl transition-all duration-200 hover:scale-110',
-                showOutline ? 'text-indigo-600 dark:text-indigo-400' : 'text-neutral-400 hover:text-indigo-500')}
-              style={showOutline ? { background: 'rgba(99,102,241,0.15)' } : {}}>
-              <ListTree className="size-5" aria-hidden />
+        {/* Mode toggle */}
+        <div className="flex gap-0.5 rounded-xl border border-primary/20 bg-primary/5 p-1">
+          {([
+            ['type', 'كتابة', <Type key="t" className="size-3.5" aria-hidden />],
+            ['pen', 'قلم', <PenTool key="p" className="size-3.5" aria-hidden />],
+          ] as const).map(([m, label, icon]) => (
+            <button key={m} type="button" onClick={() => setMode(m as Mode)} aria-pressed={mode === m}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200',
+                mode === m ? 'bg-primary text-primary-foreground shadow-md' : 'text-primary/70 hover:bg-accent hover:text-primary',
+              )}>
+              {icon} {label}
             </button>
-          )}
+          ))}
+        </div>
 
-          {/* Last report */}
-          {lastReport && (
-            <button type="button" onClick={() => setReport(lastReport)} title="آخر تقرير" aria-label="آخر تقرير"
-              className="relative flex size-9 items-center justify-center rounded-xl text-violet-400 transition-all hover:bg-violet-50 hover:text-violet-600 hover:scale-110 dark:hover:bg-violet-950/30">
-              <Trophy className="size-5" aria-hidden />
-            </button>
-          )}
+        {/* Save indicator */}
+        <span className="hidden items-center gap-1.5 text-xs lg:flex" aria-live="polite">
+          {save === 'saving' && <span className="flex items-center gap-1 text-amber-600"><Loader2 className="size-3.5 animate-spin" aria-hidden />حفظ...</span>}
+          {save === 'saved' && <span className="flex items-center gap-1 text-success"><CheckCheck className="size-3.5" aria-hidden />اتحفظ</span>}
+        </span>
 
-          {/* Gemini key */}
-          <button type="button" onClick={() => setKeyOpen(true)} title="مفتاح Gemini" aria-label="مفتاح Gemini"
-            className={cn('relative flex size-9 items-center justify-center rounded-xl transition-all hover:scale-110',
-              ready && config ? 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30' : 'text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800')}>
-            <KeyRound className="size-5" aria-hidden />
-            {ready && config && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 6px #34d399' }} />}
+        {headings.length > 0 && (
+          <button type="button" onClick={() => setShowOutline((v) => !v)} title="العناوين" aria-label="العناوين"
+            className={cn('flex size-9 items-center justify-center rounded-xl transition hover:scale-110',
+              showOutline ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-primary')}>
+            <ListTree className="size-5" aria-hidden />
           </button>
-
-          {/* Submit */}
-          <button type="button" onClick={finish} disabled={busy}
-            className={cn('relative flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-60 recite-submit-btn', submitFlash && 'recite-submit-flash')}
-            style={{ boxShadow: '0 4px 20px rgba(99,102,241,0.5)' }}>
-            {!busy && <span className="recite-shine" aria-hidden />}
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
-            <span className="hidden sm:inline">{busy ? 'بيصحح...' : 'خلصت، صحّح ✨'}</span>
-            <span className="sm:hidden">{busy ? '...' : 'صحّح'}</span>
-          </button>
-        </header>
-
-        {/* ── Outline drawer ── */}
-        {showOutline && (
-          <div className="relative z-20 shrink-0" dir="rtl"
-            style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08))', borderBottom: '1px solid rgba(99,102,241,0.2)', animation: 'slideDown 0.2s ease' }}>
-            <div className="flex items-center justify-between gap-2 px-4 py-2">
-              <p className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                <Star className="size-3.5" aria-hidden /> عناوين الدرس
-              </p>
-              <button type="button" onClick={() => setShowOutline(false)} className="text-neutral-400 hover:text-indigo-500 transition-colors" aria-label="إغلاق">
-                <X className="size-4" aria-hidden />
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2 px-4 pb-3">
-              {headings.map((h, i) => (
-                <span key={i} className="rounded-full px-3 py-1 text-xs font-semibold transition-all hover:scale-105"
-                  style={/^[-–•*]/.test(h)
-                    ? { background: 'rgba(99,102,241,0.08)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.2)' }
-                    : { background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: 'white', boxShadow: '0 2px 8px rgba(99,102,241,0.3)' }}>
-                  {h.replace(/^[-–•*]\s*/, '')}
-                </span>
-              ))}
-            </div>
-          </div>
         )}
 
-        {/* ── Notice banner ── */}
-        {notice && (
-          <div role="status" className="relative z-20 flex shrink-0 items-center justify-between gap-3 px-4 py-2.5 text-sm" dir="rtl"
-            style={{ background: 'linear-gradient(135deg,rgba(251,191,36,0.15),rgba(249,115,22,0.12))', borderBottom: '1px solid rgba(251,191,36,0.3)', color: '#92400e', animation: 'slideDown 0.2s ease' }}>
-            <span className="flex items-center gap-2"><Zap className="size-4 text-amber-500" aria-hidden />{notice}</span>
-            <button type="button" onClick={() => setNotice('')} className="rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors" aria-label="إغلاق">
+        {lastReport && (
+          <button type="button" onClick={() => setReport(lastReport)} title="آخر تقرير" aria-label="آخر تقرير"
+            className="flex size-9 items-center justify-center rounded-xl text-[color:var(--violet)] transition hover:scale-110 hover:bg-accent">
+            <Trophy className="size-5" aria-hidden />
+          </button>
+        )}
+
+        <button type="button" onClick={() => setKeyOpen(true)} title="مفتاح Gemini" aria-label="مفتاح Gemini"
+          className={cn('relative flex size-9 items-center justify-center rounded-xl transition hover:scale-110 hover:bg-accent',
+            ready && config ? 'text-success' : 'text-muted-foreground')}>
+          <KeyRound className="size-5" aria-hidden />
+          {ready && config && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-400" />}
+        </button>
+
+        <button type="button" onClick={finish} disabled={busy}
+          className={cn('ux-btn flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold', submitFlash && 'brightness-125')}>
+          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
+          <span className="relative hidden sm:inline">{busy ? 'بيصحح...' : 'خلصت، صحّح'}</span>
+          <span className="relative sm:hidden">{busy ? '...' : 'صحّح'}</span>
+        </button>
+      </header>
+
+      {/* ── Outline drawer ── */}
+      {showOutline && (
+        <div className="relative z-20 shrink-0 border-b border-primary/20 bg-primary/5" dir="rtl" style={{ animation: 'ux-rise .2s ease' }}>
+          <div className="flex items-center justify-between gap-2 px-4 py-2">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-primary">
+              <Star className="size-3.5" aria-hidden /> عناوين الدرس
+            </p>
+            <button type="button" onClick={() => setShowOutline(false)} className="text-muted-foreground transition-colors hover:text-primary" aria-label="إغلاق">
               <X className="size-4" aria-hidden />
             </button>
           </div>
-        )}
-
-        {/* ── Type mode ── */}
-        <div className={cn('relative flex min-h-0 flex-1 flex-col', mode !== 'type' && 'hidden')}>
-          <EditorToolbar editor={editor} />
-
-          {/* Word count bar */}
-          <div className="relative flex shrink-0 items-center justify-between px-4 py-2 text-xs backdrop-blur-sm" dir="rtl"
-            style={{ background: 'rgba(255,255,255,0.82)', borderBottom: '1px solid rgba(99,102,241,0.12)' }}>
-            <div className="pointer-events-none absolute inset-0 hidden dark:block" style={{ background: 'rgba(10,8,25,0.7)' }} />
-            <span className="relative flex items-center gap-2">
-              <span className={cn('size-2.5 rounded-full transition-all duration-500', wordCount > 0 ? 'bg-emerald-400' : 'bg-neutral-300 dark:bg-neutral-600')}
-                style={wordCount > 0 ? { boxShadow: '0 0 8px #34d399' } : {}} />
-              <span className={wordCount > 0 ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-neutral-400'}>
-                {wordCount > 0 ? 'تكتب الآن ✍️' : 'في انتظار الكتابة...'}
+          <div className="flex flex-wrap gap-2 px-4 pb-3">
+            {headings.map((h, i) => (
+              <span key={i}
+                className={cn('rounded-full px-3 py-1 text-xs font-semibold',
+                  /^[-–•*]/.test(h) ? 'border border-primary/25 bg-primary/10 text-primary' : 'bg-primary text-primary-foreground shadow-sm')}>
+                {h.replace(/^[-–•*]\s*/, '')}
               </span>
-            </span>
-            <span className="relative flex items-center gap-2">
-              <ProgressRing words={wordCount} />
-              <span className="word-badge text-base">{wordCount}</span>
-              <span className="text-neutral-400">كلمة</span>
-            </span>
+            ))}
           </div>
+        </div>
+      )}
 
-          {/* Editor */}
-          <main className="relative flex-1 overflow-y-auto"
-            style={{ background: 'linear-gradient(160deg,#f8f7ff 0%,#f0f4ff 50%,#fdf2f8 100%)' }}
-            onClick={() => editor?.commands.focus()}>
+      {/* ── Notice banner ── */}
+      {notice && (
+        <div role="status" className="ux-notice relative z-20 flex shrink-0 items-center justify-between gap-3 px-4 py-2.5 text-sm" dir="rtl">
+          <span className="flex items-center gap-2"><Zap className="size-4 text-amber-600" aria-hidden />{notice}</span>
+          <button type="button" onClick={() => setNotice('')} className="rounded p-0.5 transition-colors hover:bg-black/5" aria-label="إغلاق">
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+      )}
 
-            {/* Floating particles */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              {particles.map((p, i) => <FloatingParticle key={i} {...p} />)}
-            </div>
+      {/* ── Type mode ── */}
+      <div className={cn('relative flex min-h-0 flex-1 flex-col', mode !== 'type' && 'hidden')}>
+        <EditorToolbar editor={editor} />
 
-            {/* Dot grid */}
-            <div className="pointer-events-none absolute inset-0"
-              style={{ backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.1) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-
-            <div className="relative mx-auto my-6 min-h-[calc(100%-3rem)] w-full max-w-[860px] rounded-2xl recite-card-paper"
-              style={{ animation: 'bounceIn 0.4s ease' }}
-              onClick={(e) => e.stopPropagation()}>
-              {/* Top accent */}
-              <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl top-accent-bar" />
-              <EditorContent editor={editor} />
-            </div>
-          </main>
+        <div className="flex shrink-0 items-center justify-between border-b border-primary/10 bg-card/90 px-4 py-2 text-xs" dir="rtl">
+          <span className="flex items-center gap-2">
+            <span className={cn('size-2.5 rounded-full transition-colors duration-500', wordCount > 0 ? 'bg-emerald-400' : 'bg-muted-foreground/30')} />
+            <span className={wordCount > 0 ? 'font-semibold text-success' : 'text-muted-foreground'}>
+              {wordCount > 0 ? 'تكتب الآن' : 'في انتظار الكتابة...'}
+            </span>
+          </span>
+          <span className="flex items-center gap-2">
+            <ProgressRing words={wordCount} />
+            <span className="text-base font-extrabold tabular-nums text-primary">{wordCount}</span>
+            <span className="text-muted-foreground">كلمة</span>
+          </span>
         </div>
 
-        <InkPad ref={ink} storageKey={inkKey(lesson.id)} active={mode === 'pen'} />
-        <ApiKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} />
-        {report && <ReportPanel report={report} onClose={() => setReport(null)} />}
+        <main className="relative flex-1 overflow-y-auto" onClick={() => editor?.commands.focus()}>
+          <div className="ux-card relative mx-auto my-4 min-h-[calc(100%-2rem)] w-full max-w-[860px] bg-card sm:my-6"
+            onClick={(e) => e.stopPropagation()}>
+            <EditorContent editor={editor} />
+          </div>
+        </main>
       </div>
-    </>
+
+      <InkPad ref={ink} storageKey={inkKey(lesson.id)} active={mode === 'pen'} />
+      <ApiKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} />
+      {report && <ReportPanel report={report} onClose={() => setReport(null)} />}
+    </div>
   )
 }
