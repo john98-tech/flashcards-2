@@ -52,6 +52,9 @@ export function buildRecallSchedule({
   }
 
   const counts = Array.from({ length: duration }, () => 0)
+  // Keep the configured goal for normal plans, but automatically raise the planning target
+  // when the student compresses many reviews into a short time window.
+  const effectiveDailyGoal = Math.max(dailyGoal, Math.ceil((lessonIds.length * intervals.length) / duration))
   const lastAssigned = new Map<string, number>()
   const sessions: PlannedRecallSession[] = []
   const work = [...lessonIds].sort().flatMap((lessonId, lessonIndex) =>
@@ -65,14 +68,18 @@ export function buildRecallSchedule({
 
   for (const item of work) {
     const previousDay = lastAssigned.get(item.lessonId)
-    const minimumDay = previousDay === undefined ? 0 : previousDay + (duration >= intervals.length ? 1 : 0)
+    // When the window is short, several spaced repetitions may need to share a day.
+    // Never let the lower bound move past the final available day; that caused the
+    // previous "تعذر توزيع جلسات هذا الدرس" crash for compressed schedules.
+    const proposedMinimumDay = previousDay === undefined ? 0 : previousDay + (duration >= intervals.length ? 1 : 0)
+    const minimumDay = Math.min(proposedMinimumDay, duration - 1)
     const candidates = Array.from({ length: duration - minimumDay }, (_, index) => minimumDay + index)
     if (candidates.length === 0) throw new Error('تعذر توزيع جلسات هذا الدرس ضمن المدة المحددة.')
     candidates.sort((a, b) => {
       const aRest = restDay !== null && new Date((start + a) * 86_400_000).getUTCDay() === restDay ? 1 : 0
       const bRest = restDay !== null && new Date((start + b) * 86_400_000).getUTCDay() === restDay ? 1 : 0
-      const aOver = counts[a] >= dailyGoal ? 1 : 0
-      const bOver = counts[b] >= dailyGoal ? 1 : 0
+      const aOver = counts[a] >= effectiveDailyGoal ? 1 : 0
+      const bOver = counts[b] >= effectiveDailyGoal ? 1 : 0
       return aRest - bRest || aOver - bOver || Math.abs(a - item.target) - Math.abs(b - item.target) || counts[a] - counts[b] || a - b
     })
     const assignedDay = candidates[0]
@@ -94,6 +101,6 @@ export function buildRecallSchedule({
       a.scheduledDate.localeCompare(b.scheduledDate) || a.lessonId.localeCompare(b.lessonId) || a.reviewNumber - b.reviewNumber,
     ),
     dailyCounts,
-    overloadedDays: Object.keys(dailyCounts).filter((date) => dailyCounts[date] > dailyGoal),
+    overloadedDays: Object.keys(dailyCounts).filter((date) => dailyCounts[date] > effectiveDailyGoal),
   }
 }
