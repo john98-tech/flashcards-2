@@ -163,7 +163,7 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
     const result = await request(`${GROQ_API}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2 }),
+      body: JSON.stringify({ model: config.model, messages, temperature: opts.temperature ?? 0.2, max_completion_tokens: 8192 }),
       signal: opts.signal,
     }, 'groq')
     const choice = result?.choices?.[0]
