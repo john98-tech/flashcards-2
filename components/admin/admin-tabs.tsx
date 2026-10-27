@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BookOpen, KeyRound, Layers, PenLine, Sparkles } from 'lucide-react'
+import { BookOpen, KeyRound, Layers, PenLine, Sparkles, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { RecallCourse, RecallLesson, RecallSettings } from '@/lib/active-recall/types'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
@@ -10,9 +10,10 @@ import { AiDeckOrganizer } from './ai-deck-organizer'
 import { CodesPanel } from './codes-panel'
 import { DictationAdmin, type DictationAdminData } from './dictation-admin'
 import { ActiveRecallAdmin } from './active-recall-admin'
+import { RecycleBinPanel } from './recycle-bin-panel'
 
 type Section = 'flashcards' | 'dictation' | 'active-recall'
-type Tab = 'decks' | 'codes' | 'ai-organizer'
+type Tab = 'decks' | 'codes' | 'ai-organizer' | 'recycle-bin'
 
 const noDictation: DictationAdminData = { subjects: [], lessons: [], loadError: null }
 const noActiveRecall = { courses: [], lessons: [], settings: null, loadError: null } satisfies {
@@ -77,6 +78,9 @@ function FlashcardsSection({ decks, groups }: { decks: DeckSummary[]; groups: De
         <TabButton active={tab === 'ai-organizer'} onClick={() => setTab('ai-organizer')}>
           <Sparkles className="size-4" aria-hidden /> تنظيم بالذكاء الاصطناعي
         </TabButton>
+        <TabButton active={tab === 'recycle-bin'} onClick={() => setTab('recycle-bin')}>
+          <Trash2 className="size-4" aria-hidden /> سلة المحذوفات
+        </TabButton>
       </div>
       <div hidden={tab !== 'decks'}>
         <DeckEditor existingDecks={decks} existingGroups={groups} />
@@ -86,6 +90,9 @@ function FlashcardsSection({ decks, groups }: { decks: DeckSummary[]; groups: De
       </div>
       <div hidden={tab !== 'ai-organizer'}>
         <AiDeckOrganizer decks={decks} groups={groups} />
+      </div>
+      <div hidden={tab !== 'recycle-bin'}>
+        <RecycleBinPanel />
       </div>
     </div>
   )
