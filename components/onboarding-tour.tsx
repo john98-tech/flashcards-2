@@ -101,7 +101,7 @@ const baseSteps: TourStep[] = [
   },
   {
     title: 'الاختصارات',
-    body: 'Space للكشف، الأسهم للتنقل، Enter للتسجيل.',
+    body: 'Space يكشف الكلمة التالية، وA يكشف الكل. بعد كشف الإجابة استخدم ↑ أو Enter أو 2 للحفظ، و↓ أو Backspace أو 1 لو لسه. الأسهم للتنقل، وT لتغيير الوضع، وS لخلط الترتيب، وR لإعادة إخفاء الإجابة.',
     selector: '[data-tour="settings-shortcuts"]',
     route: 'any',
   },
