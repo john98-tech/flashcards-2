@@ -3,9 +3,6 @@ const nextConfig = {
   experimental: {
     agentUpgrade: 'security',
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
   },
