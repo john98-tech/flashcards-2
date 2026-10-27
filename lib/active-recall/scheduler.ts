@@ -7,6 +7,7 @@ export type RecallSchedule = {
   sessions: PlannedRecallSession[]
   dailyCounts: Record<string, number>
   overloadedDays: string[]
+  recommendedDailyGoal: number
 }
 
 function dayOffset(date: string) {
@@ -102,5 +103,6 @@ export function buildRecallSchedule({
     ),
     dailyCounts,
     overloadedDays: Object.keys(dailyCounts).filter((date) => dailyCounts[date] > dailyGoal),
+    recommendedDailyGoal: effectiveDailyGoal,
   }
 }
