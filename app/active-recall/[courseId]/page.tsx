@@ -18,7 +18,7 @@ export default async function ActiveRecallCoursePage({
   searchParams,
 }: {
   params: Promise<{ courseId: string }>
-  searchParams: Promise<{ testDate?: string | string[] }>
+  searchParams: Promise<{ testDate?: string | string[]; testTime?: string | string[] }>
 }) {
   const { courseId } = await params
   const query = await searchParams
@@ -44,14 +44,17 @@ export default async function ActiveRecallCoursePage({
   const [course, settings] = loaded
   if (!course) notFound()
   const actualToday = cairoDate()
+  const actualTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
   const requestedDate = Array.isArray(query.testDate) ? query.testDate[0] : query.testDate
   const today = requestedDate && isValidDate(requestedDate) ? requestedDate : actualToday
-  const testMode = today !== actualToday
+  const requestedTime = Array.isArray(query.testTime) ? query.testTime[0] : query.testTime
+  const selectedTime = requestedTime && /^([01]\\d|2[0-3]):[0-5]\\d$/.test(requestedTime) ? requestedTime : actualTime
+  const testMode = today !== actualToday || selectedTime !== actualTime
   return (
     <>
       <SiteHeader />
       <div className="pt-4">
-        <RecallTestDatePicker actualToday={actualToday} selectedDate={today} />
+        <RecallTestDatePicker actualToday={actualToday} selectedDate={today} actualTime={actualTime} selectedTime={selectedTime} />
         <RecallCourse course={course} today={today} settings={settings} testMode={testMode} />
       </div>
     </>
