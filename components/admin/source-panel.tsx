@@ -18,44 +18,38 @@ const newId = () => Math.random().toString(36).slice(2, 10)
 
 const PROMPT_STORAGE_KEY = 'kwk:cloze-prompt'
 
-export const DEFAULT_CLOZE_PROMPT = `You are an expert medical educator who builds fill-in-the-blank (cloze) flashcards for students from textbook text.
-Convert the text I send you into flashcards.
+export const DEFAULT_CLOZE_PROMPT = `You are an expert medical educator creating concise cloze flashcards from textbook content.
 
-SPLITTING (keep cards SMALL)
-- One card = one idea or one sub-topic. Target 30 to 80 words, never more than about 100 words or 12 blanks.
-- If a topic is longer, split it into several cards by sub-topic, even when the source is one continuous paragraph. Each card must make sense on its own.
-- Every table or diagram goes in its own card. If a table is long, split its rows across several cards and repeat the header row in each.
+CARD SIZE
+- Make cards SHORT and easy to review: usually 25–60 words, ideally 1–6 blanks, and never more than 80 words unless a table/diagram requires it.
+- One card covers one clearly defined idea, definition, mechanism, classification, or small subtopic.
+- Split long paragraphs and long lists into multiple cards at natural boundaries. Do not put an entire chapter or large topic on one card.
+- For tables, create a separate card per small logical group of rows; repeat a short header if needed.
 
-BREADCRUMB (first line of EVERY card)
-- Start every card with one line in this exact format:
->> Subject > Chapter or Section > Topic > Sub-topic
-  for example: >> Histology > Cell membrane > Molecular structure
-- Use 2 to 4 levels, written in the language of the source text, short (1 to 4 words each).
-- Infer the path from the text and its headings. Keep the same names for the same topic across cards.
-- Never put {{ }} in the breadcrumb line.
+BREADCRUMB
+- Begin each card with exactly one short breadcrumb line: >> Subject > Topic > Subtopic
+- Use only 2–3 useful levels. Keep the same wording for repeated topics.
+- Do not add a breadcrumb for every heading or repeat the breadcrumb inside a card.
 
-FORMATTING THE CARD BODY (Markdown-like)
-- Headings from the source: "# " for the main title, "## " for a sub-title, "### " for a smaller one, "#### " for the smallest. Biggest to smallest follows the hierarchy of the source.
-- Lists: start each item with "- " (or "1. " if numbered).
-- Indentation: indent nested items or sub-points by 2 spaces per level.
-- Normal sentences are plain lines with no marker.
+PRESERVE THE SOURCE FORMAT
+- Preserve the source wording exactly: do not translate, paraphrase, summarize, or reorder it.
+- Preserve original headings, lists, numbering, table rows/columns, and hierarchy.
+- Do NOT add Markdown heading markers (#, ##, ###, ####) to ordinary lines or add decorative # symbols.
+- Keep original headings as plain text, without adding # characters.
+- For nested lists, use two spaces per indentation level and the original bullet/numbering style. Never flatten nested items.
+- Keep tables as Markdown tables with the original rows and columns. Keep the header visible.
+- Do not invent headings, bullets, indentation, or extra structure that was not in the source. Only add the breadcrumb line and cloze braces.
 
-HIDING WORDS
-- Wrap every important word or phrase in double curly braces, for example {{stroke volume}}.
-- Hide: disease names, organs and anatomical structures, hormones, enzymes, receptors, drugs and doses, normal values, numbers together with their units, causes and effects, scientific terms, classifications and abbreviations.
-- Each hidden phrase is 1 to 4 words and meaningful on its own. Roughly one blank for every 6 to 10 words.
-- Never hide filler words (articles, prepositions, conjunctions, pronouns, generic verbs) and never hide a whole sentence. Never hide words inside headings or the breadcrumb.
-- Never nest braces and never leave a brace unclosed.
-
-WORDING
-- Do not change, translate, shorten, summarize or reorder the original wording. Keep every word in its original language exactly as written.
-- The only things you may add are the breadcrumb line and the Markdown markers (#, -, indentation). Only fix line breaks that were broken by a PDF.
-
-TABLES
-- Keep a table as a Markdown table, with the same rows and columns, and hide the key terms inside the cells with {{ }}. Keep the header row visible.
+CLOZE BLANKS
+- Hide important terms or short meaningful phrases using {{double curly braces}}.
+- Prioritize scientific terms, anatomical structures, diseases, hormones, enzymes, receptors, drugs, values with units, causes/effects, classifications, and abbreviations.
+- Each blank should usually be 1–4 words. Aim for roughly one blank per 8–12 words.
+- Do not hide filler words or entire sentences. Never hide words in the breadcrumb. Never nest braces.
+- Keep all original text outside the braces unchanged.
 
 OUTPUT
-- Return JSON only, with one string per card in the "cards" array. Use \\n for line breaks inside each card string.`
+- Return valid JSON only: { "cards": ["card text", "..."] }.
+- Each array item is one complete card. Do not put separators, explanations, numbering, or Markdown code fences around the JSON.`
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -117,16 +111,44 @@ export function SourcePanel({ terms, onGenerate }: Props) {
     setBusy(true)
     setError('')
     try {
-      const raw = await geminiGenerate(config, text.trim(), {
-        system: prompt,
-        responseSchema: RESPONSE_SCHEMA,
-        temperature: 0.2,
-      })
-      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { cards?: unknown }
-      const list = (Array.isArray(parsed.cards) ? parsed.cards : [])
-        .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
-        .map((c) => c.trim())
+      const source = text.trim()
+      // Process very long documents in paragraph-aware batches to keep the editor
+      // responsive and avoid oversized Gemini requests. Preserve batch order.
+      const chunks: string[] = []
+      let batch = ''
+      for (const paragraph of source.split(/\n\s*\n/)) {
+        const next = paragraph.trim()
+        if (!next) continue
+        if (batch && batch.length + next.length + 2 > 12000) {
+          chunks.push(batch)
+          batch = ''
+        }
+        if (next.length > 12000) {
+          if (batch) chunks.push(batch)
+          batch = ''
+          for (let i = 0; i < next.length; i += 12000) chunks.push(next.slice(i, i + 12000))
+        } else {
+          batch += (batch ? '\n\n' : '') + next
+        }
+      }
+      if (batch) chunks.push(batch)
+
+      const list: string[] = []
+      for (let i = 0; i < chunks.length; i++) {
+        setError(chunks.length > 1 ? `Gemini بيحوّل الجزء ${i + 1} من ${chunks.length}…` : '')
+        const raw = await geminiGenerate(config, chunks[i], {
+          system: prompt,
+          responseSchema: RESPONSE_SCHEMA,
+          temperature: 0.2,
+        })
+        const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { cards?: unknown }
+        const partCards = (Array.isArray(parsed.cards) ? parsed.cards : [])
+          .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+          .map((c) => c.trim())
+        list.push(...partCards)
+      }
       if (list.length === 0) throw new GeminiError('Gemini مرجّعش كروت. جرّب تاني أو عدّل البرومبت.')
+      setError('')
 
       const termList = parseTerms(terms)
       const cards: Card[] = list.map((cloze) => {
