@@ -7,14 +7,14 @@ import { useCallback, useEffect, useState } from 'react'
  * (localStorage) and requests go straight from the browser to Google. Nothing is
  * sent to or stored on our servers.
  */
-const STORAGE_KEY = 'kwk:gemini'
+const STORAGE_KEY = 'kwk:ai-provider'
 const EVENT = 'kwk:gemini-change'
-const API = 'https://generativelanguage.googleapis.com/v1beta'
+const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta'\nconst GROQ_API = 'https://api.groq.com/openai/v1'
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash'
 export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
 
-export type GeminiConfig = { apiKey: string; model: string }
+export type GeminiConfig = { apiKey: string; model: string; provider?: 'gemini' | 'groq' }
 
 export function readGeminiConfig(): GeminiConfig | null {
   try {
@@ -22,7 +22,7 @@ export function readGeminiConfig(): GeminiConfig | null {
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<GeminiConfig>
     if (!parsed.apiKey) return null
-    return { apiKey: parsed.apiKey, model: parsed.model || DEFAULT_MODEL }
+    return { apiKey: parsed.apiKey, model: parsed.model || DEFAULT_MODEL, provider: parsed.provider === 'groq' ? 'groq' : 'gemini' }
   } catch {
     return null
   }
@@ -138,7 +138,7 @@ export async function generate(config: GeminiConfig, prompt: string, opts: Gener
   }
   if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] }
 
-  const json = await request(`${API}/models/${encodeURIComponent(config.model)}:generateContent`, {
+  const json = await request(`${GEMINI_API}/models/${encodeURIComponent(config.model)}:generateContent`, {
     method: 'POST',
     // Header (not query string) keeps the key out of URLs and browser history.
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey },
