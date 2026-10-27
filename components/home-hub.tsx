@@ -105,6 +105,11 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
           عايز تذاكر إزاي النهارده؟
         </h1>
         <p className="hub-sub" dir="rtl">اختار الطريقة اللي تريحك وابدأ على طول</p>
+        <div className="hub-chips" dir="rtl" aria-hidden>
+          <span className="hub-chip" style={{ ['--tone' as string]: 'var(--primary)' }}><i />كروت تفاعلية</span>
+          <span className="hub-chip" style={{ ['--tone' as string]: 'var(--coral)' }}><i />تسميع بالكتابة</span>
+          <span className="hub-chip" style={{ ['--tone' as string]: 'var(--violet)' }}><i />مراجعة ذكية</span>
+        </div>
       </div>
 
       <div className="hub-grid">
@@ -116,6 +121,7 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
           cta="ابدأ بالكروت"
           onClick={openCards}
           tourId="hub-cards"
+          n="01"
         />
         <HubCard
           tone="coral"
@@ -125,6 +131,7 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
           cta="ابدأ التسميع"
           onClick={openDictation}
           tourId="hub-recite"
+          n="02"
         />
         <HubCard
           tone="violet"
@@ -133,6 +140,7 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
           desc="اقرأ درس اليوم وجاوب على سؤال واحد عشان تثبت المعلومة بالاستدعاء النشط."
           cta="ابدأ مراجعة اليوم"
           href="/active-recall"
+          n="03"
         />
         <HubCard
           tone="teal"
@@ -141,6 +149,7 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
           desc="اختار درسًا واكتب كل اللي فاكره، وبعدها شوف تقرير التصحيح والمعلومات الناقصة."
           cta="ابدأ التسميع الذكي"
           href="/recite"
+          n="04"
         />
       </div>
     </div>
@@ -232,6 +241,7 @@ function HubCard({
   href,
   onClick,
   tourId,
+  n,
 }: {
   tone: 'teal' | 'coral' | 'violet'
   icon: React.ReactNode
@@ -241,6 +251,7 @@ function HubCard({
   href?: string
   onClick?: () => void
   tourId?: string
+  n?: string
 }) {
   const ref = useRef<HTMLElement | null>(null)
 
@@ -282,6 +293,7 @@ function HubCard({
     onPointerMove: onMove,
     onPointerLeave: onLeave,
     'data-tour': tourId,
+    'data-n': n,
   }
 
   if (href) {
