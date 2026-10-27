@@ -14,7 +14,7 @@ function parseInlineStyle(raw: string): CSSProperties {
     if (!value || /[<>]/.test(value)) continue
     if (property === 'color') result.color = value
     else if (property === 'background-color') result.backgroundColor = value
-    else if (property === 'font-size' && /^(\\d+(?:\\.\\d+)?(px|pt|em|rem|%))$/i.test(value)) result.fontSize = value
+    else if (property === 'font-size' && /^(\d+(?:\.\d+)?(px|pt|em|rem|%))$/i.test(value)) result.fontSize = value
     else if (property === 'font-family') result.fontFamily = value.replace(/["']/g, '')
   }
   return result
