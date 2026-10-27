@@ -50,7 +50,7 @@ export function AdminTabs({
         </SectionButton>
       </div>
       <div hidden={section !== 'flashcards'}>
-        <FlashcardsSection decks={decks} groups={groups} />
+        <FlashcardsSection key={JSON.stringify([decks.map(d => [d.id, d.title, d.subject, d.description, d.groupId, d.isFree, d.cardCount]), groups.map(g => [g.id, g.name])])} decks={decks} groups={groups} />
       </div>
       <div hidden={section !== 'dictation'}>
         <DictationAdmin {...dictation} />
