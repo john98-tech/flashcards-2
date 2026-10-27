@@ -51,7 +51,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
     if (!config) { setShowKey(true); return }
     setBusy(true); setError(''); setNotice('')
     try {
-      const { valid, cards } = await getCards()
+      const { cards } = await getCards()
       if (!cards.length) throw new Error('المجموعة دي مفيهاش كروت.')
       const compact = cards.map((c, i) => ({ index: i, text: c.cloze }))
       const response = await generate(config, `نظّم كل بطاقات مجموعة "${groupName}" إلى مجموعات وdecks/دروس مناسبة حسب المحتوى. لا تغيّر نص أي بطاقة. أدرج كل index مرة واحدة بالضبط. البطاقات: ${JSON.stringify(compact)}`, { system: SYSTEM, json: true, temperature: 0.1 })
@@ -110,7 +110,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
         await saveDeckMeta({ id, groupId, title, subject: (item.subject || groupName).slice(0, 100), description: (item.description || '').slice(0, 500), isFree: sourceDecks.some(d => d.isFree) })
         for (let position = 0; position < item.cardIndexes.length; position++) {
           const original = sourceCards[item.cardIndexes[position]]
-          if (original) await saveCard(id, { id: `ai-${position}-${original.id}`.slice(0, 64), cloze: original.cloze }, position)
+          if (original) await saveCard(id, { id: `ai-${item.cardIndexes[position]}-${original.id}`.slice(0, 64), cloze: original.cloze }, position)
         }
       }
       await finishDeckSave()
