@@ -16,9 +16,7 @@ export function RecallTestDatePicker({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const isDateSimulating = selectedDate !== actualToday
-  const isTimeSimulating = selectedTime !== actualTime
-  const isSimulating = isDateSimulating || isTimeSimulating
+  const isSimulating = selectedDate !== actualToday || selectedTime !== actualTime
 
   function changeTestValue(key: 'testDate' | 'testTime', value: string, actualValue: string) {
     const params = new URLSearchParams(searchParams.toString())
@@ -48,35 +46,19 @@ export function RecallTestDatePicker({
           </div>
           <label className="flex shrink-0 items-center gap-2 text-sm font-semibold">
             اليوم التجريبي
-            <input
-              aria-label="اختيار اليوم التجريبي للمراجعة اليومية"
-              type="date"
-              value={selectedDate}
+            <input aria-label="اختيار اليوم التجريبي للمراجعة اليومية" type="date" value={selectedDate}
               onChange={(event) => changeTestValue('testDate', event.target.value, actualToday)}
-              className="rounded-lg border bg-background px-3 py-2"
-            />
+              className="rounded-lg border bg-background px-3 py-2" />
           </label>
           <label className="flex shrink-0 items-center gap-2 text-sm font-semibold">
             الوقت التجريبي
-            <input
-              aria-label="اختيار الوقت التجريبي للمراجعة اليومية"
-              type="time"
-              value={selectedTime}
+            <input aria-label="اختيار الوقت التجريبي للمراجعة اليومية" type="time" value={selectedTime}
               onChange={(event) => changeTestValue('testTime', event.target.value, actualTime)}
-              className="rounded-lg border bg-background px-3 py-2"
-            />
+              className="rounded-lg border bg-background px-3 py-2" />
           </label>
-          {isSimulating && (
-            <button type="button" onClick={resetSimulation} className="rounded-lg border px-3 py-2 text-sm font-semibold">
-              الرجوع للتاريخ والوقت الحقيقيين
-            </button>
-          )}
+          {isSimulating && <button type="button" onClick={resetSimulation} className="rounded-lg border px-3 py-2 text-sm font-semibold">الرجوع للتاريخ والوقت الحقيقيين</button>}
         </div>
-        {isSimulating && (
-          <p className="mt-3 text-xs font-semibold text-amber-800">
-            وضع الاختبار مفعّل: {selectedDate} — {selectedTime}
-          </p>
-        )}
+        {isSimulating && <p className="mt-3 text-xs font-semibold text-amber-800">وضع الاختبار مفعّل: {selectedDate} — {selectedTime}</p>}
       </div>
     </section>
   )
