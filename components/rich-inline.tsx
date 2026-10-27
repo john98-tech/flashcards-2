@@ -34,11 +34,12 @@ function firstMarkup(text: string, start: number, end: number): Match | null {
   for (const pattern of patterns) {
     const found = pattern.regex.exec(slice)
     if (!found || found.index === undefined) continue
+    const innerOffset = pattern.kind === 'style' ? found[0].indexOf('>') + 1 : found[0].indexOf(found[pattern.innerGroup])
     const candidate: Match = {
       start: start + found.index,
       end: start + found.index + found[0].length,
-      innerStart: start + found.index + found[0].indexOf(found[pattern.innerGroup]),
-      innerEnd: start + found.index + found[0].indexOf(found[pattern.innerGroup]) + found[pattern.innerGroup].length,
+      innerStart: start + found.index + innerOffset,
+      innerEnd: start + found.index + innerOffset + found[pattern.innerGroup].length,
       kind: pattern.kind,
       style: pattern.colorGroup ? parseInlineStyle(found[pattern.colorGroup]) : undefined,
     }
