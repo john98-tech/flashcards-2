@@ -41,7 +41,7 @@ export function RecallTestDatePicker({
           <div className="min-w-0 flex-1">
             <p className="font-bold">أداة اختبار تاريخ ووقت المراجعة</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              غيّر اليوم والساعة لمعاينة المراجعة. الاختبار للعرض فقط ولا يحفظ خطة أو إنجاز جلسة. جدولة المراجعات حاليًا تعتمد على اليوم وليس الساعة.
+              غيّر اليوم والساعة وهيشتغل الموقع بالتاريخ ده بشكل كامل، وتقدّمك وخطتك بيتحفظوا على اليوم التجريبي. جدولة المراجعات حاليًا تعتمد على اليوم وليس الساعة.
             </p>
           </div>
           <label className="flex shrink-0 items-center gap-2 text-sm font-semibold">

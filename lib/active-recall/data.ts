@@ -438,6 +438,7 @@ export async function completeRecallSession(
   userId: string,
   sessionId: string,
   selfAssessment: 'knew_it' | 'review_again' | null,
+  today: string = cairoDate(),
 ): Promise<void> {
   const { data, error } = await db()
     .from('active_recall_sessions')
@@ -450,7 +451,7 @@ export async function completeRecallSession(
     .eq('id', sessionId)
     .eq('user_id', userId)
     .in('status', ['pending', 'rescheduled'])
-    .lte('scheduled_date', cairoDate())
+    .lte('scheduled_date', today)
     .select('id')
     .maybeSingle()
   if (error) fail(error)
