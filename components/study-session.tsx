@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useEffectEvent, useMemo, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Eye, Keyboard, MousePointerClick, RotateCcw, Shuffle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -313,7 +313,7 @@ const renderLine = (line: { value: string; start: number; end: number }, key: nu
               } else blocks.push({ type: 'line', lines: [lines[i++]] })
             }
             return <div dir="auto" className="space-y-2 text-base leading-[2.3] sm:text-lg sm:leading-[2.4] md:text-xl">
-              {blocks.map((block, bi) => block.type === 'table' ? <div key={bi} className="max-w-full overflow-x-auto rounded-lg border"><table className="w-max min-w-full border-collapse text-sm sm:text-base"><tbody>{block.lines.map((line, ri) => {
+              {blocks.map((block, bi) => block.type === 'table' ? <WideTable key={bi}><table className="w-max min-w-full border-collapse text-sm sm:text-base"><tbody>{block.lines.map((line, ri) => {
                 const cells = line.value.trim().replace(/^\|/, '').replace(/\|$/, '').split('|')
                 let cursor = line.value.indexOf(line.value.trim().replace(/^\|/, '').split('|')[0])
                 return <tr key={ri} className={ri === 0 ? 'bg-muted/70 font-semibold' : 'border-t'}>{cells.map((cell, ci) => {
@@ -322,7 +322,7 @@ const renderLine = (line: { value: string; start: number; end: number }, key: nu
                   cursor = (at >= 0 ? at : cursor) + cell.length + 1
                   return <td key={ci} className="border-e px-3 py-2 align-top whitespace-nowrap break-normal [overflow-wrap:normal] last:border-e-0">{renderRange(cellStart, cellStart + cell.length)}</td>
                 })}</tr>
-              })}</tbody></table></div> : block.type === 'diagram' ? <pre key={bi} className="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{block.lines.map((line, i) => <span key={i}>{renderRange(line.start, line.end)}{i < block.lines.length - 1 ? '\n' : ''}</span>)}</pre> : renderLine(block.lines[0], bi))}
+              })}</tbody></table></WideTable> : block.type === 'diagram' ? <pre key={bi} className="overflow-x-auto rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{block.lines.map((line, i) => <span key={i}>{renderRange(line.start, line.end)}{i < block.lines.length - 1 ? '\n' : ''}</span>)}</pre> : renderLine(block.lines[0], bi))}
             </div>
           })()}
 
@@ -432,5 +432,58 @@ function TypedBlank({
       className="mx-0.5 inline-block rounded-md border-b-2 border-primary bg-accent px-1.5 text-base leading-normal outline-none focus:ring-2 focus:ring-ring"
       style={{ width }}
     />
+  )
+}
+
+function WideTable({ children }: { children: React.ReactNode }) {
+  const scroller = useRef<HTMLDivElement>(null)
+  const [canScroll, setCanScroll] = useState(false)
+  const [canGoLeft, setCanGoLeft] = useState(false)
+  const [canGoRight, setCanGoRight] = useState(false)
+
+  useEffect(() => {
+    const element = scroller.current
+    if (!element) return
+    const update = () => {
+      const max = element.scrollWidth - element.clientWidth
+      setCanScroll(max > 2)
+      const rtl = getComputedStyle(element).direction === 'rtl'
+      const normalized = rtl ? Math.abs(element.scrollLeft) : element.scrollLeft
+      setCanGoLeft(normalized > 2)
+      setCanGoRight(normalized < max - 2)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    if (element.firstElementChild) observer.observe(element.firstElementChild)
+    element.addEventListener('scroll', update, { passive: true })
+    return () => { observer.disconnect(); element.removeEventListener('scroll', update) }
+  }, [children])
+
+  const move = (direction: 'left' | 'right') => {
+    const element = scroller.current
+    if (!element) return
+    const rtl = getComputedStyle(element).direction === 'rtl'
+    const amount = Math.max(220, element.clientWidth * 0.72)
+    element.scrollBy({ left: (direction === 'left' ? -1 : 1) * amount * (rtl ? -1 : 1), behavior: 'smooth' })
+  }
+
+  return (
+    <div className="my-2 min-w-0 max-w-full overflow-hidden rounded-xl border bg-card/60 shadow-sm">
+      {canScroll && (
+        <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-2 py-1.5 sm:px-3">
+          <span className="text-xs font-medium text-muted-foreground">حرّك الجدول</span>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => move('right')} disabled={!canGoRight} aria-label="حرّك الجدول لليمين" title="يمين" className="inline-flex size-8 items-center justify-center rounded-lg border bg-background text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-35">
+              <ChevronRight className="size-4" aria-hidden />
+            </button>
+            <button type="button" onClick={() => move('left')} disabled={!canGoLeft} aria-label="حرّك الجدول للشمال" title="شمال" className="inline-flex size-8 items-center justify-center rounded-lg border bg-background text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-35">
+              <ChevronLeft className="size-4" aria-hidden />
+            </button>
+          </div>
+        </div>
+      )}
+      <div ref={scroller} className="max-w-full overflow-x-auto overscroll-x-contain">{children}</div>
+    </div>
   )
 }
