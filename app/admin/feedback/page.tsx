@@ -19,7 +19,7 @@ export default async function AdminFeedbackPage() {
   try {
     const { data, error } = await db()
       .from('feedback_messages')
-      .select('id, thread_id, sender_role, message, page_path, page_title, created_at')
+      .select('id, thread_id, sender_role, message, page_path, page_title, created_at, attachment_url, attachment_type, attachment_name')
       .order('created_at', { ascending: true })
       .limit(3000)
     if (error) throw error
