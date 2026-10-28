@@ -75,7 +75,29 @@ function parseGradingReport(raw: string): GradingReport | null {
 
 type LessonImage = { path: string; name: string; url: string }
 
-function blobToBase64(blob: Blob) {
+async function blobToBase64(blob: Blob) {
+  // Compress handwriting pages before sending them to the job API; the key and
+  // image payload are never written to browser logs.
+  let source = blob
+  try {
+    const bitmap = await createImageBitmap(blob)
+    const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('تعذر تجهيز صورة صفحة الإجابة.')
+    context.fillStyle = '#fff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const compressed = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((value) => value ? resolve(value) : reject(new Error('تعذر ضغط صورة صفحة الإجابة.')), 'image/jpeg', 0.82)
+    })
+    source = compressed
+  } catch {
+    source = blob
+  }
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -91,8 +113,41 @@ function blobToBase64(blob: Blob) {
       resolve(reader.result.slice(separator + 1))
     }
     reader.onerror = () => reject(reader.error ?? new Error('تعذر قراءة صورة صفحة الإجابة.'))
-    reader.readAsDataURL(blob)
+    reader.readAsDataURL(source)
   })
+}
+
+const correctionJobStorageKey = (lessonId: string) => `kwk:ai-correction-job:${lessonId}`
+
+type CorrectionJobResult = {
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  result?: { raw?: string } | null
+  error?: string | null
+}
+
+async function waitForCorrectionJob(jobId: string, signal: AbortSignal): Promise<CorrectionJobResult> {
+  while (true) {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+    const response = await fetch(`/api/ai-correction/jobs/${encodeURIComponent(jobId)}`, {
+      cache: 'no-store',
+      signal,
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'تعذر متابعة التصحيح.')
+    if (['completed', 'failed', 'cancelled'].includes(data.status)) return data as CorrectionJobResult
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        signal.removeEventListener('abort', onAbort)
+        resolve()
+      }, 2200)
+      const onAbort = () => {
+        window.clearTimeout(timer)
+        signal.removeEventListener('abort', onAbort)
+        reject(new DOMException('Aborted', 'AbortError'))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+  }
 }
 
 const CONFETTI_COLORS = ['#14b8a6', '#8b5cf6', '#fb7185', '#f59e0b', '#10b981', '#38bdf8']
@@ -117,6 +172,8 @@ export function NoteEditor({
   const boardRef = useRef<HandwritingEditorHandle>(null)
   const router = useRouter()
   const gradingAbortRef = useRef<AbortController | null>(null)
+  const activeJobIdRef = useRef<string | null>(null)
+  const mountedRef = useRef(true)
   const [keyOpen, setKeyOpen] = useState(false)
   const [grading, setGrading] = useState(false)
   const [notice, setNotice] = useState('')
@@ -140,6 +197,7 @@ export function NoteEditor({
 
     const controller = new AbortController()
     gradingAbortRef.current = controller
+    activeJobIdRef.current = null
     setGrading(true)
     setNotice('')
     setReport(null)
@@ -165,32 +223,116 @@ export function NoteEditor({
       ]
         .filter(Boolean)
         .join('\n\n')
-      const raw = await generate(config, prompt, {
-        temperature: 0.1,
-        json: true,
-        ...(answerImages.length ? { images: answerImages } : {}),
+      if (controller.signal.aborted) return
+      const response = await fetch('/api/ai-correction/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         signal: controller.signal,
+        body: JSON.stringify({
+          provider: config.provider ?? 'gemini',
+          apiKey: config.apiKey,
+          model: config.model,
+          prompt,
+          temperature: 0.1,
+          json: true,
+          images: answerImages,
+        }),
       })
-      const parsed = parseGradingReport(raw)
-      if (parsed) setReport(parsed)
-      else setRawReply(raw)
+      const created = await response.json().catch(() => ({}))
+      if (!response.ok || typeof created.jobId !== 'string') {
+        throw new Error(typeof created.error === 'string' ? created.error : 'تعذر بدء التصحيح في الخلفية.')
+      }
+      const jobId = created.jobId as string
+      activeJobIdRef.current = jobId
+      localStorage.setItem(correctionJobStorageKey(lessonId), jobId)
+      const completed = await waitForCorrectionJob(jobId, controller.signal)
+      localStorage.removeItem(correctionJobStorageKey(lessonId))
+      activeJobIdRef.current = null
+      if (completed.status === 'completed' && typeof completed.result?.raw === 'string') {
+        const parsed = parseGradingReport(completed.result.raw)
+        if (parsed) setReport(parsed)
+        else setRawReply(completed.result.raw)
+      } else if (completed.status === 'cancelled') {
+        setNotice('تم إيقاف التصحيح.')
+      } else {
+        throw new Error(completed.error || 'تعذر إكمال التصحيح. جرّب مرة أخرى.')
+      }
     } catch (error) {
       if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-        setNotice('تم إيقاف التصحيح بناءً على طلبك.')
-      } else if (error instanceof GeminiError && (error.status === 413 || (error.status === 400 && /size|payload|large/i.test(error.message)))) {
-        setNotice('حجم صور الإجابة كبير على Gemini. قلّل عدد الصفحات أو امسح أجزاءً غير ضرورية ثم جرّب مرة أخرى.')
+        if (mountedRef.current && activeJobIdRef.current) setNotice('تم إيقاف متابعة التصحيح محليًا؛ لو لم تُلغَ المهمة ستظل تعمل في الخلفية.')
       } else {
-        setNotice(error instanceof Error ? error.message : 'تعذر تصحيح التسميع. جرّب مرة أخرى.')
+        if (activeJobIdRef.current) localStorage.removeItem(correctionJobStorageKey(lessonId))
+        activeJobIdRef.current = null
+        if (mountedRef.current) setNotice(error instanceof Error ? error.message : 'تعذر تصحيح التسميع. جرّب مرة أخرى.')
       }
     } finally {
       answerImages.length = 0
       pageBlobs.length = 0
       if (gradingAbortRef.current === controller) gradingAbortRef.current = null
-      setGrading(false)
+      if (mountedRef.current) setGrading(false)
     }
   }
 
-  useEffect(() => () => gradingAbortRef.current?.abort(), [])
+  const cancelGrading = async () => {
+    const jobId = activeJobIdRef.current
+    gradingAbortRef.current?.abort()
+    if (jobId) {
+      try {
+        await fetch(`/api/ai-correction/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE', cache: 'no-store' })
+      } catch {
+        // The task may still finish; its result will not be shown until checked again.
+      }
+      localStorage.removeItem(correctionJobStorageKey(lessonId))
+      activeJobIdRef.current = null
+    }
+    setGrading(false)
+    setNotice('تم إرسال طلب إيقاف التصحيح.')
+  }
+
+  const showJobResult = (completed: CorrectionJobResult) => {
+    localStorage.removeItem(correctionJobStorageKey(lessonId))
+    activeJobIdRef.current = null
+    if (completed.status === 'completed' && typeof completed.result?.raw === 'string') {
+      const parsed = parseGradingReport(completed.result.raw)
+      if (parsed) setReport(parsed)
+      else setRawReply(completed.result.raw)
+    } else if (completed.status === 'failed') {
+      setNotice(completed.error || 'تعذر إكمال التصحيح. جرّب مرة أخرى.')
+    } else if (completed.status === 'cancelled') {
+      setNotice('تم إيقاف التصحيح.')
+    }
+    setGrading(false)
+  }
+
+  useEffect(() => {
+    mountedRef.current = true
+    const storageKey = correctionJobStorageKey(lessonId)
+    const existingJobId = localStorage.getItem(storageKey)
+    if (!existingJobId) return
+    const controller = new AbortController()
+    gradingAbortRef.current = controller
+    activeJobIdRef.current = existingJobId
+    setGrading(true)
+    void waitForCorrectionJob(existingJobId, controller.signal)
+      .then((completed) => {
+        if (mountedRef.current) showJobResult(completed)
+      })
+      .catch((error) => {
+        if (mountedRef.current && !(error instanceof Error && error.name === 'AbortError')) {
+          setNotice(error instanceof Error ? error.message : 'تعذر استعادة التصحيح.')
+        }
+      })
+      .finally(() => {
+        if (gradingAbortRef.current === controller) gradingAbortRef.current = null
+      })
+    return () => controller.abort()
+  }, [lessonId])
+
+  useEffect(() => () => {
+    mountedRef.current = false
+    gradingAbortRef.current?.abort()
+  }, [])
 
   const goBackOneStep = () => {
     if (typeof window !== 'undefined' && Number(window.history.state?.idx) > 0) router.back()
@@ -233,7 +375,7 @@ export function NoteEditor({
             <span className="relative">{grading ? 'بيصحح...' : 'صحّح بالذكاء الاصطناعي'}</span>
           </button>
           {grading && (
-            <button type="button" onClick={() => gradingAbortRef.current?.abort()} aria-label="إيقاف التصحيح بالذكاء الاصطناعي" title="إيقاف التصحيح" className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={cancelGrading} aria-label="إيقاف التصحيح بالذكاء الاصطناعي" title="إيقاف التصحيح" className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <Square className="size-4 fill-current" aria-hidden />
             </button>
           )}
