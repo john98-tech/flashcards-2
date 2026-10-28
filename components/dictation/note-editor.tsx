@@ -174,6 +174,7 @@ export function NoteEditor({
   const router = useRouter()
   const gradingAbortRef = useRef<AbortController | null>(null)
   const activeJobIdRef = useRef<string | null>(null)
+  const userCancelledRef = useRef(false)
   const mountedRef = useRef(true)
   const [keyOpen, setKeyOpen] = useState(false)
   const [grading, setGrading] = useState(false)
@@ -199,6 +200,7 @@ export function NoteEditor({
     const controller = new AbortController()
     gradingAbortRef.current = controller
     activeJobIdRef.current = null
+    userCancelledRef.current = false
     setGrading(true)
     setNotice('')
     setReport(null)
@@ -226,7 +228,6 @@ export function NoteEditor({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        signal: controller.signal,
         body: JSON.stringify({
           provider: config.provider ?? 'gemini',
           apiKey: config.apiKey,
@@ -244,6 +245,12 @@ export function NoteEditor({
       const jobId = created.jobId as string
       activeJobIdRef.current = jobId
       localStorage.setItem(correctionJobStorageKey(lessonId), jobId)
+      if (controller.signal.aborted && userCancelledRef.current) {
+        await fetch(`/api/ai-correction/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE', cache: 'no-store' }).catch(() => undefined)
+        localStorage.removeItem(correctionJobStorageKey(lessonId))
+        activeJobIdRef.current = null
+        return
+      }
       const completed = await waitForCorrectionJob(jobId, controller.signal)
       localStorage.removeItem(correctionJobStorageKey(lessonId))
       activeJobIdRef.current = null
@@ -273,6 +280,7 @@ export function NoteEditor({
   }
 
   const cancelGrading = async () => {
+    userCancelledRef.current = true
     const jobId = activeJobIdRef.current
     gradingAbortRef.current?.abort()
     if (jobId) {
