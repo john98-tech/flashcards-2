@@ -1087,3 +1087,60 @@ a[href*='wa.me'] { animation: wa-pulse 2.6s ease-out infinite; }
   html, body { max-width: 100%; overflow-x: clip; }
   img, video, canvas, svg { max-width: 100%; }
 }
+
+
+/* Floating contact dock: consistent circular launchers and subtle rotating hints. */
+.floating-contact-button {
+  isolation: isolate;
+  overflow: visible;
+  transform-origin: center;
+}
+.floating-contact-hint {
+  position: absolute;
+  right: calc(100% + 12px);
+  top: 50%;
+  z-index: 5;
+  width: max-content;
+  max-width: 150px;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 0.72);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card, #fff) 92%, transparent);
+  color: var(--foreground, #222);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(6px, -50%) scale(.96);
+  animation: floating-contact-hint 12s ease-in-out infinite;
+}
+.floating-contact-hint::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid rgb(255 255 255 / 0.72);
+  border-right: 1px solid rgb(255 255 255 / 0.72);
+  background: color-mix(in srgb, var(--card, #fff) 92%, transparent);
+  transform: translateY(-50%) rotate(45deg);
+}
+.floating-contact-hint-whatsapp { animation-delay: 0s; }
+.floating-contact-hint-facebook { animation-delay: 4s; }
+.floating-contact-hint-feedback { animation-delay: 8s; }
+@keyframes floating-contact-hint {
+  0%, 4%, 18%, 100% { opacity: 0; transform: translate(6px, -50%) scale(.96); }
+  7%, 15% { opacity: 1; transform: translate(0, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floating-contact-hint { animation: none; }
+}
+@media (max-width: 768px), (pointer: coarse) {
+  .floating-contact-hint { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
