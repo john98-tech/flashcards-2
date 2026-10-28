@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     // The API key is encrypted before leaving this request handler. Only ciphertext
     // is stored temporarily; the queue receives the job ID, never the API key.
     const encryptedPayload = encryptJobPayload(payload)
-    const upload = await db().storage.from(BUCKET).upload(payloadPath, encryptedPayload, {
+    const upload = await db().storage.from(BUCKET).upload(payloadPath, Buffer.from(encryptedPayload, 'utf8'), {
       contentType: 'text/plain',
       upsert: false,
     })
