@@ -178,7 +178,7 @@ export function CursorFx() {
   }, [])
 
   return (
-    <div ref={layerRef} aria-hidden className="pointer-events-none fixed inset-0 z-[100] overflow-hidden">
+    <div ref={layerRef} aria-hidden className="pointer-events-none fixed inset-0 z-[100001] overflow-hidden">
       <div ref={ringRef} className="cursor-ring" data-active="false" data-down="false" data-grab="false" data-grabbing="false">
         <Hand className="ic-hand" />
         <Grab className="ic-grab" />
