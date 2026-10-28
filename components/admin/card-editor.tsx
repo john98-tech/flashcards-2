@@ -40,8 +40,10 @@ export const CardEditor = memo(function CardEditor({
   onDragOverCard,
   onDragEnd,
 }: Props) {
-  const { text, tokens, selected: chosen } = useMemo(() => fromCloze(card.cloze), [card.cloze])
-  const blanks = useMemo(() => (card.cloze.match(/\{\{/g) ?? []).length, [card.cloze])
+  // Defend against legacy/malformed records where cloze may be missing at runtime.
+  const cloze = typeof card.cloze === 'string' ? card.cloze : ''
+  const { text, tokens, selected: chosen } = useMemo(() => fromCloze(cloze), [cloze])
+  const blanks = useMemo(() => (cloze.match(/\{\{/g) ?? []).length, [cloze])
 
   const toggle = (i: number) => {
     const next = new Set(chosen)
