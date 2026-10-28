@@ -23,7 +23,12 @@ export default async function AdminFeedbackPage() {
       .order('created_at', { ascending: true })
       .limit(3000)
     if (error) throw error
-    messages = (data ?? []) as FeedbackMessage[]
+    const rows = (data ?? []) as FeedbackMessage[]
+    messages = await Promise.all(rows.map(async row => {
+      if (!row.attachment_url) return row
+      const { data: signed, error: signedError } = await db().storage.from('feedback-attachments').createSignedUrl(row.attachment_url, 3600)
+      return signedError || !signed?.signedUrl ? { ...row, attachment_url: null } : { ...row, attachment_url: signed.signedUrl }
+    }))
   } catch {
     loadError = 'لازم تنفّذ ملف supabase/migrations/20261028000000_feedback_messages.sql في Supabase SQL Editor مرة واحدة، وبعدها ارجع للصفحة.'
   }
