@@ -21,15 +21,17 @@ export type FeedbackMessage = {
   attachment_name?: string | null
 }
 
-export async function loadFeedbackMessages(threadId: string): Promise<FeedbackMessage[]> {
-  if (!UUID_RE.test(threadId)) return []
-  // Keep feedback history to a rolling seven-day window and remove expired attachment files too.
+async function cleanupExpiredFeedback() {
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const client = db()
   const { data: expiredRows } = await client.from('feedback_messages').select('attachment_url').lt('created_at', cutoff).not('attachment_url', 'is', null).limit(1000)
   const expiredPaths = (expiredRows ?? []).map(row => row.attachment_url).filter((path): path is string => typeof path === 'string' && path.length > 0)
   if (expiredPaths.length) await client.storage.from(BUCKET).remove(expiredPaths)
   await client.from('feedback_messages').delete().lt('created_at', cutoff)
+}
+
+export async function loadFeedbackMessages(threadId: string): Promise<FeedbackMessage[]> {
+  if (!UUID_RE.test(threadId)) return []
   const { data, error } = await db().from('feedback_messages')
     .select('id, thread_id, sender_role, message, page_path, page_title, created_at, attachment_url, attachment_type, attachment_name')
     .eq('thread_id', threadId).order('created_at', { ascending: true }).limit(300)
@@ -50,6 +52,7 @@ export async function sendFeedbackMessage(input: { threadId: string; message: st
   if (!UUID_RE.test(threadId)) return { ok: false, error: 'تعذر التعرف على المحادثة. حدّث الصفحة وحاول مرة أخرى.' }
   if (!message || message.length > 2000) return { ok: false, error: 'اكتب رسالة من حرف واحد إلى 2000 حرف.' }
   if (!pagePath.startsWith('/') || pagePath.startsWith('//')) return { ok: false, error: 'تعذر تحديد الصفحة الحالية.' }
+  await cleanupExpiredFeedback()
   const { error } = await db().from('feedback_messages').insert({ thread_id: threadId, sender_role: 'user', message, page_path: pagePath, page_title: pageTitle || pagePath })
   if (error) return { ok: false, error: 'لم تُرسل الرسالة. تأكد من إعداد قاعدة البيانات وحاول مرة أخرى.' }
   return { ok: true }
@@ -70,6 +73,7 @@ export async function sendFeedbackAttachment(input: {
   if (!UUID_RE.test(threadId)) return { ok: false, error: 'تعذر التعرف على المحادثة. حدّث الصفحة وحاول مرة أخرى.' }
   if (!(file instanceof File) || file.size < 1 || file.size > MAX_ATTACHMENT_BYTES) return { ok: false, error: 'حجم الملف لازم يكون أكبر من صفر و8 ميجابايت أو أقل.' }
   if (!pagePath.startsWith('/') || pagePath.startsWith('//')) return { ok: false, error: 'تعذر تحديد الصفحة الحالية.' }
+  await cleanupExpiredFeedback()
 
   const normalizedMimeType = file.type.split(';')[0].trim().toLowerCase()
   const allowedTypes = kind === 'image'
