@@ -156,7 +156,7 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
       return
     }
     const timerKey = `sammaa-active-recall-deadline-v1-${course.id}-${activeSession.id}`
-    const wordCount = lesson.content.trim() ? lesson.content.trim().split(/\\s+/u).length : 0
+    const wordCount = lesson.content.trim() ? lesson.content.trim().split(/\s+/u).length : 0
     const questionCount = [lesson.question, lesson.additionalQuestion].filter(Boolean).length
     const estimatedSeconds = Math.max(60, Math.ceil((wordCount / 200) * 60) + questionCount * 30)
     let deadline: number
