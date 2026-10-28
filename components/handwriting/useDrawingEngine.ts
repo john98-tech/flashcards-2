@@ -549,13 +549,14 @@ export function useDrawingEngine(
       setCurrentPage(nextIndex)
       redraw()
       syncHistoryState()
+      persistDraft()
     } catch (error) {
       reportError(error)
     } finally {
       switchingRef.current = false
       setIsSwitching(false)
     }
-  }, [redraw, reportError, syncHistoryState])
+  }, [redraw, reportError, syncHistoryState, persistDraft])
 
   const addPage = useCallback(async () => {
     if (pagesRef.current.length >= effectiveMaxPages || switchingRef.current || strokeRef.current) return
