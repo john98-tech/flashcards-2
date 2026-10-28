@@ -28,6 +28,7 @@ export type DrawingPage = {
 export type PageInfo = { pageCount: number; hasContent: boolean }
 export type DrawingEngineOptions = {
   maxPages: number
+  storageKey?: string
   onChange?: (info: PageInfo) => void
   onError?: (message: string) => void
 }
@@ -162,7 +163,7 @@ function pageHasInk(page: DrawingPage) {
 export function useDrawingEngine(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   shadowRef: RefObject<HTMLCanvasElement | null>,
-  { maxPages, onChange, onError }: DrawingEngineOptions,
+  { maxPages, storageKey, onChange, onError }: DrawingEngineOptions,
 ) {
   const pagesRef = useRef<DrawingPage[]>([makePage(0)])
   const currentPageRef = useRef(0)
@@ -197,6 +198,24 @@ export function useDrawingEngine(
 
   onChangeRef.current = onChange
   onErrorRef.current = onError
+
+  const persistDraft = useCallback(() => {
+    if (!storageKey) return
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        version: 1,
+        currentPage: currentPageRef.current,
+        nextPageId: nextPageIdRef.current,
+        pages: pagesRef.current.map(({ id, strokes }) => ({ id, strokes })),
+        tool,
+        color,
+        penSize,
+        eraserSize,
+      }))
+    } catch (error) {
+      console.error('Unable to save the handwriting draft.', error)
+    }
+  }, [storageKey, tool, color, penSize, eraserSize])
 
   const reportError = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : 'تعذر إكمال عملية الكتابة.'
@@ -251,11 +270,12 @@ export function useDrawingEngine(
   const updatePageList = useCallback(() => {
     const currentPages = pagesRef.current
     setPages(currentPages.map(({ id, hasContent }) => ({ id, hasContent })))
+    persistDraft()
     onChangeRef.current?.({
       pageCount: currentPages.length,
       hasContent: currentPages.some((page) => page.hasContent),
     })
-  }, [])
+  }, [persistDraft])
 
   const updateContentState = useCallback((pageIndex: number, hasContent: boolean) => {
     const page = pagesRef.current[pageIndex]
@@ -330,12 +350,13 @@ export function useDrawingEngine(
         page.strokes = [...page.strokes, stroke.data]
         updateContentState(index, pageHasInk(page))
         syncHistoryState()
+        persistDraft()
       }
     } catch (error) {
       reportError(error)
     }
     releaseStroke()
-  }, [drawPendingPoints, initializeCanvases, releaseStroke, reportError, syncHistoryState, updateContentState])
+  }, [drawPendingPoints, initializeCanvases, releaseStroke, reportError, syncHistoryState, updateContentState, persistDraft])
 
   // Aborts the stroke in progress without saving it (a second finger landed, so the gesture is
   // a pinch / pan, not writing). Strokes are only committed on finish, so a repaint is enough.
@@ -445,13 +466,14 @@ export function useDrawingEngine(
     finishStroke(event.pointerId)
   }, [finishStroke, schedulePoints])
 
-  const setCurrentTool = useCallback((nextTool: DrawingTool) => setTool(nextTool), [])
+  const setCurrentTool = useCallback((nextTool: DrawingTool) => { setTool(nextTool); persistDraft() }, [persistDraft])
 
   const changePenColor = useCallback((nextColor: string) => {
     if (!COLORS.includes(nextColor)) return
     colorRef.current = nextColor
     setColor(nextColor)
-  }, [])
+    persistDraft()
+  }, [persistDraft])
 
   const changeBrushSize = useCallback((size: number) => {
     if (!Number.isFinite(size)) return
@@ -464,7 +486,8 @@ export function useDrawingEngine(
       eraserSizeRef.current = next
       setEraserSize(next)
     }
-  }, [tool])
+    persistDraft()
+  }, [tool, persistDraft])
 
   const applyHistory = useCallback((direction: 'undo' | 'redo') => {
     if (strokeRef.current || switchingRef.current) return
@@ -485,7 +508,8 @@ export function useDrawingEngine(
       reportError(error)
     }
     syncHistoryState()
-  }, [redraw, reportError, syncHistoryState, updateContentState])
+    persistDraft()
+  }, [redraw, reportError, syncHistoryState, updateContentState, persistDraft])
 
   const undo = useCallback(() => applyHistory('undo'), [applyHistory])
   const redo = useCallback(() => applyHistory('redo'), [applyHistory])
@@ -504,10 +528,11 @@ export function useDrawingEngine(
       redraw()
       updateContentState(index, false)
       syncHistoryState()
+      persistDraft()
     } catch (error) {
       reportError(error)
     }
-  }, [redraw, reportError, syncHistoryState, updateContentState])
+  }, [redraw, reportError, syncHistoryState, updateContentState, persistDraft])
 
   const switchPage = useCallback(async (nextIndex: number) => {
     if (
@@ -610,7 +635,8 @@ export function useDrawingEngine(
     setCurrentPage(0)
     setHistoryState({ canUndo: false, canRedo: false })
     updatePageList()
-  }, [canvasRef, shadowRef, updatePageList])
+    if (storageKey) { try { localStorage.removeItem(storageKey) } catch {} }
+  }, [canvasRef, shadowRef, updatePageList, storageKey])
 
   // Export always renders every page from its strokes at the fixed 1000x1400 size, so the image
   // sent to the AI is the same no matter how far the student zoomed in.
@@ -653,6 +679,30 @@ export function useDrawingEngine(
   }, [canvasRef])
 
   useEffect(() => {
+    if (storageKey) {
+      try {
+        const raw = localStorage.getItem(storageKey)
+        if (raw) {
+          const saved = JSON.parse(raw) as { version?: number; currentPage?: number; nextPageId?: number; pages?: Array<{ id: number; strokes: StrokeData[] }>; tool?: DrawingTool; color?: string; penSize?: number; eraserSize?: number }
+          if (saved.version === 1 && Array.isArray(saved.pages) && saved.pages.length > 0) {
+            pagesRef.current = saved.pages.slice(0, effectiveMaxPages).map((item, index) => {
+              const page = makePage(Number.isInteger(item.id) ? item.id : index)
+              page.strokes = Array.isArray(item.strokes) ? item.strokes : []
+              page.hasContent = pageHasInk(page)
+              return page
+            })
+            currentPageRef.current = Math.max(0, Math.min(pagesRef.current.length - 1, saved.currentPage ?? 0))
+            nextPageIdRef.current = Math.max(saved.nextPageId ?? 1, ...pagesRef.current.map((page) => page.id + 1))
+            if (saved.tool === 'pen' || saved.tool === 'eraser') setTool(saved.tool)
+            if (typeof saved.color === 'string' && COLORS.includes(saved.color)) { colorRef.current = saved.color; setColor(saved.color) }
+            if (Number.isFinite(saved.penSize)) { penSizeRef.current = Math.max(2, Math.min(22, saved.penSize!)); setPenSize(penSizeRef.current) }
+            if (Number.isFinite(saved.eraserSize)) { eraserSizeRef.current = Math.max(12, Math.min(96, saved.eraserSize!)); setEraserSize(eraserSizeRef.current) }
+          }
+        }
+      } catch (error) {
+        console.error('Unable to restore the handwriting draft.', error)
+      }
+    }
     if (pagesRef.current.length === 0) {
       pagesRef.current = [makePage(0)]
       currentPageRef.current = 0
@@ -661,6 +711,7 @@ export function useDrawingEngine(
     }
     try {
       initializeCanvases()
+      setCurrentPage(currentPageRef.current)
       updatePageList()
     } catch (error) {
       reportError(error)
@@ -713,7 +764,7 @@ export function useDrawingEngine(
         shadowRef.current.height = 0
       }
     }
-  }, [canvasRef, initializeCanvases, redo, redraw, reportError, shadowRef, undo, updatePageList])
+  }, [canvasRef, initializeCanvases, redo, redraw, reportError, shadowRef, undo, updatePageList, storageKey, effectiveMaxPages])
 
   const handleContextMenu = useCallback((event: React.MouseEvent) => event.preventDefault(), [])
   const handlePointerLeave = useCallback(() => {
