@@ -36,6 +36,7 @@ export function FeedbackWidget() {
   const [ready, setReady] = useState(false)
   const [pending, startTransition] = useTransition()
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [selectedImageUrl, setSelectedImageUrl] = useState('')
   const [recording, setRecording] = useState(false)
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null)
   const [recordingUrl, setRecordingUrl] = useState('')
@@ -62,6 +63,12 @@ export function FeedbackWidget() {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, open, pending, selectedImage, recordedAudio])
+  useEffect(() => {
+    if (!selectedImage) { setSelectedImageUrl(''); return }
+    const url = URL.createObjectURL(selectedImage)
+    setSelectedImageUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [selectedImage])
   useEffect(() => () => {
     if (timerRef.current) window.clearInterval(timerRef.current)
     if (recordingUrl) URL.revokeObjectURL(recordingUrl)
