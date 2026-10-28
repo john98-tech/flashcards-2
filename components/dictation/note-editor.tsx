@@ -276,20 +276,34 @@ export function NoteEditor({
         return
       }
 
-      const created = await geminiInteractionRequest(GEMINI_INTERACTIONS_API, config.apiKey, {
-        method: 'POST',
-        body: JSON.stringify({
-          model: config.model,
-          input: [
-            { type: 'text', text: prompt },
-            ...answerImages.map((image) => ({ type: 'image', data: image.data, mime_type: image.mimeType })),
-          ],
-          background: true,
-          generation_config: { temperature: 0.1, max_output_tokens: 8192 },
-        }),
-        signal: controller.signal,
-      })
-      if (typeof created.id !== 'string') throw new Error('جوجل لم ترجع معرف المهمة.')
+      // Before Google returns an interaction ID there is nothing the page can
+      // persist to resume. Warn against refreshing during this short creation step.
+      const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+        event.preventDefault()
+        event.returnValue = ''
+      }
+      window.addEventListener('beforeunload', warnBeforeUnload)
+      let created: any
+      try {
+        setNotice('بيبدأ التصحيح… استنى لحظة لحد ما نحفظ رقم المهمة؛ بعدها تقدر تعمل Refresh بأمان.')
+        created = await geminiInteractionRequest(GEMINI_INTERACTIONS_API, config.apiKey, {
+          method: 'POST',
+          body: JSON.stringify({
+            model: config.model,
+            input: [
+              { type: 'text', text: prompt },
+              ...answerImages.map((image) => ({ type: 'image', data: image.data, mime_type: image.mimeType })),
+            ],
+            background: true,
+            store: true,
+            generation_config: { temperature: 0.1, max_output_tokens: 8192 },
+          }),
+          signal: controller.signal,
+        })
+      } finally {
+        window.removeEventListener('beforeunload', warnBeforeUnload)
+      }
+      if (typeof created?.id !== 'string') throw new Error('جوجل لم ترجع معرف المهمة.')
       const jobId = created.id as string
       activeJobIdRef.current = jobId
       localStorage.setItem(correctionJobStorageKey(lessonId), jobId)
