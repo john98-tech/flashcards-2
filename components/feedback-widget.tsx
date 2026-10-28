@@ -28,7 +28,12 @@ export function FeedbackWidget() {
   }, [])
 
   useEffect(() => { const id = getThreadId(); setThreadId(id); setReady(true); if (id) void refresh(id) }, [refresh])
-  useEffect(() => { if (open && threadId) void refresh(threadId) }, [open, threadId, refresh])
+  useEffect(() => {
+    if (!open || !threadId) return
+    void refresh(threadId)
+    const interval = window.setInterval(() => void refresh(threadId), 10000)
+    return () => window.clearInterval(interval)
+  }, [open, threadId, refresh])
 
   function send() {
     const message = draft.trim()
