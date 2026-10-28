@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowRight, BookOpen, KeyRound, Loader2, PenLine, Sparkles, Zap } from 'lucide-react'
+import { ArrowRight, BookOpen, KeyRound, Loader2, PenLine, Sparkles, Square, Zap } from 'lucide-react'
 import { ApiKeyDialog } from '@/components/gemini/api-key-dialog'
 import type { HandwritingEditorHandle } from '@/components/handwriting/HandwritingEditor'
 import { GeminiError, generate, useGeminiConfig } from '@/lib/gemini'
@@ -114,6 +115,8 @@ export function NoteEditor({
   studentImages: LessonImage[]
 }) {
   const boardRef = useRef<HandwritingEditorHandle>(null)
+  const router = useRouter()
+  const gradingAbortRef = useRef<AbortController | null>(null)
   const [keyOpen, setKeyOpen] = useState(false)
   const [grading, setGrading] = useState(false)
   const [notice, setNotice] = useState('')
@@ -135,6 +138,8 @@ export function NoteEditor({
       return
     }
 
+    const controller = new AbortController()
+    gradingAbortRef.current = controller
     setGrading(true)
     setNotice('')
     setReport(null)
@@ -164,12 +169,15 @@ export function NoteEditor({
         temperature: 0.1,
         json: true,
         ...(answerImages.length ? { images: answerImages } : {}),
+        signal: controller.signal,
       })
       const parsed = parseGradingReport(raw)
       if (parsed) setReport(parsed)
       else setRawReply(raw)
     } catch (error) {
-      if (error instanceof GeminiError && (error.status === 413 || (error.status === 400 && /size|payload|large/i.test(error.message)))) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        setNotice('تم إيقاف التصحيح بناءً على طلبك.')
+      } else if (error instanceof GeminiError && (error.status === 413 || (error.status === 400 && /size|payload|large/i.test(error.message)))) {
         setNotice('حجم صور الإجابة كبير على Gemini. قلّل عدد الصفحات أو امسح أجزاءً غير ضرورية ثم جرّب مرة أخرى.')
       } else {
         setNotice(error instanceof Error ? error.message : 'تعذر تصحيح التسميع. جرّب مرة أخرى.')
@@ -177,8 +185,16 @@ export function NoteEditor({
     } finally {
       answerImages.length = 0
       pageBlobs.length = 0
+      if (gradingAbortRef.current === controller) gradingAbortRef.current = null
       setGrading(false)
     }
+  }
+
+  useEffect(() => () => gradingAbortRef.current?.abort(), [])
+
+  const goBackOneStep = () => {
+    if (typeof window !== 'undefined' && Number(window.history.state?.idx) > 0) router.back()
+    else router.push('/#dictation')
   }
 
   return (
@@ -187,8 +203,9 @@ export function NoteEditor({
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-3 py-2.5">
           <Link
             href="/#dictation"
+            onClick={(event) => { event.preventDefault(); goBackOneStep() }}
             className="transition hover:scale-110 hover:border-primary/50 hover:bg-accent hover:text-primary inline-flex size-9 shrink-0 items-center justify-center rounded-full border text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="رجوع"
+            aria-label="رجوع خطوة واحدة"
           >
             <ArrowRight className="size-4" aria-hidden />
           </Link>
@@ -215,6 +232,11 @@ export function NoteEditor({
             {grading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
             <span className="relative">{grading ? 'بيصحح...' : 'صحّح بالذكاء الاصطناعي'}</span>
           </button>
+          {grading && (
+            <button type="button" onClick={() => gradingAbortRef.current?.abort()} aria-label="إيقاف التصحيح بالذكاء الاصطناعي" title="إيقاف التصحيح" className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Square className="size-4 fill-current" aria-hidden />
+            </button>
+          )}
         </div>
       </header>
 
