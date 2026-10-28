@@ -59,13 +59,64 @@ const RESPONSE_SCHEMA = {
   required: ['cards'],
 }
 
-const SEGMENT_RESPONSE_SCHEMA = {
-  type: 'OBJECT',
-  properties: { parts: { type: 'ARRAY', items: { type: 'STRING' } } },
-  required: ['parts'],
+const WORDS_PER_CHUNK = 200
+
+function countWords(value: string) {
+  return value.match(/\S+/g)?.length ?? 0
 }
 
-const SEGMENTATION_PROMPT = "You are an expert textbook editor. Split the supplied text into small, coherent learning sections for flashcard generation. Keep sentences together when they explain the same idea. Never split a sentence or separate a heading from its explanation, list, table, example, or steps. Keep a complete definition, mechanism, classification, or connected topic together if splitting would damage its meaning. Split only at natural boundaries between ideas, not after an arbitrary number of sentences. Preserve every word, heading, list item, number, table row, and original order exactly. Do not summarize, rewrite, translate, omit, or add anything. Keep tables and diagrams intact when possible. Make each section small enough to process independently, without losing context. Include all source text exactly once. Return valid JSON only: { \"parts\": [\"complete source section\", \"...\"] }. No explanations or Markdown fences.";
+/** Split locally at natural boundaries so the AI never receives the whole source at once. */
+function splitIntoWordChunks(source: string, targetWords = WORDS_PER_CHUNK) {
+  const chunks: string[] = []
+  let current = ''
+  let currentWords = 0
+
+  const flush = () => {
+    if (current.trim()) chunks.push(current.trim())
+    current = ''
+    currentWords = 0
+  }
+
+  const addBlock = (block: string) => {
+    const trimmed = block.trim()
+    if (!trimmed) return
+    const words = countWords(trimmed)
+    // Keep tables and structured lists intact instead of cutting through their rows.
+    const isStructuredBlock = /(^|\n)\s*\|/.test(trimmed) || /(^|\n)\s*(?:[-*+]\s|\d+[.)]\s)/.test(trimmed)
+    if (words > targetWords && !isStructuredBlock) {
+      const sentences = trimmed.match(/[^.!?؟。]+(?:[.!?؟。]+[”’"')\]]*)?(?:\s+|$)/gu) ?? [trimmed]
+      for (const sentence of sentences) {
+        const sentenceText = sentence.trim()
+        if (!sentenceText) continue
+        const sentenceWords = countWords(sentenceText)
+        if (current && currentWords + sentenceWords > targetWords) flush()
+        if (sentenceWords > targetWords) {
+          // Extremely long sentence: split on word boundaries as a last resort.
+          const tokens = sentenceText.match(/\S+\s*/g) ?? [sentenceText]
+          for (const token of tokens) {
+            const tokenWords = countWords(token)
+            if (current && currentWords + tokenWords > targetWords) flush()
+            current += token
+            currentWords += tokenWords
+          }
+        } else {
+          current += (current ? ' ' : '') + sentenceText
+          currentWords += sentenceWords
+        }
+      }
+      return
+    }
+    if (current && currentWords + words > targetWords) flush()
+    current += (current ? '\n\n' : '') + trimmed
+    currentWords += words
+    // Oversized tables/lists remain intact, then start a fresh chunk.
+    if (isStructuredBlock && currentWords >= targetWords) flush()
+  }
+
+  for (const block of source.replace(/\r\n?/g, '\n').split(/\n\s*\n/)) addBlock(block)
+  flush()
+  return chunks
+}
 
 export function SourcePanel({ terms, onGenerate }: Props) {
   const [text, setText] = useState('')
@@ -164,50 +215,16 @@ export function SourcePanel({ terms, onGenerate }: Props) {
     setError('')
     try {
       const source = text.trim()
-      // Process very long documents in paragraph-aware batches to keep the editor
-      // responsive and avoid oversized Gemini requests. Preserve batch order.
-      const chunks: string[] = []
-      let batch = ''
-      for (const paragraph of source.split(/\n\s*\n/)) {
-        const next = paragraph.trim()
-        if (!next) continue
-        if (batch && batch.length + next.length + 2 > 12000) {
-          chunks.push(batch)
-          batch = ''
-        }
-        if (next.length > 12000) {
-          if (batch) chunks.push(batch)
-          batch = ''
-          for (let i = 0; i < next.length; i += 12000) chunks.push(next.slice(i, i + 12000))
-        } else {
-          batch += (batch ? '\n\n' : '') + next
-        }
-      }
-      if (batch) chunks.push(batch)
+      const totalWords = countWords(source)
+      const chunks = splitIntoWordChunks(source)
+      if (!chunks.length) throw new GeminiError('مفيش نص صالح للتحويل.')
+      setError(`النص فيه حوالي ${totalWords} كلمة؛ هيتعالج على ${chunks.length} جزء، حوالي ${WORDS_PER_CHUNK} كلمة للجزء.`)
 
-      // Stage 1: ask the AI to split the text into coherent sections before making cards.
-      const sections: string[] = []
-      for (let i = 0; i < chunks.length; i++) {
-        setError(`المرحلة ١/٢: تقسيم النص لأجزاء مترابطة — الجزء ${i + 1} من ${chunks.length}…`)
-        const raw = await geminiGenerate(config, chunks[i], {
-          system: SEGMENTATION_PROMPT,
-          signal: controller.signal,
-          responseSchema: SEGMENT_RESPONSE_SCHEMA,
-          temperature: 0.1,
-        })
-        const parsed = JSON.parse(raw.replace(/\x60\x60\x60json|\x60\x60\x60/g, '').trim()) as { parts?: unknown }
-        const parts = (Array.isArray(parsed.parts) ? parsed.parts : [])
-          .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
-          .map((part) => part.trim())
-        sections.push(...parts)
-      }
-      if (!sections.length) throw new GeminiError('الذكاء الاصطناعي مقدرش يقسم النص لأجزاء. جرّب تاني.')
-
-      // Stage 2: generate cloze cards from each section, in source order.
+      // Process one small chunk per request; never send the entire source to the model.
       const list: string[] = []
-      for (let i = 0; i < sections.length; i++) {
-        setError(`المرحلة ٢/٢: تفريغ الجزء ${i + 1} من ${sections.length} لكروت…`)
-        const raw = await geminiGenerate(config, sections[i], {
+      for (let i = 0; i < chunks.length; i++) {
+        setError(`جاري تفريغ الجزء ${i + 1} من ${chunks.length} لكروت (${Math.min(totalWords, (i + 1) * WORDS_PER_CHUNK)} كلمة تقريبًا من ${totalWords})…`)
+        const raw = await geminiGenerate(config, chunks[i], {
           system: activePrompt,
           signal: controller.signal,
           responseSchema: RESPONSE_SCHEMA,
