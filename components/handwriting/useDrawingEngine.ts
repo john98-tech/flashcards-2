@@ -181,6 +181,7 @@ export function useDrawingEngine(
   const fallbackListenersRef = useRef<(() => void) | null>(null)
   const renderScaleRef = useRef(MIN_RENDER_SCALE)
   const pendingScaleRef = useRef<number | null>(null)
+  const toolRef = useRef<DrawingTool>('pen')
   const colorRef = useRef(COLORS[0])
   const penSizeRef = useRef(5)
   const eraserSizeRef = useRef(34)
@@ -198,6 +199,13 @@ export function useDrawingEngine(
 
   onChangeRef.current = onChange
   onErrorRef.current = onError
+  // Keep current values in refs so draft persistence stays referentially stable.
+  // Otherwise changing the tool/color/size re-creates persistDraft -> updatePageList ->
+  // the canvas initialization effect, whose cleanup clears the active drawing surface.
+  toolRef.current = tool
+  colorRef.current = color
+  penSizeRef.current = penSize
+  eraserSizeRef.current = eraserSize
 
   const persistDraft = useCallback(() => {
     if (!storageKey) return
@@ -207,15 +215,15 @@ export function useDrawingEngine(
         currentPage: currentPageRef.current,
         nextPageId: nextPageIdRef.current,
         pages: pagesRef.current.map(({ id, strokes }) => ({ id, strokes })),
-        tool,
-        color,
-        penSize,
-        eraserSize,
+        tool: toolRef.current,
+        color: colorRef.current,
+        penSize: penSizeRef.current,
+        eraserSize: eraserSizeRef.current,
       }))
     } catch (error) {
       console.error('Unable to save the handwriting draft.', error)
     }
-  }, [storageKey, tool, color, penSize, eraserSize])
+  }, [storageKey])
 
   const reportError = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : 'تعذر إكمال عملية الكتابة.'
@@ -466,7 +474,11 @@ export function useDrawingEngine(
     finishStroke(event.pointerId)
   }, [finishStroke, schedulePoints])
 
-  const setCurrentTool = useCallback((nextTool: DrawingTool) => { setTool(nextTool); persistDraft() }, [persistDraft])
+  const setCurrentTool = useCallback((nextTool: DrawingTool) => {
+    toolRef.current = nextTool
+    setTool(nextTool)
+    persistDraft()
+  }, [persistDraft])
 
   const changePenColor = useCallback((nextColor: string) => {
     if (!COLORS.includes(nextColor)) return
@@ -477,7 +489,7 @@ export function useDrawingEngine(
 
   const changeBrushSize = useCallback((size: number) => {
     if (!Number.isFinite(size)) return
-    if (tool === 'pen') {
+    if (toolRef.current === 'pen') {
       const next = Math.max(2, Math.min(22, size))
       penSizeRef.current = next
       setPenSize(next)
@@ -487,7 +499,7 @@ export function useDrawingEngine(
       setEraserSize(next)
     }
     persistDraft()
-  }, [tool, persistDraft])
+  }, [persistDraft])
 
   const applyHistory = useCallback((direction: 'undo' | 'redo') => {
     if (strokeRef.current || switchingRef.current) return
@@ -694,7 +706,7 @@ export function useDrawingEngine(
             })
             currentPageRef.current = Math.max(0, Math.min(pagesRef.current.length - 1, saved.currentPage ?? 0))
             nextPageIdRef.current = Math.max(saved.nextPageId ?? 1, ...pagesRef.current.map((page) => page.id + 1))
-            if (saved.tool === 'pen' || saved.tool === 'eraser') setTool(saved.tool)
+            if (saved.tool === 'pen' || saved.tool === 'eraser') { toolRef.current = saved.tool; setTool(saved.tool) }
             if (typeof saved.color === 'string' && COLORS.includes(saved.color)) { colorRef.current = saved.color; setColor(saved.color) }
             if (Number.isFinite(saved.penSize)) { penSizeRef.current = Math.max(2, Math.min(22, saved.penSize!)); setPenSize(penSizeRef.current) }
             if (Number.isFinite(saved.eraserSize)) { eraserSizeRef.current = Math.max(12, Math.min(96, saved.eraserSize!)); setEraserSize(eraserSizeRef.current) }
