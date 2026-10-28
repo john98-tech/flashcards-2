@@ -30,8 +30,10 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))
+  // These machine-to-machine endpoints enforce their own QStash signature / CRON_SECRET.
+  const isVerifiedMachineEndpoint = path === '/api/ai-correction/worker' || path === '/api/ai-correction/cleanup'
 
-  if (!user && !isPublic) {
+  if (!user && !isPublic && !isVerifiedMachineEndpoint) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.search = path === '/' ? '' : `?next=${encodeURIComponent(path)}`
