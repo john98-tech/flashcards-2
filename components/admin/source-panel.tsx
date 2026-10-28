@@ -240,16 +240,22 @@ export function SourcePanel({ terms, onGenerate }: Props) {
       setError('')
 
       const termList = parseTerms(terms)
-      const cards: Card[] = list.map((cloze) => {
+      const cards: Card[] = list.flatMap((rawCard) => {
+        const cloze = rawCard.trim()
+        const plain = cloze.replace(/\{\{|\}\}/g, '').trim()
+        // Some model responses contain empty cloze markers such as {{}}.
+        // Never add a visually empty card to the editor.
+        if (!plain) return []
+
         const opens = (cloze.match(/\{\{/g) ?? []).length
         const closes = (cloze.match(/\}\}/g) ?? []).length
         // Broken or missing blanks: fall back to the local auto-blanking for that card only.
-        if (opens === 0 || opens !== closes) {
-          const plain = cloze.replace(/\{\{|\}\}/g, '')
-          return { id: newId(), cloze: autoCloze(plain, { numbers, abbreviations, terms: termList }) }
+        if (opens === 0 || opens !== closes || !/\{\{[^{}]+\}\}/.test(cloze)) {
+          return [{ id: newId(), cloze: autoCloze(plain, { numbers, abbreviations, terms: termList }) }]
         }
-        return { id: newId(), cloze }
+        return [{ id: newId(), cloze }]
       })
+      if (!cards.length) throw new GeminiError('الذكاء الاصطناعي رجّع كروت فاضية. جرّب تاني أو رجّع البرومبت الافتراضي من قائمة البرومبت.')
       onGenerate(cards)
       clearEditor()
     } catch (err) {
