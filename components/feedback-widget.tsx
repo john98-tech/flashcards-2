@@ -103,14 +103,15 @@ export function FeedbackWidget() {
     if (!ready) return
     if (!originalTitleRef.current) originalTitleRef.current = document.title
     if (originalFaviconRef.current === null) {
-      originalFaviconRef.current = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.href || '/logo.png'
+      originalFaviconRef.current = '/favicon.svg?v=2'
     }
     const icon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
     if (unreadCount > 0) {
       document.title = `(${unreadCount > 9 ? '9+' : unreadCount}) رسالة جديدة | ${originalTitleRef.current}`
       if (icon) {
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><image href="${originalFaviconRef.current}" width="64" height="64"/><circle cx="48" cy="15" r="14" fill="#ef4444" stroke="white" stroke-width="4"/><text x="48" y="20" font-size="14" font-weight="bold" text-anchor="middle" fill="white">${unreadCount > 9 ? '9+' : unreadCount}</text></svg>`
-        icon.href = `data:image/svg+xml,${encodeURIComponent(svg)}`
+        const badge = unreadCount > 9 ? '9+' : String(unreadCount)
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#075e54"/><path d="M14 18c7-3 13-2 18 2v27c-5-4-11-5-18-2z" fill="#fff"/><path d="M50 18c-7-3-13-2-18 2v27c5-4 11-5 18-2z" fill="#d9fdd3"/><path d="M32 20v27" stroke="#075e54" stroke-width="2"/><circle cx="49" cy="15" r="14" fill="#ef4444" stroke="#fff" stroke-width="3"/><text x="49" y="${badge.length > 1 ? 19 : 20}" font-size="${badge.length > 1 ? 10 : 14}" font-family="Arial,sans-serif" font-weight="bold" text-anchor="middle" fill="#fff">${badge}</text></svg>`
+        icon.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
       }
     } else {
       document.title = originalTitleRef.current
