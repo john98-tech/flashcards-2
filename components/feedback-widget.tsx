@@ -31,7 +31,7 @@ export function FeedbackWidget() {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const initialLoadDoneRef = useRef(false)
-  const seenMessageIdsRef = useRef<Set<string>>(new Set())
+  const seenMessageIdsRef = useRef<Set<number>>(new Set())
   const originalTitleRef = useRef('')
   const originalFaviconRef = useRef<string | null>(null)
   const [threadId, setThreadId] = useState('')
