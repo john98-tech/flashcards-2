@@ -23,6 +23,13 @@ export type FeedbackMessage = {
 
 export async function loadFeedbackMessages(threadId: string): Promise<FeedbackMessage[]> {
   if (!UUID_RE.test(threadId)) return []
+  // Keep feedback history to a rolling seven-day window and remove expired attachment files too.
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const client = db()
+  const { data: expiredRows } = await client.from('feedback_messages').select('attachment_url').lt('created_at', cutoff).not('attachment_url', 'is', null).limit(1000)
+  const expiredPaths = (expiredRows ?? []).map(row => row.attachment_url).filter((path): path is string => typeof path === 'string' && path.length > 0)
+  if (expiredPaths.length) await client.storage.from(BUCKET).remove(expiredPaths)
+  await client.from('feedback_messages').delete().lt('created_at', cutoff)
   const { data, error } = await db().from('feedback_messages')
     .select('id, thread_id, sender_role, message, page_path, page_title, created_at, attachment_url, attachment_type, attachment_name')
     .eq('thread_id', threadId).order('created_at', { ascending: true }).limit(300)
