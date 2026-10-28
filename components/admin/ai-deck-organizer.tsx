@@ -117,6 +117,8 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
     const prompt = chatInput.trim()
     if (!prompt) return
     if (!config) { setShowKey(true); return }
+    const controller = new AbortController()
+    abortRef.current = controller
     const history = [...messages, { role: 'user' as const, text: prompt }]
     setMessages(history); setChatInput(''); setBusy(true); setError(''); setNotice('')
     try {
