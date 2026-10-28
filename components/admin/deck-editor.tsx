@@ -45,14 +45,7 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
       if (raw) {
         const saved = JSON.parse(raw) as { deck?: Deck; terms?: string; page?: number; active?: boolean; selectedGroupId?: string; savedIds?: { deckId: string; ids: string[] } | null }
         if (saved.deck && Array.isArray(saved.deck.cards)) {
-          // Remove blank cards left in a previously saved local draft by older generation runs.
-          const cleanedDeck = {
-            ...saved.deck,
-            cards: saved.deck.cards.filter((card) =>
-              typeof card?.cloze === 'string' && card.cloze.replace(/\{\{|\}\}/g, '').trim().length > 0,
-            ),
-          }
-          setDeck(cleanedDeck)
+          setDeck(saved.deck)
           setTerms(typeof saved.terms === 'string' ? saved.terms : '')
           setPage(Number.isInteger(saved.page) ? Math.max(0, saved.page!) : 0)
           setActive(Boolean(saved.active))
@@ -100,23 +93,8 @@ export function DeckEditor({ existingDecks, existingGroups }: { existingDecks: D
   }, [])
 
   const addCards = (cards: Card[]) => {
-    // Ignore empty generated cards and clean any empty cards already in the editor.
-    const validCards = cards.filter((card) =>
-      typeof card?.cloze === 'string' && card.cloze.replace(/\{\{|\}\}/g, '').trim().length > 0,
-    )
-    const existingValid = deck.cards.filter((card) =>
-      typeof card?.cloze === 'string' && card.cloze.replace(/\{\{|\}\}/g, '').trim().length > 0,
-    )
-    const total = existingValid.length + validCards.length
-    setDeck((current) => ({
-      ...current,
-      cards: [
-        ...current.cards.filter((card) =>
-          typeof card?.cloze === 'string' && card.cloze.replace(/\{\{|\}\}/g, '').trim().length > 0,
-        ),
-        ...validCards,
-      ],
-    }))
+    const total = deck.cards.length + cards.length
+    setCards((existing) => [...existing, ...cards])
     setPage(Math.max(0, Math.ceil(total / PAGE_SIZE) - 1))
   }
     // ===== ترتيب الكروت زي File Explorer =====
