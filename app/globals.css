@@ -1140,6 +1140,20 @@ footer.mt-auto::before {
   background: color-mix(in srgb, var(--card, #fff) 92%, transparent);
   transform: translateY(-50%) rotate(45deg);
 }
+/* Disable rotating contact hints; only show a message hint beside the chat when needed. */
+.floating-contact-hint { display: none !important; }
+.feedback-message-hint {
+  position: absolute; right: calc(100% + 12px); top: 50%; z-index: 6;
+  padding: 9px 13px; border-radius: 12px; white-space: nowrap;
+  color: white; background: #dc2626; font-size: 12px; font-weight: 800;
+  box-shadow: 0 8px 24px rgb(15 23 42 / .2); pointer-events: none;
+  transform: translateY(-50%); animation: feedback-hint-pop .25s ease-out both;
+}
+.feedback-message-hint::after {
+  content: ''; position: absolute; top: 50%; right: -5px; width: 9px; height: 9px;
+  background: #dc2626; transform: translateY(-50%) rotate(45deg);
+}
+@keyframes feedback-hint-pop { from { opacity: 0; translate: 6px 0; } to { opacity: 1; translate: 0 0; } }
 /* Show one floating hint at a time, in a repeating sequence. */
 .floating-contact-hint-whatsapp { animation-delay: 0s; }
 .floating-contact-hint-facebook { animation-delay: 4s; }
