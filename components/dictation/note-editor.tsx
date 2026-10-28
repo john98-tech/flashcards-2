@@ -359,12 +359,12 @@ export function NoteEditor({
     mountedRef.current = true
     const storageKey = correctionJobStorageKey(lessonId)
     const existingJobId = localStorage.getItem(storageKey)
-    if (!existingJobId) return
+    if (!existingJobId || !config?.apiKey || config.provider === 'groq') return
     const controller = new AbortController()
     gradingAbortRef.current = controller
     activeJobIdRef.current = existingJobId
     setGrading(true)
-    if (!config?.apiKey || config.provider === 'groq') return\n    void waitForCorrectionJob(existingJobId, config.apiKey, controller.signal)
+    void waitForCorrectionJob(existingJobId, config.apiKey, controller.signal)
       .then((completed) => {
         if (mountedRef.current) showJobResult(completed)
       })
