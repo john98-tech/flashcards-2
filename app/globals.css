@@ -1140,8 +1140,7 @@ footer.mt-auto::before {
   background: color-mix(in srgb, var(--card, #fff) 92%, transparent);
   transform: translateY(-50%) rotate(45deg);
 }
-/* Disable rotating contact hints; only show a message hint beside the chat when needed. */
-.floating-contact-hint { display: none !important; }
+/* The three contact hints rotate independently; the chat hint switches to a new-message alert when needed. */
 .feedback-message-hint {
   position: absolute; right: calc(100% + 12px); top: 50%; z-index: 6;
   padding: 9px 13px; border-radius: 12px; white-space: nowrap;
