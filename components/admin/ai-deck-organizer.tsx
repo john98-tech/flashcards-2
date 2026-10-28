@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { Bot, Loader2, MessageCircle, Sparkles } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Bot, Loader2, MessageCircle, Sparkles, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ApiKeyDialog } from '@/components/gemini/api-key-dialog'
 import { GeminiError, generate, useGeminiConfig } from '@/lib/gemini'
@@ -32,6 +32,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
   const [sourceCards, setSourceCards] = useState<Card[]>([])
   const [sourceDeckIds, setSourceDeckIds] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
@@ -52,6 +53,8 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
 
   const makePlan = async () => {
     if (!config) { setShowKey(true); return }
+    const controller = new AbortController()
+    abortRef.current = controller
     setBusy(true); setError(''); setNotice('')
     try {
       const { cards } = await getCards()
@@ -79,7 +82,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
         setNotice(`جاري تنظيم الدفعة ${batchIndex + 1} من ${batches.length}...`)
         const current = batches[batchIndex]
         const prompt = `نظّم الدفعة الحالية من بطاقات مجموعة "${groupName}" إلى مجموعات ودروس مناسبة. أرجع JSON حسب النظام، ووزّع كل index محلي مرة واحدة بالضبط. لا تغيّر النصوص. البطاقات: ${JSON.stringify(current.map((c, i) => ({ index: i, text: c.text })))}`
-        const response = await generate(config, prompt, { system: config.provider === 'groq' ? GROQ_SYSTEM : SYSTEM, json: true, temperature: 0.1 })
+        const response = await generate(config, prompt, { system: config.provider === 'groq' ? GROQ_SYSTEM : SYSTEM, json: true, temperature: 0.1, signal: controller.signal })
         const part = parsePlan(response)
         const used = part.decks.flatMap(deck => deck.cardIndexes)
         if (used.some(i => !Number.isInteger(i) || i < 0 || i >= current.length) || new Set(used).size !== used.length || used.length !== current.length) {
@@ -107,7 +110,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
       setPlan(next)
       setMessages([{ role: 'assistant', text: next.explanation || `اقترحت ${next.groups.length} مجموعات و${next.decks.length} دروس. راجع الخطة قبل التطبيق.` }])
     } catch (e) { setError(e instanceof Error ? e.message : 'حصل خطأ أثناء التنظيم.') }
-    finally { setBusy(false) }
+    finally { if (abortRef.current === controller) abortRef.current = null; setBusy(false) }
   }
 
   const sendChat = async () => {
@@ -134,7 +137,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
         loadedCards: availableCards.map((card, index) => ({ index, id: card.id, text: card.cloze, deckId: card.__sourceDeck }))
       }
       const request = 'بيانات الإدارة الحالية بصيغة JSON: ' + JSON.stringify(catalog) + '\nسجل المحادثة السابقة: ' + JSON.stringify(history.slice(-12)) + '\nطلب المستخدم الحالي: ' + prompt + '\nأرجع JSON فقط حسب تعليمات النظام. إذا كان طلب إدارة فأنشئ actions دقيقة قابلة للتنفيذ.'
-      const response = await generate(config, request, { system: config.provider === 'groq' ? GROQ_SYSTEM : SYSTEM, json: true, temperature: 0.1 })
+      const response = await generate(config, request, { system: config.provider === 'groq' ? GROQ_SYSTEM : SYSTEM, json: true, temperature: 0.1, signal: controller.signal })
       const cleaned = response.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
       const parsed = JSON.parse(cleaned) as { actions?: Array<Record<string, unknown>>; explanation?: string; groups?: string[]; decks?: PlanDeck[] }
       if (Array.isArray(parsed.actions)) {
@@ -290,7 +293,7 @@ export function AiDeckOrganizer({ decks, groups }: { decks: DeckSummary[]; group
       <div className="flex items-center gap-2"><MessageCircle className="size-5" /><h3 className="font-semibold">شات مع Gemini</h3></div>
       <p className="text-sm text-muted-foreground">الشات يقدر ينفّذ أوامر فعلية بعد تأكيدك: إنشاء/تعديل/نقل/حذف المجموعات والدروس، تعديل أو حذف الكروت، واستعادة المحذوفات. اكتب طلبك بوضوح، وسيعرض الإجراءات قبل تنفيذها.</p>
       <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">{messages.map((m,i)=><div key={i} className={`max-w-full whitespace-pre-wrap rounded-lg p-3 text-sm ${m.role === 'user' ? 'self-start bg-muted' : 'self-stretch border'}`}>{m.role === 'assistant' && <Bot className="mb-1 inline size-4" />} {m.text}</div>)}</div>
-      <div className="flex gap-2"><textarea value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="مثال: أنشئ مجموعة جديدة باسم الجهاز الهضمي، وانقل درس كذا إليها..." rows={2} className="min-w-0 flex-1 resize-y rounded-lg border bg-background px-3 py-2 text-sm" /><Button onClick={sendChat} disabled={busy || !chatInput.trim()}>{busy ? <Loader2 className="size-4 animate-spin" /> : 'إرسال'}</Button></div>
+      <div className="flex gap-2"><textarea value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="مثال: أنشئ مجموعة جديدة باسم الجهاز الهضمي، وانقل درس كذا إليها..." rows={2} className="min-w-0 flex-1 resize-y rounded-lg border bg-background px-3 py-2 text-sm" /><Button onClick={sendChat} disabled={busy || !chatInput.trim()}>{busy ? <Loader2 className="size-4 animate-spin" /> : 'إرسال'}</Button>{busy && <Button type="button" variant="destructive" size="icon" onClick={() => abortRef.current?.abort()} aria-label="إيقاف الذكاء الاصطناعي" title="إيقاف الذكاء الاصطناعي"><Square className="size-4 fill-current" /></Button>}</div>
     </section>
     {showKey && <ApiKeyDialog open={showKey} onClose={() => setShowKey(false)} />}
   </div>
