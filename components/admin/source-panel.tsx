@@ -59,6 +59,14 @@ const RESPONSE_SCHEMA = {
   required: ['cards'],
 }
 
+const SEGMENT_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: { parts: { type: 'ARRAY', items: { type: 'STRING' } } },
+  required: ['parts'],
+}
+
+const SEGMENTATION_PROMPT = "You are an expert textbook editor. Split the supplied text into small, coherent learning sections for flashcard generation. Keep sentences together when they explain the same idea. Never split a sentence or separate a heading from its explanation, list, table, example, or steps. Keep a complete definition, mechanism, classification, or connected topic together if splitting would damage its meaning. Split only at natural boundaries between ideas, not after an arbitrary number of sentences. Preserve every word, heading, list item, number, table row, and original order exactly. Do not summarize, rewrite, translate, omit, or add anything. Keep tables and diagrams intact when possible. Make each section small enough to process independently, without losing context. Include all source text exactly once. Return valid JSON only: { \"parts\": [\"complete source section\", \"...\"] }. No explanations or Markdown fences.";
+
 export function SourcePanel({ terms, onGenerate }: Props) {
   const [text, setText] = useState('')
   const [resetKey, setResetKey] = useState(0)
@@ -177,19 +185,38 @@ export function SourcePanel({ terms, onGenerate }: Props) {
       }
       if (batch) chunks.push(batch)
 
-      const list: string[] = []
+      // Stage 1: ask the AI to split the text into coherent sections before making cards.
+      const sections: string[] = []
       for (let i = 0; i < chunks.length; i++) {
-        setError(chunks.length > 1 ? `Gemini بيحوّل الجزء ${i + 1} من ${chunks.length}…` : '')
+        setError(`المرحلة ١/٢: تقسيم النص لأجزاء مترابطة — الجزء ${i + 1} من ${chunks.length}…`)
         const raw = await geminiGenerate(config, chunks[i], {
+          system: SEGMENTATION_PROMPT,
+          signal: controller.signal,
+          responseSchema: SEGMENT_RESPONSE_SCHEMA,
+          temperature: 0.1,
+        })
+        const parsed = JSON.parse(raw.replace(/\x60\x60\x60json|\x60\x60\x60/g, '').trim()) as { parts?: unknown }
+        const parts = (Array.isArray(parsed.parts) ? parsed.parts : [])
+          .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+          .map((part) => part.trim())
+        sections.push(...parts)
+      }
+      if (!sections.length) throw new GeminiError('الذكاء الاصطناعي مقدرش يقسم النص لأجزاء. جرّب تاني.')
+
+      // Stage 2: generate cloze cards from each section, in source order.
+      const list: string[] = []
+      for (let i = 0; i < sections.length; i++) {
+        setError(`المرحلة ٢/٢: تفريغ الجزء ${i + 1} من ${sections.length} لكروت…`)
+        const raw = await geminiGenerate(config, sections[i], {
           system: activePrompt,
           signal: controller.signal,
           responseSchema: RESPONSE_SCHEMA,
           temperature: 0.2,
         })
-        const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { cards?: unknown }
+        const parsed = JSON.parse(raw.replace(/\x60\x60\x60json|\x60\x60\x60/g, '').trim()) as { cards?: unknown }
         const partCards = (Array.isArray(parsed.cards) ? parsed.cards : [])
-          .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
-          .map((c) => c.trim())
+          .filter((card): card is string => typeof card === 'string' && card.trim().length > 0)
+          .map((card) => card.trim())
         list.push(...partCards)
       }
       if (list.length === 0) throw new GeminiError('Gemini مرجّعش كروت. جرّب تاني أو عدّل البرومبت.')
