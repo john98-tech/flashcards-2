@@ -24,7 +24,8 @@ export const metadata: Metadata = {
   applicationName: 'Kart w Ketab',
   generator: 'Next.js',
   icons: {
-    icon: [{ url: '/logo.png', type: 'image/png' }],
+    icon: [{ url: '/favicon.svg?v=2', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg?v=2',
     apple: '/logo.png',
   },
 }
