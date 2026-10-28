@@ -152,7 +152,6 @@ async function geminiInteractionRequest(url: string, apiKey: string, init: Reque
       'Content-Type': 'application/json',
       'x-goog-api-key': apiKey,
       'Api-Revision': GEMINI_API_REVISION,
-      ...init.headers,
     },
     cache: 'no-store',
   })
@@ -171,7 +170,7 @@ async function waitForCorrectionJob(jobId: string, apiKey: string, signal: Abort
     if (data.status === 'completed') return { status: 'completed', result: { raw: interactionOutput(data) } }
     if (data.status === 'failed') return { status: 'failed', error: data.errors?.map((item: any) => item?.message).filter(Boolean).join('\n') || 'Gemini تعذر عليه إكمال التصحيح.' }
     if (data.status === 'cancelled') return { status: 'cancelled' }
-    if (data.status === 'incomplete') return { status: 'incomplete', result: { raw: interactionOutput(data) }, error: 'Gemini أنهى المهمة بإجابة غير مكتملة.' }
+    if (data.status === 'incomplete') return { status: 'completed', result: { raw: interactionOutput(data) } }
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         signal.removeEventListener('abort', onAbort)
