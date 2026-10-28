@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic'
 import { ArrowRight, BookOpen, KeyRound, Loader2, PenLine, Sparkles, Square, Zap } from 'lucide-react'
 import { ApiKeyDialog } from '@/components/gemini/api-key-dialog'
 import type { HandwritingEditorHandle } from '@/components/handwriting/HandwritingEditor'
-import { GeminiError, generate, useGeminiConfig } from '@/lib/gemini'
+import { useGeminiConfig } from '@/lib/gemini'
 import { DEFAULT_DICTATION_GRADING_PROMPT } from '@/lib/dictation/types'
 
 const HandwritingEditor = dynamic(
@@ -75,7 +75,7 @@ function parseGradingReport(raw: string): GradingReport | null {
 
 type LessonImage = { path: string; name: string; url: string }
 
-async function blobToBase64(blob: Blob) {
+async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: string }> {
   // Compress handwriting pages before sending them to the job API; the key and
   // image payload are never written to browser logs.
   let source = blob
@@ -98,7 +98,7 @@ async function blobToBase64(blob: Blob) {
   } catch {
     source = blob
   }
-  return new Promise<string>((resolve, reject) => {
+  const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result !== 'string') {
@@ -115,6 +115,7 @@ async function blobToBase64(blob: Blob) {
     reader.onerror = () => reject(reader.error ?? new Error('تعذر قراءة صورة صفحة الإجابة.'))
     reader.readAsDataURL(source)
   })
+  return { mimeType: source.type || blob.type || 'image/jpeg', data }
 }
 
 const correctionJobStorageKey = (lessonId: string) => `kwk:ai-correction-job:${lessonId}`
@@ -210,10 +211,7 @@ export function NoteEditor({
         setNotice('اكتب إجابتك الأول قبل التصحيح.')
         return
       }
-      answerImages = await Promise.all(pageBlobs.map(async (blob) => ({
-        mimeType: blob.type || 'image/jpeg',
-        data: await blobToBase64(blob),
-      })))
+      answerImages = await Promise.all(pageBlobs.map((blob) => blobToBase64(blob)))
 
       const prompt = [
         gradingPrompt.trim() || DEFAULT_DICTATION_GRADING_PROMPT,
