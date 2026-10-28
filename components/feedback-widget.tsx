@@ -49,7 +49,7 @@ export function FeedbackWidget() {
     })
   }
 
-  return <div className="fixed bottom-5 left-5 z-[80] flex flex-col items-start gap-3" dir="rtl">
+  return <div className="flex flex-col items-start gap-3" dir="rtl" style={{ position: "fixed", left: "20px", bottom: "20px", zIndex: 99999, isolation: "isolate" }}>
     {open && <section className="flex h-[min(76dvh,560px)] w-[min(92vw,380px)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl" aria-label="محادثة التعليقات">
       <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
         <div><h2 className="font-bold text-foreground">اقتراح أو مشكلة؟</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">علّق من نفس الصفحة اللي مضايقاك أو عايز تعدّل فيها. اسم الصفحة هيتبعت تلقائيًا، وتقدر تتابع الردود من هنا.</p></div>
@@ -69,7 +69,7 @@ export function FeedbackWidget() {
         <button type="submit" disabled={!ready || pending || !draft.trim() || !threadId} aria-label="إرسال التعليق" className="ux-btn inline-flex size-11 shrink-0 items-center justify-center rounded-xl disabled:cursor-not-allowed"><Send className="size-4" /></button>
       </form>
     </section>}
-    <button type="button" onClick={() => setOpen(value => !value)} className="ux-btn inline-flex min-h-12 items-center gap-2 rounded-full px-5 py-3 text-sm font-bold shadow-lg" aria-expanded={open}>
+    <button type="button" onClick={() => setOpen(value => !value)} className="inline-flex min-h-12 items-center gap-2 rounded-full border-2 border-white px-5 py-3 text-sm font-bold shadow-2xl" style={{ background: "#2563eb", color: "#ffffff", boxShadow: "0 8px 28px rgba(0,0,0,.35)", position: "relative", zIndex: 100000, visibility: "visible", opacity: 1 }} aria-expanded={open}>
       {open ? <X className="size-5" /> : <MessageCircle className="size-5" />}{open ? 'إغلاق' : 'تعليق / مشكلة'}
       {messages.some(message => message.sender_role === 'admin') && <span className="size-2 rounded-full bg-amber-300" aria-label="يوجد رد" />}
     </button>
