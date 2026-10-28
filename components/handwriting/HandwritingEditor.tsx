@@ -35,13 +35,14 @@ export type HandwritingEditorHandle = {
 }
 
 type Props = {
+  storageKey?: string
   maxPages?: number
   onChange?: (info: PageInfo) => void
   onError?: (message: string) => void
 }
 
 export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(function HandwritingEditor(
-  { maxPages = 10, onChange, onError },
+  { storageKey, maxPages = 10, onChange, onError },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -126,7 +127,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     exportPages,
     reportError,
     setRenderScale,
-  } = useDrawingEngine(canvasRef, shadowRef, { maxPages, onChange, onError: handleEngineError })
+  } = useDrawingEngine(canvasRef, shadowRef, { maxPages, storageKey, onChange, onError: handleEngineError })
 
   useImperativeHandle(ref, () => ({
     async exportPages() {
