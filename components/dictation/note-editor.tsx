@@ -120,6 +120,7 @@ async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: strin
 
 
 const correctionJobStorageKey = (lessonId: string) => `kwk:ai-correction-job:${lessonId}`
+const correctionIntentStorageKey = (lessonId: string) => `kwk:ai-correction-intent:${lessonId}`
 const pendingCorrectionStorageName = 'kwk-ai-correction-pending-v1'
 
 type PendingCorrection = { lessonId: string; body: string; savedAt: number }
@@ -296,6 +297,10 @@ export function NoteEditor({
       return
     }
 
+    // Mark the user's intent before any asynchronous image export/compression.
+    // If they refresh during preparation, the next page load can retry from the
+    // handwriting editor's own persisted content.
+    localStorage.setItem(correctionIntentStorageKey(lessonId), '1')
     const controller = new AbortController()
     gradingAbortRef.current = controller
     activeJobIdRef.current = null
@@ -309,6 +314,7 @@ export function NoteEditor({
     try {
       pageBlobs = await boardRef.current.exportPages()
       if (!pageBlobs.length) {
+        localStorage.removeItem(correctionIntentStorageKey(lessonId))
         setNotice('اكتب إجابتك الأول قبل التصحيح.')
         return
       }
@@ -367,6 +373,7 @@ export function NoteEditor({
       const jobId = created.id as string
       activeJobIdRef.current = jobId
       localStorage.setItem(correctionJobStorageKey(lessonId), jobId)
+      localStorage.removeItem(correctionIntentStorageKey(lessonId))
       await deletePendingCorrection(lessonId).catch(() => undefined)
       setNotice('') // The ID is persisted now, so refreshing can safely resume this interaction.
       if (controller.signal.aborted && userCancelledRef.current) {
@@ -394,6 +401,11 @@ export function NoteEditor({
         // Keep a persisted interaction ID if polling failed: the task may still be
         // running at Google and can be resumed when the page is reopened.
         activeJobIdRef.current = null
+        if (!localStorage.getItem(correctionJobStorageKey(lessonId))) {
+          void getPendingCorrection(lessonId).then((pending) => {
+            if (!pending) localStorage.removeItem(correctionIntentStorageKey(lessonId))
+          }).catch(() => undefined)
+        }
         if (mountedRef.current) {
           setGrading(false)
           const savedJob = localStorage.getItem(correctionJobStorageKey(lessonId))
@@ -457,6 +469,7 @@ export function NoteEditor({
     const restoreOrStartJob = async () => {
       const existingJobId = localStorage.getItem(storageKey)
       if (existingJobId) {
+        localStorage.removeItem(correctionIntentStorageKey(lessonId))
         activeJobIdRef.current = existingJobId
         setGrading(true)
         const completed = await waitForCorrectionJob(existingJobId, config.apiKey, controller.signal)
@@ -467,7 +480,26 @@ export function NoteEditor({
       // No ID means refresh happened while the initial POST was in flight.
       // Re-submit the request saved in IndexedDB so the job can still finish.
       const pending = await getPendingCorrection(lessonId)
-      if (!pending || disposed || controller.signal.aborted) return
+      if (disposed || controller.signal.aborted) return
+      if (!pending) {
+        // Refresh may have happened while handwriting pages were still being
+        // exported/compressed. Wait for the editor to restore its saved content,
+        // then rerun the preparation stage automatically.
+        if (localStorage.getItem(correctionIntentStorageKey(lessonId))) {
+          for (let attempt = 0; attempt < 40; attempt += 1) {
+            if (disposed || controller.signal.aborted) return
+            if (boardRef.current?.hasContent()) {
+              void gradeAnswer()
+              return
+            }
+            await new Promise((resolve) => window.setTimeout(resolve, 250))
+          }
+          if (!disposed && mountedRef.current) {
+            setNotice('الإجابة محفوظة، لكن مساحة الكتابة لسه بتفتح. اضغط «صحّح بالذكاء الاصطناعي» مرة تانية.')
+          }
+        }
+        return
+      }
       setGrading(true)
       setNotice('بنستكمل بدء التصحيح بعد تحديث الصفحة…')
       const created = await geminiInteractionRequest(GEMINI_INTERACTIONS_API, config.apiKey, {
@@ -478,6 +510,7 @@ export function NoteEditor({
       if (typeof created?.id !== 'string') throw new Error('جوجل لم ترجع معرف المهمة أثناء الاستعادة.')
       const jobId = created.id as string
       localStorage.setItem(storageKey, jobId)
+      localStorage.removeItem(correctionIntentStorageKey(lessonId))
       await deletePendingCorrection(lessonId).catch(() => undefined)
       if (disposed || controller.signal.aborted) return
       activeJobIdRef.current = jobId
