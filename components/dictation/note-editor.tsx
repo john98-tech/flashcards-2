@@ -113,7 +113,7 @@ export function NoteEditor({
   studentText: string
   studentImages: LessonImage[]
 }) {
-  const boardRef = useRef<HandwritingEditorHandle>(null)
+  const boardRef = useRef<HandwritingEditor storageKey={`sammaa-dictation-answer-v1-${lessonId}`}Handle>(null)
   const [keyOpen, setKeyOpen] = useState(false)
   const [grading, setGrading] = useState(false)
   const [notice, setNotice] = useState('')
