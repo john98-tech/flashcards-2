@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   if (
     !body.apiKey || typeof body.apiKey !== 'string' || body.apiKey.length > 512 ||
     !body.model || typeof body.model !== 'string' || body.model.length > 200 ||
-    !body.prompt || typeof body.prompt !== 'string' || body.prompt.length > 200_000 ||
+    !body.prompt || typeof body.prompt !== 'string' || body.prompt.length > 2_500_000 ||
     (body.provider !== 'gemini' && body.provider !== 'groq')
   ) {
     return jsonError('بيانات التصحيح ناقصة أو غير صالحة.', 400)
