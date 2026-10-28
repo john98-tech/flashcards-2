@@ -121,6 +121,7 @@ async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: strin
 
 const correctionJobStorageKey = (lessonId: string) => `kwk:ai-correction-job:${lessonId}`
 const correctionIntentStorageKey = (lessonId: string) => `kwk:ai-correction-intent:${lessonId}`
+const correctionResultStorageKey = (lessonId: string) => `kwk:ai-correction-result:${lessonId}`
 const pendingCorrectionStorageName = 'kwk-ai-correction-pending-v1'
 
 type PendingCorrection = { lessonId: string; body: string; savedAt: number }
@@ -283,6 +284,21 @@ export function NoteEditor({
   const [rawReply, setRawReply] = useState('')
   const { config } = useGeminiConfig()
 
+  // Keep the finished report across refreshes, not just the in-memory React state.
+  const showRawResult = (raw: string, persist = true) => {
+    if (persist) {
+      try { localStorage.setItem(correctionResultStorageKey(lessonId), raw) } catch {}
+    }
+    const parsed = parseGradingReport(raw)
+    if (parsed) {
+      setReport(parsed)
+      setRawReply('')
+    } else {
+      setReport(null)
+      setRawReply(raw)
+    }
+  }
+
   const gradeAnswer = async () => {
     if (!config) {
       setKeyOpen(true)
@@ -309,6 +325,7 @@ export function NoteEditor({
     setNotice('')
     setReport(null)
     setRawReply('')
+    try { localStorage.removeItem(correctionResultStorageKey(lessonId)) } catch {}
     let pageBlobs: Blob[] = []
     let answerImages: { mimeType: string; data: string }[] = []
     try {
@@ -333,9 +350,7 @@ export function NoteEditor({
         // Groq does not expose a compatible persisted background interaction API.
         // Keep Groq direct-from-browser, but use Gemini Background Interactions when Gemini is selected.
         const raw = await generate(config, prompt, { temperature: 0.1, json: true, images: answerImages, signal: controller.signal })
-        const parsed = parseGradingReport(raw)
-        if (parsed) setReport(parsed)
-        else setRawReply(raw)
+        showRawResult(raw)
         return
       }
 
@@ -386,9 +401,7 @@ export function NoteEditor({
       localStorage.removeItem(correctionJobStorageKey(lessonId))
       activeJobIdRef.current = null
       if (completed.status === 'completed' && typeof completed.result?.raw === 'string') {
-        const parsed = parseGradingReport(completed.result.raw)
-        if (parsed) setReport(parsed)
-        else setRawReply(completed.result.raw)
+        showRawResult(completed.result.raw)
       } else if (completed.status === 'cancelled') {
         setNotice('تم إيقاف التصحيح.')
       } else {
@@ -445,9 +458,7 @@ export function NoteEditor({
     localStorage.removeItem(correctionJobStorageKey(lessonId))
     activeJobIdRef.current = null
     if (completed.status === 'completed' && typeof completed.result?.raw === 'string') {
-      const parsed = parseGradingReport(completed.result.raw)
-      if (parsed) setReport(parsed)
-      else setRawReply(completed.result.raw)
+      showRawResult(completed.result.raw)
     } else if (completed.status === 'failed') {
       setNotice(completed.error || 'تعذر إكمال التصحيح. جرّب مرة أخرى.')
     } else if (completed.status === 'cancelled') {
@@ -460,6 +471,10 @@ export function NoteEditor({
 
   useEffect(() => {
     mountedRef.current = true
+    try {
+      const savedResult = localStorage.getItem(correctionResultStorageKey(lessonId))
+      if (savedResult) showRawResult(savedResult, false)
+    } catch {}
     const storageKey = correctionJobStorageKey(lessonId)
     if (!config?.apiKey || config.provider === 'groq') return
     const controller = new AbortController()
