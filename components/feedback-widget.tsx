@@ -49,7 +49,7 @@ export function FeedbackWidget() {
     })
   }
 
-  return <div className="flex flex-col items-start gap-3" dir="rtl" style={{ position: "fixed", left: "20px", bottom: "20px", zIndex: 99999, isolation: "isolate" }}>
+  return <div className="flex flex-col items-start gap-3" dir="rtl" style={{ position: "fixed", right: "20px", left: "auto", bottom: "88px", zIndex: 99999, isolation: "isolate" }}>
     {open && <section className="flex h-[min(76dvh,560px)] w-[min(92vw,380px)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl" aria-label="محادثة التعليقات">
       <header className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
         <div><h2 className="font-bold text-foreground">اقتراح أو مشكلة؟</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">علّق من نفس الصفحة اللي مضايقاك أو عايز تعدّل فيها. اسم الصفحة هيتبعت تلقائيًا، وتقدر تتابع الردود من هنا.</p></div>
