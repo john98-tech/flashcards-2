@@ -29,6 +29,7 @@ export default async function DictationLessonPage({ params }: PageProps<'/dictat
 
   return (
     <NoteEditor
+      lessonId={id}
       lessonTitle={full.lesson.title}
       subjectName={subject?.name ?? ''}
       referenceText={full.reference.kind === 'text' ? full.reference.text : ''}
