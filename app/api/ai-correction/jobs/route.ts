@@ -56,6 +56,15 @@ export async function POST(request: Request) {
     return jsonError('إعداد التصحيح في الخلفية غير مكتمل على الاستضافة.', 503)
   }
 
+  const { data: activeJobs, error: activeJobsError } = await db()
+    .from('ai_correction_jobs')
+    .select('id')
+    .eq('owner_id', session.id)
+    .in('status', ['queued', 'processing'])
+    .limit(1)
+  if (activeJobsError) return jsonError('تعذر التحقق من مهام التصحيح الحالية.', 500)
+  if (activeJobs?.length) return jsonError('عندك تصحيح شغال بالفعل. ارجع له أو أوقفه قبل بدء تصحيح جديد.', 409)
+
   const payload: CorrectionPayload = {
     provider: body.provider,
     apiKey: body.apiKey,
