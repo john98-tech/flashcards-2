@@ -928,14 +928,23 @@ footer.mt-auto::before {
 }
 
 /* ---------- WhatsApp / floating buttons ---------- */
-a[href*='wa.me'] { animation: wa-pulse 2.6s ease-out infinite; }
-@keyframes wa-pulse {
-  0% { box-shadow: 0 0 0 0 rgb(37 211 102 / 0.55); }
-  70%, 100% { box-shadow: 0 0 0 16px rgb(37 211 102 / 0); }
+.floating-contact-button::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border: 2px solid rgb(255 255 255 / 0.85);
+  border-radius: inherit;
+  pointer-events: none;
+  animation: floating-contact-ripple 2.6s ease-out infinite;
+}
+@keyframes floating-contact-ripple {
+  0% { transform: scale(1); opacity: 0.75; }
+  70%, 100% { transform: scale(1.42); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  header.sticky::after, .hub-card::before, a[href*='wa.me'], .hub-chip { animation: none !important; }
+  header.sticky::after, .hub-card::before, .floating-contact-button::before, .hub-chip { animation: none !important; }
 }
 
 
@@ -1062,7 +1071,7 @@ a[href*='wa.me'] { animation: wa-pulse 2.6s ease-out infinite; }
   footer.mt-auto { backdrop-filter: none; background: var(--card) !important; }
   .tour-dim { backdrop-filter: none; -webkit-backdrop-filter: none; }
   /* infinite background/box-shadow animations force a repaint every frame */
-  header.sticky::after, .text-gradient, .glow-border, a[href*='wa.me'],
+  header.sticky::after, .text-gradient, .glow-border, .floating-contact-button::before,
   .ux-grad-text, .ux-btn, .ux-card::before, .ux-btn::after,
   .hub-chip, .hub-card::before { animation: none !important; }
   .ux-glow::before { filter: blur(10px); opacity: 0.2; }
