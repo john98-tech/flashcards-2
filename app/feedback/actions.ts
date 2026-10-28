@@ -59,20 +59,21 @@ export async function sendFeedbackAttachment(input: {
   if (!(file instanceof File) || file.size < 1 || file.size > MAX_ATTACHMENT_BYTES) return { ok: false, error: 'حجم الملف لازم يكون أكبر من صفر و8 ميجابايت أو أقل.' }
   if (!pagePath.startsWith('/') || pagePath.startsWith('//')) return { ok: false, error: 'تعذر تحديد الصفحة الحالية.' }
 
+  const normalizedMimeType = file.type.split(';')[0].trim().toLowerCase()
   const allowedTypes = kind === 'image'
     ? ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     : ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/mpeg', 'audio/aac', 'audio/3gpp']
-  if (!allowedTypes.includes(file.type)) return { ok: false, error: kind === 'image' ? 'صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WebP أو GIF.' : 'صيغة التسجيل الصوتي غير مدعومة على هذا المتصفح.' }
+  if (!allowedTypes.includes(normalizedMimeType)) return { ok: false, error: kind === 'image' ? 'صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WebP أو GIF.' : 'صيغة التسجيل الصوتي غير مدعومة على هذا المتصفح.' }
 
   const extensionByType: Record<string, string> = {
     'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
     'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3',
     'audio/aac': 'aac', 'audio/3gpp': '3gp',
   }
-  const extension = extensionByType[file.type]
+  const extension = extensionByType[normalizedMimeType]
   const storagePath = `${threadId}/${crypto.randomUUID()}.${extension}`
   const { error: uploadError } = await db().storage.from(BUCKET).upload(storagePath, file, {
-    contentType: file.type,
+    contentType: normalizedMimeType,
     upsert: false,
     cacheControl: '3600',
   })
