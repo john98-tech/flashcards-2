@@ -196,14 +196,14 @@ export function FeedbackWidget() {
         </div>}
         {recording && <div className="mb-2 flex items-center justify-center gap-2 rounded-xl bg-red-50 p-2 text-sm text-red-700"><span className="size-2 animate-pulse rounded-full bg-red-600" /> جاري التسجيل {formatDuration(recordSeconds)} — اضغط المربع للإيقاف</div>}
         <div className="flex items-end gap-1.5">
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={event => chooseImage(event.target.files?.[0])} />
-          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={pending || recording} className="grid size-10 shrink-0 place-items-center rounded-full text-stone-600 hover:bg-stone-200 disabled:opacity-40" aria-label="إرفاق صورة" title="إرفاق صورة"><Paperclip className="size-5" /></button>
-          <textarea value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (recording) stopRecording(); else send() } }} maxLength={2000} rows={1} placeholder="اكتب رسالة..." className="max-h-28 min-h-10 flex-1 resize-none rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-[#128c7e] focus:ring-1 focus:ring-[#128c7e]" aria-label="اكتب تعليقك" />
           {recording
             ? <button type="button" onClick={stopRecording} aria-label="إيقاف التسجيل" className="grid size-10 shrink-0 place-items-center rounded-full bg-red-600 text-white hover:bg-red-700"><Square className="size-4 fill-current" /></button>
             : (draft.trim() || selectedImage || recordedAudio)
               ? <button type="submit" disabled={!ready || pending || !threadId} aria-label="إرسال الرسالة" className="grid size-10 shrink-0 place-items-center rounded-full bg-[#128c7e] text-white hover:bg-[#075e54] disabled:opacity-40"><Send className="size-4" /></button>
               : <button type="button" onClick={() => void startRecording()} disabled={!ready || pending} aria-label="تسجيل رسالة صوتية" title="تسجيل رسالة صوتية" className="grid size-10 shrink-0 place-items-center rounded-full bg-[#128c7e] text-white hover:bg-[#075e54] disabled:opacity-40"><Mic className="size-5" /></button>}
+          <textarea value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (recording) stopRecording(); else send() } }} maxLength={2000} rows={1} placeholder="اكتب رسالة..." className="max-h-28 min-h-10 flex-1 resize-none rounded-2xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-[#128c7e] focus:ring-1 focus:ring-[#128c7e]" aria-label="اكتب تعليقك" />
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={event => chooseImage(event.target.files?.[0])} />
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={pending || recording} className="grid size-10 shrink-0 place-items-center rounded-full text-stone-600 hover:bg-stone-200 disabled:opacity-40" aria-label="إرفاق صورة" title="إرفاق صورة"><Paperclip className="size-5" /></button>
         </div>
         <p className="mt-1.5 px-1 text-[10px] text-stone-500">Enter للإرسال · Shift + Enter لسطر جديد</p>
       </form>
