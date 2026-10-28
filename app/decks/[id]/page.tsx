@@ -14,13 +14,14 @@ import { DEMO_DECK_ID, demoDeck } from '@/lib/demo-data'
 function DemoDeckPage() {
   return (
     <div className="min-h-dvh flex flex-col">
-      <SiteHeader>
-        <Link href="/" data-tour="home-link" data-tour-action="return-home" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" aria-hidden />
-          All decks
-        </Link>
-      </SiteHeader>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+      <SiteHeader />
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">
+        <nav aria-label="Page navigation" className="mb-6">
+          <Link href="/" data-tour="home-link" data-tour-action="return-home" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm backdrop-blur transition-all hover:border-primary/40 hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <ArrowLeft className="size-4" aria-hidden />
+            الرئيسية
+          </Link>
+        </nav>
         <div className="mb-6">
           <span className="text-xs font-medium text-primary">{demoDeck.subject}</span>
           <h1 className="text-2xl font-bold" dir="auto">
@@ -48,13 +49,14 @@ export default async function DeckPage({ params }: PageProps<'/decks/[id]'>) {
 
   return (
     <div className="min-h-dvh flex flex-col">
-      <SiteHeader>
-        <Link href="/" data-tour="home-link" data-tour-action="return-home" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" aria-hidden />
-          All decks
-        </Link>
-      </SiteHeader>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+      <SiteHeader />
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">
+        <nav aria-label="Page navigation" className="mb-6">
+          <Link href="/" data-tour="home-link" data-tour-action="return-home" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm backdrop-blur transition-all hover:border-primary/40 hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <ArrowLeft className="size-4" aria-hidden />
+            الرئيسية
+          </Link>
+        </nav>
         <div className="mb-6">
           <span className="text-xs font-medium text-primary">{meta.subject}</span>
           <h1 className="text-2xl font-bold" dir="auto">
