@@ -68,6 +68,16 @@ export function SourcePanel({ terms, onGenerate }: Props) {
   const [draftReady, setDraftReady] = useState(false)
   const sourceDraftKey = 'sammaa-admin-source-panel-draft-v1'
 
+  const updateSourceText = (value: string) => {
+    setText(value)
+    // Write on each editor update, not only in a later React effect, so a quick
+    // refresh cannot race the debounce/state update and lose the latest text.
+    try {
+      if (!value) localStorage.removeItem(sourceDraftKey)
+      else localStorage.setItem(sourceDraftKey, JSON.stringify({ text: value, joinLines, numbers, abbreviations, savedAt: Date.now() }))
+    } catch {}
+  }
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(sourceDraftKey)
@@ -225,8 +235,10 @@ export function SourcePanel({ terms, onGenerate }: Props) {
 
       <div className="[&_.word-editor-content]:min-h-[480px]">
         <WordEditor
-          debounceMs={150}
-          onTextChange={setText}
+          key={draftReady ? 'source-draft-restored' : 'source-draft-loading'}
+          debounceMs={0}
+          initialText={text}
+          onTextChange={updateSourceText}
           resetKey={resetKey}
           placeholder="الصق النص أو جدول Word هنا؛ الجداول هتتحول لجدول منسق في الكارت…"
         />
