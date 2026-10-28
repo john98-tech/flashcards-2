@@ -120,7 +120,7 @@ async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: strin
 
 const correctionJobStorageKey = (lessonId: string) => `kwk:ai-correction-job:${lessonId}`
 
-const GEMINI_INTERACTIONS_API = 'https://generativelanguage.googleapis.com/v1beta/interactions'
+const GEMINI_INTERACTIONS_API = '/api/ai-correction/jobs'
 const GEMINI_API_REVISION = '2026-05-20'
 
 type CorrectionJobResult = {
