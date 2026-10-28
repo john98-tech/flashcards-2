@@ -118,7 +118,7 @@ export function DictationAdmin({ subjects: initialSubjects, lessons: initialLess
         if (typeof saved.savedStudentText === 'string') setSavedStudentText(saved.savedStudentText)
         if (Array.isArray(saved.studentImages)) setStudentImages(saved.studentImages as DictationStudentImage[])
         if (typeof saved.savedStudentImages === 'string') setSavedStudentImages(saved.savedStudentImages)
-        if (saved.refKind === 'none' || saved.refKind === 'text' || saved.refKind === 'file') setRefKind(saved.refKind)
+        if (saved.refKind === 'none' || saved.refKind === 'text' || saved.refKind === 'pdf') setRefKind(saved.refKind)
       }
     } catch {}
     setDraftReady(true)
