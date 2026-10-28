@@ -10,7 +10,7 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values (
   'feedback-attachments',
   'feedback-attachments',
-  true,
+  false,
   8388608,
   array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'audio/webm', 'audio/mp4', 'audio/ogg', 'audio/mpeg', 'audio/aac', 'audio/3gpp']
 )
