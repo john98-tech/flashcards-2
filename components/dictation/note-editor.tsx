@@ -307,6 +307,7 @@ export function NoteEditor({
       const jobId = created.id as string
       activeJobIdRef.current = jobId
       localStorage.setItem(correctionJobStorageKey(lessonId), jobId)
+      setNotice('') // The ID is persisted now, so refreshing can safely resume this interaction.
       if (controller.signal.aborted && userCancelledRef.current) {
         await geminiInteractionRequest(`${GEMINI_INTERACTIONS_API}/${encodeURIComponent(jobId)}/cancel`, config.apiKey, { method: 'POST' }).catch(() => undefined)
         localStorage.removeItem(correctionJobStorageKey(lessonId))
