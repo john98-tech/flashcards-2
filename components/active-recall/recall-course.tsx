@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, CalendarDays, Check, CircleHelp, Loader2 } from 'lucide-react'
@@ -53,6 +53,53 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [draftReady, setDraftReady] = useState(false)
+  const draftStorageKey = `sammaa-active-recall-student-draft-v1-${course.id}`
+
+  // Keep student answers and the active editor/session in this browser so refreshes
+  // do not discard unfinished work.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftStorageKey)
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          selectedLessonIds?: string[]
+          durationDays?: number
+          examDate?: string
+          editing?: boolean
+          rescheduling?: boolean
+          selectedSessionId?: string
+          revealedQuestions?: number[]
+          answers?: Record<number, string>
+          choices?: Record<number, number>
+          noAnswer?: number[]
+          selfAssessment?: 'knew_it' | 'review_again' | null
+        }
+        if (Array.isArray(saved.selectedLessonIds)) setSelectedLessonIds(saved.selectedLessonIds.filter((id) => course.lessons.some((lesson) => lesson.id === id)))
+        if (Number.isInteger(saved.durationDays) && saved.durationDays! >= 1 && saved.durationDays! <= 366) setDurationDays(saved.durationDays!)
+        if (typeof saved.examDate === 'string') setExamDate(saved.examDate)
+        if (typeof saved.editing === 'boolean') setEditing(saved.editing)
+        if (typeof saved.rescheduling === 'boolean') setRescheduling(saved.rescheduling)
+        if (typeof saved.selectedSessionId === 'string') setSelectedSessionId(saved.selectedSessionId)
+        if (Array.isArray(saved.revealedQuestions)) setRevealedQuestions(saved.revealedQuestions.filter(Number.isInteger))
+        if (saved.answers && typeof saved.answers === 'object') setAnswers(saved.answers)
+        if (saved.choices && typeof saved.choices === 'object') setChoices(saved.choices)
+        if (Array.isArray(saved.noAnswer)) setNoAnswer(saved.noAnswer.filter(Number.isInteger))
+        if (saved.selfAssessment === 'knew_it' || saved.selfAssessment === 'review_again' || saved.selfAssessment === null) setSelfAssessment(saved.selfAssessment)
+      }
+    } catch {}
+    setDraftReady(true)
+  }, [draftStorageKey, course.lessons])
+
+  useEffect(() => {
+    if (!draftReady) return
+    try {
+      localStorage.setItem(draftStorageKey, JSON.stringify({
+        selectedLessonIds, durationDays, examDate, editing, rescheduling, selectedSessionId,
+        revealedQuestions, answers, choices, noAnswer, selfAssessment, savedAt: Date.now(),
+      }))
+    } catch {}
+  }, [draftReady, draftStorageKey, selectedLessonIds, durationDays, examDate, editing, rescheduling, selectedSessionId, revealedQuestions, answers, choices, noAnswer, selfAssessment])
 
   const endDate = useMemo(() => {
     const proposed = addDays(today, durationDays - 1)
