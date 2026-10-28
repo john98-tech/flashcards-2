@@ -1140,10 +1140,10 @@ footer.mt-auto::before {
   background: color-mix(in srgb, var(--card, #fff) 92%, transparent);
   transform: translateY(-50%) rotate(45deg);
 }
-/* Keep the hint animation identical and synchronized on every floating button. */
-.floating-contact-hint-whatsapp,
-.floating-contact-hint-facebook,
-.floating-contact-hint-feedback { animation-delay: 0s; }
+/* Show one floating hint at a time, in a repeating sequence. */
+.floating-contact-hint-whatsapp { animation-delay: 0s; }
+.floating-contact-hint-facebook { animation-delay: 4s; }
+.floating-contact-hint-feedback { animation-delay: 8s; }
 @keyframes floating-contact-hint {
   0%, 4%, 18%, 100% { opacity: 0; transform: translate(6px, -50%) scale(.96); }
   7%, 15% { opacity: 1; transform: translate(0, -50%) scale(1); }
