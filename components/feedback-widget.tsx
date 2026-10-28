@@ -5,12 +5,20 @@ import { ImagePlus, MessageCircle, Mic, Paperclip, Send, Square, X, Trash2, Play
 import { loadFeedbackMessages, sendFeedbackAttachment, sendFeedbackMessage, type FeedbackMessage } from '@/app/feedback/actions'
 
 const STORAGE_KEY = 'kart-ketab-feedback-thread-v1'
+const THREAD_STARTED_KEY = 'kart-ketab-feedback-thread-started-v1'
+const THREAD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_FILE_SIZE = 8 * 1024 * 1024
 
 function getThreadId() {
   try {
+    const now = Date.now()
+    const startedAt = Number(window.localStorage.getItem(THREAD_STARTED_KEY) || 0)
     let id = window.localStorage.getItem(STORAGE_KEY)
-    if (!id) { id = window.crypto.randomUUID(); window.localStorage.setItem(STORAGE_KEY, id) }
+    if (!id || !startedAt || now - startedAt >= THREAD_MAX_AGE_MS) {
+      id = window.crypto.randomUUID()
+      window.localStorage.setItem(STORAGE_KEY, id)
+      window.localStorage.setItem(THREAD_STARTED_KEY, String(now))
+    }
     return id
   } catch { return '' }
 }
@@ -234,13 +242,28 @@ export function FeedbackWidget() {
       </header>
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-[#efeae2] p-3" style={{ backgroundImage: 'radial-gradient(rgba(100,90,75,.07) .7px, transparent .7px)', backgroundSize: '12px 12px' }}>
         {!messages.length && <p className="mx-auto mt-5 max-w-[90%] rounded-xl bg-[#fff8c5] p-3 text-center text-xs leading-6 text-stone-700 shadow-sm">أهلًا بيك 👋 اكتب رسالتك أو ابعت صورة أو رسالة صوتية. المحادثة محفوظة وهتقدر تتابع الردود من هنا.</p>}
-        {messages.map(item => <article key={item.id} className={`max-w-[88%] rounded-2xl px-3 py-2.5 text-sm shadow-sm ${item.sender_role === 'admin' ? 'ml-auto rounded-tr-sm bg-[#d9fdd3] text-stone-900' : 'mr-auto rounded-tl-sm bg-white text-stone-900'}`}>
+        {messages.map((item, index) => {
+          const currentDate = new Date(item.created_at)
+          const previousDate = index > 0 ? new Date(messages[index - 1].created_at) : null
+          const dayKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`
+          const previousDayKey = previousDate ? `${previousDate.getFullYear()}-${previousDate.getMonth()}-${previousDate.getDate()}` : ''
+          const showDate = index === 0 || dayKey !== previousDayKey
+          const today = new Date()
+          const isToday = dayKey === `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`
+          const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+          const isYesterday = dayKey === `${yesterday.getFullYear()}-${yesterday.getMonth()}-${yesterday.getDate()}`
+          const dateLabel = isToday ? 'اليوم' : isYesterday ? 'أمس' : currentDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })
+          return <div key={item.id}>
+          {showDate && <div className="sticky top-0 z-10 my-2 flex justify-center"><span className="rounded-lg bg-[#dfe8df] px-3 py-1 text-[11px] font-semibold text-stone-700 shadow-sm">{dateLabel}</span></div>}
+          <article className={`max-w-[88%] rounded-2xl px-3 py-2.5 text-sm shadow-sm ${item.sender_role === 'admin' ? 'ml-auto rounded-tr-sm bg-[#d9fdd3] text-stone-900' : 'mr-auto rounded-tl-sm bg-white text-stone-900'}`}>
           <p className="mb-1 text-[11px] font-bold text-[#075e54]">{item.sender_role === 'admin' ? 'الإدارة' : 'أنت'}</p>
           {item.message && !((item.attachment_type === 'image' && item.message === 'صورة مرفقة') || (item.attachment_type === 'audio' && item.message === 'رسالة صوتية')) && <p className="whitespace-pre-wrap break-words leading-6">{item.message}</p>}
           <Attachment item={item} />
           {item.page_path && item.sender_role === 'user' && <p className="mt-2 border-t border-stone-900/10 pt-1.5 text-[10px] opacity-65">الصفحة: {item.page_title || item.page_path}<br />{item.page_path}</p>}
-          <time className="mt-1 block text-left text-[10px] text-stone-500">{new Date(item.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</time>
-        </article>)}
+          <time dateTime={item.created_at} className="mt-1 block text-left text-[10px] text-stone-500">{new Date(item.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</time>
+        </article>
+          </div>
+        })}
         {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{error}</p>}
       </div>
       <form className="border-t border-border bg-[#f7f7f7] p-2.5" onSubmit={event => { event.preventDefault(); if (recording) stopRecording(); else send() }}>
