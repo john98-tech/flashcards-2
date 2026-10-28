@@ -180,7 +180,8 @@ async function deletePendingCorrection(lessonId: string): Promise<void> {
   }
 }
 
-const GEMINI_INTERACTIONS_API = 'https://generativelanguage.googleapis.com/v1beta/interactions'
+// Use same-origin API routes to proxy Gemini requests; direct browser calls can fail CORS/network fetch.
+const GEMINI_INTERACTIONS_API = '/api/ai-correction/jobs'
 const GEMINI_API_REVISION = '2026-05-20'
 
 type CorrectionJobResult = {
