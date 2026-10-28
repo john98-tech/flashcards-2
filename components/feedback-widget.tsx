@@ -161,7 +161,7 @@ export function FeedbackWidget() {
 
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
 
-  return <div className="flex flex-col items-start gap-3" dir="rtl" style={{ position: 'fixed', right: '20px', left: 'auto', bottom: '88px', zIndex: 99999, isolation: 'isolate' }}>
+  return <div className="flex flex-col items-start gap-3" dir="rtl" style={{ position: 'fixed', right: '20px', left: 'auto', bottom: '156px', zIndex: 99999, isolation: 'isolate' }}>
     {open && <section className="flex h-[min(78dvh,620px)] w-[min(94vw,400px)] flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-2xl" aria-label="محادثة التعليقات">
       <header className="flex items-center justify-between gap-3 border-b border-border bg-[#075e54] px-4 py-3 text-white">
         <div className="flex min-w-0 items-center gap-3">
@@ -208,9 +208,10 @@ export function FeedbackWidget() {
         <p className="mt-1.5 px-1 text-[10px] text-stone-500">Enter للإرسال · Shift + Enter لسطر جديد</p>
       </form>
     </section>}
-    <button type="button" onClick={() => setOpen(value => !value)} className="inline-flex min-h-12 items-center gap-2 rounded-full border-2 border-white px-5 py-3 text-sm font-bold shadow-2xl" style={{ background: '#075e54', color: '#ffffff', boxShadow: '0 8px 28px rgba(0,0,0,.35)', position: 'relative', zIndex: 100000, visibility: 'visible', opacity: 1 }} aria-expanded={open}>
-      {open ? <X className="size-5" /> : <MessageCircle className="size-5" />}{open ? 'إغلاق' : 'تعليقات الموقع'}
-      {messages.some(message => message.sender_role === 'admin') && <span className="size-2 rounded-full bg-amber-300" aria-label="يوجد رد" />}
+    <button type="button" onClick={() => setOpen(value => !value)} className="floating-contact-button relative flex size-14 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#075e54] text-white shadow-lg ring-2 ring-white/90 transition duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#075e54] focus-visible:ring-offset-2" aria-expanded={open} aria-label={open ? 'إغلاق التعليقات' : 'تعليقات الموقع'} title="تعليقات الموقع" style={{ zIndex: 100000, visibility: 'visible', opacity: 1 }}>
+      <span className="floating-contact-hint floating-contact-hint-feedback" aria-hidden="true">اسألنا</span>
+      {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
+      {messages.some(message => message.sender_role === 'admin') && <span className="absolute right-0 top-0 size-3 rounded-full border-2 border-white bg-amber-300" aria-label="يوجد رد" />}
     </button>
   </div>
 }
