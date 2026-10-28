@@ -113,7 +113,7 @@ export function NoteEditor({
   studentText: string
   studentImages: LessonImage[]
 }) {
-  const boardRef = useRef<HandwritingEditor storageKey={`sammaa-dictation-answer-v1-${lessonId}`}Handle>(null)
+  const boardRef = useRef<HandwritingEditorHandle>(null)
   const [keyOpen, setKeyOpen] = useState(false)
   const [grading, setGrading] = useState(false)
   const [notice, setNotice] = useState('')
@@ -242,7 +242,7 @@ export function NoteEditor({
         <section aria-label="مساحة التسميع" className="space-y-3">
           <span className="ux-pill"><PenLine className="size-3.5" aria-hidden />اكتب إجابتك</span>
           <div className="ux-glow">
-            <HandwritingEditor ref={boardRef} />
+            <HandwritingEditor ref={boardRef} storageKey={`sammaa-dictation-answer-v1-${lessonId}`} />
           </div>
         </section>
       </main>
