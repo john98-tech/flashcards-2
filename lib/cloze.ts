@@ -20,7 +20,10 @@ const BLANK_RE = /\{\{([\s\S]+?)\}\}/g
 const TOKEN_RE =
   /\s+|[\p{L}\p{N}](?:[\p{L}\p{N}\p{M}'’.\-]*[\p{L}\p{N}\p{M}])?|[^\s\p{L}\p{N}]/gu
 
-export function parseCloze(cloze: string): Segment[] {
+export function parseCloze(cloze: string | null | undefined): Segment[] {
+  // Older or malformed saved cards may not have a cloze string. Treat them as empty
+  // instead of crashing the entire study/admin page during rendering.
+  const source = typeof cloze === 'string' ? cloze : ''
   const segments: Segment[] = []
   let last = 0
   let index = 0
@@ -32,9 +35,9 @@ export function parseCloze(cloze: string): Segment[] {
     else segments.push({ type: 'text', value })
   }
 
-  for (const match of cloze.matchAll(BLANK_RE)) {
+  for (const match of source.matchAll(BLANK_RE)) {
     const at = match.index ?? 0
-    if (at > last) pushText(cloze.slice(last, at))
+    if (at > last) pushText(source.slice(last, at))
 
     // A stored cloze may contain several words in one blank (e.g. {{high cholesterol}}).
     // Render each word as its own independently revealable blank while preserving
@@ -50,20 +53,23 @@ export function parseCloze(cloze: string): Segment[] {
 
     last = at + match[0].length
   }
-  if (last < cloze.length) pushText(cloze.slice(last))
+  if (last < source.length) pushText(source.slice(last))
   return segments
 }
 
-export function plainText(cloze: string) {
-  return cloze.replace(BLANK_RE, '$1')
+export function plainText(cloze: string | null | undefined) {
+  const source = typeof cloze === 'string' ? cloze : ''
+  return source.replace(BLANK_RE, '$1')
 }
 
-export function countBlanks(cloze: string) {
-  return [...cloze.matchAll(BLANK_RE)].length
+export function countBlanks(cloze: string | null | undefined) {
+  const source = typeof cloze === 'string' ? cloze : ''
+  return [...source.matchAll(BLANK_RE)].length
 }
 
-export function tokenize(text: string): Token[] {
-  return [...text.matchAll(TOKEN_RE)].map((m) => {
+export function tokenize(text: string | null | undefined): Token[] {
+  const source = typeof text === 'string' ? text : ''
+  return [...source.matchAll(TOKEN_RE)].map((m) => {
     const start = m.index ?? 0
     return { text: m[0], start, end: start + m[0].length, space: /^\s+$/.test(m[0]) }
   })
