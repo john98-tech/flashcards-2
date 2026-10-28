@@ -27,7 +27,12 @@ export async function loadFeedbackMessages(threadId: string): Promise<FeedbackMe
     .select('id, thread_id, sender_role, message, page_path, page_title, created_at, attachment_url, attachment_type, attachment_name')
     .eq('thread_id', threadId).order('created_at', { ascending: true }).limit(300)
   if (error) throw new Error('تعذر تحميل المحادثة. حاول مرة أخرى.')
-  return (data ?? []) as FeedbackMessage[]
+  const rows = (data ?? []) as FeedbackMessage[]
+  return Promise.all(rows.map(async row => {
+    if (!row.attachment_url) return row
+    const { data: signed, error: signedError } = await db().storage.from(BUCKET).createSignedUrl(row.attachment_url, 3600)
+    return signedError || !signed?.signedUrl ? { ...row, attachment_url: null } : { ...row, attachment_url: signed.signedUrl }
+  }))
 }
 
 export async function sendFeedbackMessage(input: { threadId: string; message: string; pagePath: string; pageTitle: string }): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -79,7 +84,6 @@ export async function sendFeedbackAttachment(input: {
   })
   if (uploadError) return { ok: false, error: 'تعذر رفع المرفق. تأكد من تشغيل إعدادات تخزين المرفقات في Supabase.' }
 
-  const { data: publicData } = db().storage.from(BUCKET).getPublicUrl(storagePath)
   const messageText = message || (kind === 'image' ? 'صورة مرفقة' : 'رسالة صوتية')
   const { error: insertError } = await db().from('feedback_messages').insert({
     thread_id: threadId,
@@ -87,7 +91,7 @@ export async function sendFeedbackAttachment(input: {
     message: messageText,
     page_path: pagePath,
     page_title: pageTitle || pagePath,
-    attachment_url: publicData.publicUrl,
+    attachment_url: storagePath,
     attachment_type: kind,
     attachment_name: file.name?.slice(0, 255) || (kind === 'image' ? 'image' : 'voice-message'),
   })
