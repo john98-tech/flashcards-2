@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { KeyRound, Loader2, RotateCcw, Sparkles, Wand2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { KeyRound, Loader2, RotateCcw, Sparkles, Square, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ApiKeyDialog } from '@/components/gemini/api-key-dialog'
 import { WordEditor } from './word-editor'
@@ -107,6 +107,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
   const activePrompt = config?.provider === 'groq' ? groqPrompt : geminiPrompt
   const setActivePrompt = config?.provider === 'groq' ? setGroqPrompt : setGeminiPrompt
   const [busy, setBusy] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -149,6 +150,8 @@ export function SourcePanel({ terms, onGenerate }: Props) {
       setKeyOpen(true)
       return
     }
+    const controller = new AbortController()
+    abortRef.current = controller
     setBusy(true)
     setError('')
     try {
@@ -179,6 +182,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
         setError(chunks.length > 1 ? `Gemini بيحوّل الجزء ${i + 1} من ${chunks.length}…` : '')
         const raw = await geminiGenerate(config, chunks[i], {
           system: activePrompt,
+          signal: controller.signal,
           responseSchema: RESPONSE_SCHEMA,
           temperature: 0.2,
         })
@@ -213,6 +217,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
             : 'حصل خطأ غير متوقع.',
       )
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       setBusy(false)
     }
   }
@@ -272,6 +277,7 @@ export function SourcePanel({ terms, onGenerate }: Props) {
           {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
           {busy ? `${config?.provider === 'groq' ? 'Groq' : 'Gemini'} بيحوّل النص…` : `حوّل لفلاش كاردس بـ ${config?.provider === 'groq' ? 'Groq' : 'Gemini'}`}
         </Button>
+        {busy && <Button type="button" variant="destructive" size="icon" onClick={() => abortRef.current?.abort()} aria-label="إيقاف الذكاء الاصطناعي" title="إيقاف الذكاء الاصطناعي"><Square className="size-4 fill-current" aria-hidden /></Button>}
       </div>
 
       <details className="text-sm">
