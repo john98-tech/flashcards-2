@@ -175,6 +175,9 @@ async function waitForCorrectionJob(jobId: string, apiKey: string, signal: Abort
     if (data.status === 'failed') return { status: 'failed', error: data.errors?.map((item: any) => item?.message).filter(Boolean).join('\n') || 'Gemini تعذر عليه إكمال التصحيح.' }
     if (data.status === 'cancelled') return { status: 'cancelled' }
     if (data.status === 'incomplete') return { status: 'incomplete', result: { raw: interactionOutput(data) }, error: 'Gemini أنهى المهمة بإجابة غير مكتملة.' }
+    if (data.status !== 'in_progress') {
+      throw new Error(`حالة غير متوقعة لمهمة التصحيح: ${String(data.status || 'غير معروفة')}.`)
+    }
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         signal.removeEventListener('abort', onAbort)
@@ -317,7 +320,10 @@ export function NoteEditor({
         activeJobIdRef.current = null
         if (mountedRef.current) {
           setGrading(false)
-          setNotice(error instanceof Error ? error.message + ' معرّف المهمة محفوظ؛ افتح الصفحة مرة أخرى لاستكمال المتابعة.' : 'تعذر الاتصال بمتابعة التصحيح. معرّف المهمة محفوظ؛ افتح الصفحة مرة أخرى لاستكمال المتابعة.')
+          const savedJob = localStorage.getItem(correctionJobStorageKey(lessonId))
+          setNotice(savedJob
+            ? (error instanceof Error ? error.message : 'تعذر الاتصال بمتابعة التصحيح.') + ' معرّف المهمة محفوظ؛ افتح الصفحة مرة أخرى لاستكمال المتابعة.'
+            : (error instanceof Error ? error.message : 'تعذر تصحيح التسميع. جرّب مرة أخرى.'))
         }
       }
     } finally {
@@ -358,6 +364,8 @@ export function NoteEditor({
       setNotice(completed.error || 'تعذر إكمال التصحيح. جرّب مرة أخرى.')
     } else if (completed.status === 'cancelled') {
       setNotice('تم إيقاف التصحيح.')
+    } else if (completed.status === 'incomplete') {
+      setNotice(completed.error || 'Gemini أنهى المهمة بإجابة غير مكتملة. جرّب مرة أخرى.')
     }
     setGrading(false)
   }
