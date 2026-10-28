@@ -75,13 +75,24 @@ function parseGradingReport(raw: string): GradingReport | null {
 
 type LessonImage = { path: string; name: string; url: string }
 
-async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: string }> {
+type ImageProfile = { maxSide: number; quality: number }
+// Tried in order: the request must stay under the hosting body limit (~4.5MB),
+// so many/large pages are re-compressed more aggressively instead of failing.
+const IMAGE_PROFILES: ImageProfile[] = [
+  { maxSide: 1800, quality: 0.82 },
+  { maxSide: 1500, quality: 0.7 },
+  { maxSide: 1200, quality: 0.6 },
+  { maxSide: 1000, quality: 0.5 },
+]
+const MAX_REQUEST_BYTES = 4_000_000
+
+async function blobToBase64(blob: Blob, profile: ImageProfile = IMAGE_PROFILES[0]): Promise<{ mimeType: string; data: string }> {
   // Compress handwriting pages before sending them to the job API; the key and
   // image payload are never written to browser logs.
   let source = blob
   try {
     const bitmap = await createImageBitmap(blob)
-    const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height))
+    const scale = Math.min(1, profile.maxSide / Math.max(bitmap.width, bitmap.height))
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(bitmap.width * scale))
     canvas.height = Math.max(1, Math.round(bitmap.height * scale))
@@ -92,7 +103,7 @@ async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: strin
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close()
     const compressed = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((value) => value ? resolve(value) : reject(new Error('تعذر ضغط صورة صفحة الإجابة.')), 'image/jpeg', 0.82)
+      canvas.toBlob((value) => value ? resolve(value) : reject(new Error('تعذر ضغط صورة صفحة الإجابة.')), 'image/jpeg', profile.quality)
     })
     source = compressed
   } catch {
@@ -182,7 +193,6 @@ async function deletePendingCorrection(lessonId: string): Promise<void> {
 
 // Same-origin proxy avoids browser CORS failures when calling Gemini Interactions.
 const GEMINI_INTERACTIONS_API = '/api/ai-correction/jobs'
-const GEMINI_API_REVISION = '2026-05-20'
 
 type CorrectionJobResult = {
   status: 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'incomplete'
@@ -208,29 +218,105 @@ function interactionOutput(data: any): string {
     .join('\n')
 }
 
-async function geminiInteractionRequest(url: string, apiKey: string, init: RequestInit = {}) {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
-      'Api-Revision': GEMINI_API_REVISION,
-      ...init.headers,
-    },
-    cache: 'no-store',
+class CorrectionRequestError extends Error {
+  constructor(
+    message: string,
+    public status = 0,
+    public retryable = false,
+  ) {
+    super(message)
+    this.name = 'CorrectionRequestError'
+  }
+}
+
+const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
+const MAX_POLL_FAILURES = 6
+
+function describeRequestFailure(status: number, upstreamMessage: string) {
+  const detail = upstreamMessage ? ` (${upstreamMessage})` : ''
+  if (status === 400) return upstreamMessage || 'جوجل رفضت الطلب لأن بياناته غير صحيحة.'
+  if (status === 403) return `جوجل رفضت الطلب (403)${detail}. اتأكد إن مفتاح Gemini شغال وغير مقيّد بموقع معين، وإن مشروعه مسموح له يستخدم Interactions API.`
+  if (status === 404) return 'المهمة أو الموديل مش متاحين عند جوجل (المهمة ممكن تكون انتهت مدتها، أو الموديل مش مدعوم). صحّح من جديد أو غيّر الموديل من إعداد المفتاح.'
+  if (status === 413) return 'صور الإجابة كبيرة زيادة عن الحد المسموح. قلّل عدد الصفحات وجرّب تاني.'
+  if (status === 429) return 'وصلت للحد المؤقت من جوجل. استنى شوية وجرّب تاني.'
+  if (status >= 500) return 'خدمة Gemini أو السيرفر فيها مشكلة مؤقتة.'
+  return upstreamMessage || `Gemini رفض الطلب (HTTP ${status}). تأكد من المفتاح والموديل.`
+}
+
+// Errors that will never succeed on retry: drop the saved job/request so a refresh
+// does not loop on them forever (the answer itself stays in the handwriting editor).
+const isDeadCorrectionError = (error: unknown) =>
+  error instanceof CorrectionRequestError && [400, 403, 404, 413].includes(error.status)
+
+function discardCorrectionState(lessonId: string) {
+  try {
+    localStorage.removeItem(correctionJobStorageKey(lessonId))
+    localStorage.removeItem(correctionIntentStorageKey(lessonId))
+  } catch {}
+  void deletePendingCorrection(lessonId).catch(() => undefined)
+}
+
+const isAbortError = (error: unknown) => (error as { name?: string } | null)?.name === 'AbortError'
+
+function sleep(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      window.clearTimeout(timer)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
   })
+}
+
+async function geminiInteractionRequest(url: string, apiKey: string, init: RequestInit = {}) {
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...init.headers,
+      },
+      cache: 'no-store',
+    })
+  } catch (error) {
+    if (isAbortError(error)) throw error
+    throw new CorrectionRequestError('مفيش اتصال بالإنترنت أو السيرفر مش متاح دلوقتي.', 0, true)
+  }
+  // An expired login makes the proxy redirect to /login; fetch follows it and gets HTML.
+  if (response.redirected && /\/login(\/|\?|$)/.test(response.url)) {
+    throw new CorrectionRequestError('جلسة الدخول انتهت. سجّل دخول تاني وافتح الصفحة، وإجابتك محفوظة.', 401, false)
+  }
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const message = typeof data?.error?.message === 'string' ? data.error.message : ''
-    throw new Error(message || `Gemini رفض الطلب (HTTP ${response.status}). تأكد من المفتاح والموديل.`)
+    throw new CorrectionRequestError(describeRequestFailure(response.status, message), response.status, RETRYABLE_STATUSES.has(response.status))
   }
   return data
 }
 
 async function waitForCorrectionJob(jobId: string, apiKey: string, signal: AbortSignal): Promise<CorrectionJobResult> {
+  let failures = 0
   while (true) {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-    const data = await geminiInteractionRequest(`${GEMINI_INTERACTIONS_API}/${encodeURIComponent(jobId)}`, apiKey, { signal })
+    let data: any
+    try {
+      data = await geminiInteractionRequest(`${GEMINI_INTERACTIONS_API}/${encodeURIComponent(jobId)}`, apiKey, { signal })
+      failures = 0
+    } catch (error) {
+      // Network blips, 429/5xx and the occasional transient 403 from Google must not
+      // kill a job that is still running remotely: back off and keep polling.
+      const transient = error instanceof CorrectionRequestError && (error.retryable || error.status === 403)
+      failures += 1
+      if (!transient || failures > MAX_POLL_FAILURES) throw error
+      await sleep(Math.min(2500 * failures, 12000), signal)
+      continue
+    }
     if (data.status === 'completed') return { status: 'completed', result: { raw: interactionOutput(data) } }
     if (data.status === 'failed') return { status: 'failed', error: data.errors?.map((item: any) => item?.message).filter(Boolean).join('\n') || 'Gemini تعذر عليه إكمال التصحيح.' }
     if (data.status === 'cancelled') return { status: 'cancelled' }
@@ -238,18 +324,7 @@ async function waitForCorrectionJob(jobId: string, apiKey: string, signal: Abort
     if (data.status !== 'in_progress') {
       throw new Error(`حالة غير متوقعة لمهمة التصحيح: ${String(data.status || 'غير معروفة')}.`)
     }
-    await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(() => {
-        signal.removeEventListener('abort', onAbort)
-        resolve()
-      }, 2500)
-      const onAbort = () => {
-        window.clearTimeout(timer)
-        signal.removeEventListener('abort', onAbort)
-        reject(new DOMException('Aborted', 'AbortError'))
-      }
-      signal.addEventListener('abort', onAbort, { once: true })
-    })
+    await sleep(2500, signal)
   }
 }
 
@@ -358,16 +433,24 @@ export function NoteEditor({
       // Persist the complete request in IndexedDB before contacting Google. If the
       // page is refreshed before Google returns an ID, the next mount can recreate
       // the background interaction instead of losing the answer and stopping.
-      const requestBody = JSON.stringify({
+      const buildRequestBody = (images: { mimeType: string; data: string }[]) => JSON.stringify({
         model: config.model,
         input: [
           { type: 'text', text: prompt },
-          ...answerImages.map((image) => ({ type: 'image', data: image.data, mime_type: image.mimeType })),
+          ...images.map((image) => ({ type: 'image', data: image.data, mime_type: image.mimeType })),
         ],
         background: true,
         store: true,
         generation_config: { temperature: 0.1, max_output_tokens: 8192 },
       })
+      let requestBody = buildRequestBody(answerImages)
+      // The hosting platform rejects request bodies over ~4.5MB, so shrink the pages if needed.
+      for (const profile of IMAGE_PROFILES.slice(1)) {
+        if (new Blob([requestBody]).size <= MAX_REQUEST_BYTES) break
+        answerImages = await Promise.all(pageBlobs.map((blob) => blobToBase64(blob, profile)))
+        requestBody = buildRequestBody(answerImages)
+      }
+      if (new Blob([requestBody]).size > MAX_REQUEST_BYTES) throw new CorrectionRequestError(describeRequestFailure(413, ''), 413)
       await savePendingCorrection(lessonId, requestBody)
       const warnBeforeUnload = (event: BeforeUnloadEvent) => {
         event.preventDefault()
@@ -414,6 +497,8 @@ export function NoteEditor({
       } else {
         // Keep a persisted interaction ID if polling failed: the task may still be
         // running at Google and can be resumed when the page is reopened.
+        // Permanent failures (403/404/...) are discarded so a refresh doesn't loop on them.
+        if (isDeadCorrectionError(error)) discardCorrectionState(lessonId)
         activeJobIdRef.current = null
         if (!localStorage.getItem(correctionJobStorageKey(lessonId))) {
           void getPendingCorrection(lessonId).then((pending) => {
@@ -537,10 +622,12 @@ export function NoteEditor({
 
     void restoreOrStartJob()
       .catch((error) => {
-        if (!disposed && mountedRef.current && !(error instanceof Error && error.name === 'AbortError')) {
+        if (!disposed && mountedRef.current && !isAbortError(error)) {
+          const dead = isDeadCorrectionError(error)
+          if (dead) discardCorrectionState(lessonId)
           setGrading(false)
           setNotice(error instanceof Error
-            ? error.message + ' لو المهمة لم تبدأ بعد، سيظل طلبها محفوظًا لمحاولة الاستعادة.'
+            ? dead ? error.message : error.message + ' لو المهمة لم تبدأ بعد، سيظل طلبها محفوظًا لمحاولة الاستعادة.'
             : 'تعذر استعادة التصحيح؛ بيانات الطلب محفوظة لمحاولة أخرى.')
           activeJobIdRef.current = null
         }
