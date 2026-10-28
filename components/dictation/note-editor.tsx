@@ -120,6 +120,63 @@ async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: strin
 
 
 const correctionJobStorageKey = (lessonId: string) => `kwk:ai-correction-job:${lessonId}`
+const pendingCorrectionStorageName = 'kwk-ai-correction-pending-v1'
+
+type PendingCorrection = { lessonId: string; body: string; savedAt: number }
+
+function openPendingCorrectionDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(pendingCorrectionStorageName, 1)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'lessonId' })
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error ?? new Error('تعذر فتح التخزين المحلي لمهمة التصحيح.'))
+  })
+}
+
+async function savePendingCorrection(lessonId: string, body: string): Promise<void> {
+  const db = await openPendingCorrectionDb()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('pending', 'readwrite')
+      tx.objectStore('pending').put({ lessonId, body, savedAt: Date.now() } satisfies PendingCorrection)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error ?? new Error('تعذر حفظ بيانات مهمة التصحيح قبل إرسالها.'))
+      tx.onabort = () => reject(tx.error ?? new Error('تم إلغاء حفظ بيانات مهمة التصحيح.'))
+    })
+  } finally {
+    db.close()
+  }
+}
+
+async function getPendingCorrection(lessonId: string): Promise<PendingCorrection | null> {
+  const db = await openPendingCorrectionDb()
+  try {
+    return await new Promise((resolve, reject) => {
+      const request = db.transaction('pending', 'readonly').objectStore('pending').get(lessonId)
+      request.onsuccess = () => resolve((request.result as PendingCorrection | undefined) ?? null)
+      request.onerror = () => reject(request.error ?? new Error('تعذر قراءة بيانات مهمة التصحيح المحفوظة.'))
+    })
+  } finally {
+    db.close()
+  }
+}
+
+async function deletePendingCorrection(lessonId: string): Promise<void> {
+  const db = await openPendingCorrectionDb()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('pending', 'readwrite')
+      tx.objectStore('pending').delete(lessonId)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error ?? new Error('تعذر حذف بيانات مهمة التصحيح المؤقتة.'))
+    })
+  } finally {
+    db.close()
+  }
+}
 
 const GEMINI_INTERACTIONS_API = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 const GEMINI_API_REVISION = '2026-05-20'
@@ -276,8 +333,20 @@ export function NoteEditor({
         return
       }
 
-      // Before Google returns an interaction ID there is nothing the page can
-      // persist to resume. Warn against refreshing during this short creation step.
+      // Persist the complete request in IndexedDB before contacting Google. If the
+      // page is refreshed before Google returns an ID, the next mount can recreate
+      // the background interaction instead of losing the answer and stopping.
+      const requestBody = JSON.stringify({
+        model: config.model,
+        input: [
+          { type: 'text', text: prompt },
+          ...answerImages.map((image) => ({ type: 'image', data: image.data, mime_type: image.mimeType })),
+        ],
+        background: true,
+        store: true,
+        generation_config: { temperature: 0.1, max_output_tokens: 8192 },
+      })
+      await savePendingCorrection(lessonId, requestBody)
       const warnBeforeUnload = (event: BeforeUnloadEvent) => {
         event.preventDefault()
         event.returnValue = ''
@@ -285,19 +354,10 @@ export function NoteEditor({
       window.addEventListener('beforeunload', warnBeforeUnload)
       let created: any
       try {
-        setNotice('بيبدأ التصحيح… استنى لحظة لحد ما نحفظ رقم المهمة؛ بعدها تقدر تعمل Refresh بأمان.')
+        setNotice('بيبدأ التصحيح… حفظنا بيانات الإجابة، ولو عملت Refresh هنحاول استكمال بدء المهمة تلقائيًا.')
         created = await geminiInteractionRequest(GEMINI_INTERACTIONS_API, config.apiKey, {
           method: 'POST',
-          body: JSON.stringify({
-            model: config.model,
-            input: [
-              { type: 'text', text: prompt },
-              ...answerImages.map((image) => ({ type: 'image', data: image.data, mime_type: image.mimeType })),
-            ],
-            background: true,
-            store: true,
-            generation_config: { temperature: 0.1, max_output_tokens: 8192 },
-          }),
+          body: requestBody,
           signal: controller.signal,
         })
       } finally {
@@ -307,6 +367,7 @@ export function NoteEditor({
       const jobId = created.id as string
       activeJobIdRef.current = jobId
       localStorage.setItem(correctionJobStorageKey(lessonId), jobId)
+      await deletePendingCorrection(lessonId).catch(() => undefined)
       setNotice('') // The ID is persisted now, so refreshing can safely resume this interaction.
       if (controller.signal.aborted && userCancelledRef.current) {
         await geminiInteractionRequest(`${GEMINI_INTERACTIONS_API}/${encodeURIComponent(jobId)}/cancel`, config.apiKey, { method: 'POST' }).catch(() => undefined)
@@ -388,27 +449,61 @@ export function NoteEditor({
   useEffect(() => {
     mountedRef.current = true
     const storageKey = correctionJobStorageKey(lessonId)
-    const existingJobId = localStorage.getItem(storageKey)
-    if (!existingJobId || !config?.apiKey || config.provider === 'groq') return
+    if (!config?.apiKey || config.provider === 'groq') return
     const controller = new AbortController()
     gradingAbortRef.current = controller
-    activeJobIdRef.current = existingJobId
-    setGrading(true)
-    void waitForCorrectionJob(existingJobId, config.apiKey, controller.signal)
-      .then((completed) => {
-        if (mountedRef.current) showJobResult(completed)
+    let disposed = false
+
+    const restoreOrStartJob = async () => {
+      const existingJobId = localStorage.getItem(storageKey)
+      if (existingJobId) {
+        activeJobIdRef.current = existingJobId
+        setGrading(true)
+        const completed = await waitForCorrectionJob(existingJobId, config.apiKey, controller.signal)
+        if (!disposed && mountedRef.current) showJobResult(completed)
+        return
+      }
+
+      // No ID means refresh happened while the initial POST was in flight.
+      // Re-submit the request saved in IndexedDB so the job can still finish.
+      const pending = await getPendingCorrection(lessonId)
+      if (!pending || disposed || controller.signal.aborted) return
+      setGrading(true)
+      setNotice('بنستكمل بدء التصحيح بعد تحديث الصفحة…')
+      const created = await geminiInteractionRequest(GEMINI_INTERACTIONS_API, config.apiKey, {
+        method: 'POST',
+        body: pending.body,
+        signal: controller.signal,
       })
+      if (typeof created?.id !== 'string') throw new Error('جوجل لم ترجع معرف المهمة أثناء الاستعادة.')
+      const jobId = created.id as string
+      localStorage.setItem(storageKey, jobId)
+      await deletePendingCorrection(lessonId).catch(() => undefined)
+      if (disposed || controller.signal.aborted) return
+      activeJobIdRef.current = jobId
+      setNotice('')
+      const completed = await waitForCorrectionJob(jobId, config.apiKey, controller.signal)
+      if (!disposed && mountedRef.current) showJobResult(completed)
+    }
+
+    void restoreOrStartJob()
       .catch((error) => {
-        if (mountedRef.current && !(error instanceof Error && error.name === 'AbortError')) {
+        if (!disposed && mountedRef.current && !(error instanceof Error && error.name === 'AbortError')) {
           setGrading(false)
-          setNotice(error instanceof Error ? error.message + ' معرّف المهمة محفوظ؛ أعد فتح الصفحة لاستكمال المتابعة.' : 'تعذر استعادة التصحيح. معرّف المهمة محفوظ؛ أعد فتح الصفحة لاستكمال المتابعة.')
+          setNotice(error instanceof Error
+            ? error.message + ' لو المهمة لم تبدأ بعد، سيظل طلبها محفوظًا لمحاولة الاستعادة.'
+            : 'تعذر استعادة التصحيح؛ بيانات الطلب محفوظة لمحاولة أخرى.')
           activeJobIdRef.current = null
         }
       })
       .finally(() => {
         if (gradingAbortRef.current === controller) gradingAbortRef.current = null
       })
-    return () => controller.abort()
+
+    return () => {
+      disposed = true
+      controller.abort()
+    }
   }, [lessonId, config?.apiKey, config?.provider])
 
   useEffect(() => () => {
