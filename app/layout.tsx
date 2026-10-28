@@ -6,6 +6,7 @@ import { CursorFx } from '@/components/fx/cursor-fx'
 import { SoundEngine } from '@/components/fx/sound-engine'
 import { OnboardingTour } from '@/components/onboarding-tour'
 import { WhatsAppButton } from '@/components/whatsapp-button'
+import { FacebookButton } from '@/components/facebook-button'
 import { FeedbackWidget } from '@/components/feedback-widget'
 import { getSession } from '@/lib/auth'
 import './globals.css'
@@ -49,6 +50,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           />
         )}
         <WhatsAppButton />
+        <FacebookButton />
         <FeedbackWidget />
         <CursorFx />
         <SoundEngine />
