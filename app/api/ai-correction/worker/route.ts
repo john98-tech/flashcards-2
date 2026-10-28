@@ -43,16 +43,26 @@ export async function POST(request: Request) {
   }
   if (!job.payload_path) return NextResponse.json({ ok: true })
 
-  const { data: claimed, error: claimError } = await db()
-    .from('ai_correction_jobs')
-    .update({ status: 'processing', updated_at: new Date().toISOString() })
-    .eq('id', jobId)
-    .in('status', ['queued', 'processing'])
-    .select('id')
-    .maybeSingle()
+  const claimTime = new Date().toISOString()
+  const claimResult = job.status === 'queued'
+    ? await db()
+        .from('ai_correction_jobs')
+        .update({ status: 'processing', updated_at: claimTime })
+        .eq('id', jobId)
+        .eq('status', 'queued')
+        .select('id')
+        .maybeSingle()
+    : await db()
+        .from('ai_correction_jobs')
+        .update({ status: 'processing', updated_at: claimTime })
+        .eq('id', jobId)
+        .eq('status', 'processing')
+        .lt('updated_at', new Date(Date.now() - 270_000).toISOString())
+        .select('id')
+        .maybeSingle()
 
-  if (claimError) return jsonError('Unable to claim job.', 500)
-  if (!claimed) return NextResponse.json({ ok: true })
+  if (claimResult.error) return jsonError('Unable to claim job.', 500)
+  if (!claimResult.data) return NextResponse.json({ ok: true })
 
   try {
     const { data: encryptedFile, error: downloadError } = await db().storage.from(BUCKET).download(job.payload_path)
