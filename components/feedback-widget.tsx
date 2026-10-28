@@ -270,7 +270,9 @@ export function FeedbackWidget() {
       </form>
     </section>}
     <button type="button" onClick={() => { const nextOpen = !open; setOpen(nextOpen); if (nextOpen) setUnreadCount(0) }} className="floating-contact-button relative flex size-14 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#075e54] text-white shadow-lg ring-2 ring-white/90 transition duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#075e54] focus-visible:ring-offset-2" aria-expanded={open} aria-label={open ? 'إغلاق التعليقات' : 'تعليقات الموقع'} title="تعليقات الموقع" style={{ zIndex: 100000, visibility: 'visible', opacity: 1 }}>
-      {unreadCount > 0 && !open && <span className="feedback-message-hint" aria-live="polite">رسالة جديدة</span>}
+      {!open && (unreadCount > 0
+        ? <span className="feedback-message-hint" aria-live="polite">رسالة جديدة</span>
+        : <span className="floating-contact-hint floating-contact-hint-feedback" aria-hidden="true">اترك تعليقك</span>)}
       {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
       {unreadCount > 0 && !open && <span className="absolute -right-1 -top-1 grid min-h-6 min-w-6 place-items-center rounded-full border-2 border-white bg-red-600 px-1 text-xs font-extrabold leading-none text-white shadow-md" aria-label={`${unreadCount} رسالة غير مقروءة`}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
     </button>
