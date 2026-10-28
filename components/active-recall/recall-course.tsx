@@ -29,6 +29,16 @@ function formatDate(date: string) {
   return new Intl.DateTimeFormat('ar-EG', { timeZone: 'UTC', dateStyle: 'medium' }).format(new Date(`${date}T00:00:00Z`))
 }
 
+function formatCountdown(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainder = seconds % 60
+  return hours > 0
+    ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`
+    : `${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`
+}
+
 export function RecallCourse({ course, today, settings, testMode = false, testTime }: { course: Course; today: string; settings: RecallSettings; testMode?: boolean; testTime?: string }) {
   const router = useRouter()
   // Include lessons added by the admin after a student created their plan.
@@ -54,6 +64,8 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [draftReady, setDraftReady] = useState(false)
+  const [timerDeadline, setTimerDeadline] = useState<number | null>(null)
+  const [timerNow, setTimerNow] = useState(() => Date.now())
   const draftStorageKey = `sammaa-active-recall-student-draft-v1-${course.id}`
 
   // Keep student answers and the active editor/session in this browser so refreshes
@@ -135,6 +147,37 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
   const activeSession = dueSessions.find((session) => session.id === activeSessionId) ?? null
   const lesson = course.lessons.find((item) => item.id === activeSession?.lessonId) ?? null
   const questions = lesson ? [lesson.question, lesson.additionalQuestion].filter((question): question is RecallQuestion => !!question) : []
+
+  // Persist an absolute deadline per review session. Leaving the page or refreshing
+  // therefore never resets the countdown; time continues to elapse in the background.
+  useEffect(() => {
+    if (!activeSession || !lesson || activeSession.status === 'completed') {
+      setTimerDeadline(null)
+      return
+    }
+    const timerKey = `sammaa-active-recall-deadline-v1-${course.id}-${activeSession.id}`
+    const wordCount = lesson.content.trim() ? lesson.content.trim().split(/\\s+/u).length : 0
+    const questionCount = [lesson.question, lesson.additionalQuestion].filter(Boolean).length
+    const estimatedSeconds = Math.max(60, Math.ceil((wordCount / 200) * 60) + questionCount * 30)
+    let deadline: number
+    try {
+      const stored = Number(localStorage.getItem(timerKey))
+      if (Number.isFinite(stored) && stored > Date.now()) {
+        deadline = stored
+      } else if (Number.isFinite(stored) && stored > 0) {
+        deadline = stored
+      } else {
+        deadline = Date.now() + estimatedSeconds * 1000
+        localStorage.setItem(timerKey, String(deadline))
+      }
+    } catch {
+      deadline = Date.now() + estimatedSeconds * 1000
+    }
+    setTimerDeadline(deadline)
+    setTimerNow(Date.now())
+    const interval = window.setInterval(() => setTimerNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [course.id, activeSession?.id, activeSession?.status, lesson?.content, lesson?.question, lesson?.additionalQuestion])
   const completedToday = dueSessions.filter((session) => session.scheduledDate === today && session.status === 'completed').length
   const pendingToday = dueSessions.filter((session) => session.scheduledDate === today && session.status !== 'completed').length
   const overdueCount = dueSessions.filter((session) => session.scheduledDate < today && session.status !== 'completed').length
@@ -341,6 +384,14 @@ export function RecallCourse({ course, today, settings, testMode = false, testTi
                   ) : activeSession && lesson ? (
                     <>
                       <article className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+                        <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${timerDeadline !== null && timerDeadline <= timerNow ? 'border-amber-500/50 bg-amber-500/10' : 'bg-muted/40'}`}>
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground">الوقت التقديري لإنهاء الدرس</p>
+                            <p className="mt-1 text-2xl font-bold tabular-nums" dir="ltr">{timerDeadline === null ? '--:--' : formatCountdown(Math.ceil((timerDeadline - timerNow) / 1000))}</p>
+                          </div>
+                          <p className="max-w-xs text-xs leading-5 text-muted-foreground">الحساب حسب عدد كلمات الدرس (200 كلمة/دقيقة) + 30 ثانية لكل سؤال. الوقت محفوظ ويستمر حتى لو خرجت ورجعت.</p>
+                        </div>
+                        {timerDeadline !== null && timerDeadline <= timerNow && <p className="mb-3 rounded-lg bg-amber-500/10 p-2 text-sm font-semibold text-amber-800">انتهى الوقت التقديري؛ تقدر تكمل الدرس عادي لحد ما تخلص.</p>}
                         <p className="text-sm font-semibold text-primary">مراجعة رقم {activeSession.reviewNumber}{activeSession.scheduledDate < today ? ' · جلسة متأخرة' : ''}</p>
                         <h2 className="mt-1 text-xl font-bold">{lesson.title}</h2>
                         <div className="mt-5 whitespace-pre-wrap text-base leading-8" dir="auto">{lesson.content}</div>
