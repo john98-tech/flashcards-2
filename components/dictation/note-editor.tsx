@@ -119,6 +119,77 @@ async function blobToBase64(blob: Blob): Promise<{ mimeType: string; data: strin
 }
 
 
+const correctionJobStorageKey = (lessonId: string) => `kwk:ai-correction-job:${lessonId}`
+
+const GEMINI_INTERACTIONS_API = 'https://generativelanguage.googleapis.com/v1beta/interactions'
+const GEMINI_API_REVISION = '2026-05-20'
+
+type CorrectionJobResult = {
+  status: 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'incomplete'
+  result?: { raw?: string } | null
+  error?: string | null
+}
+
+function interactionOutput(data: any): string {
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text
+  const output = Array.isArray(data?.output) ? data.output : []
+  const outputText = output
+    .flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
+    .filter((part: any) => part?.type === 'text' && typeof part.text === 'string')
+    .map((part: any) => part.text)
+    .join('\n')
+  if (outputText.trim()) return outputText
+  const steps = Array.isArray(data?.steps) ? data.steps : []
+  return steps
+    .filter((step: any) => step?.type === 'model_output')
+    .flatMap((step: any) => Array.isArray(step.content) ? step.content : [])
+    .filter((part: any) => part?.type === 'text' && typeof part.text === 'string')
+    .map((part: any) => part.text)
+    .join('\n')
+}
+
+async function geminiInteractionRequest(url: string, apiKey: string, init: RequestInit = {}) {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+      'Api-Revision': GEMINI_API_REVISION,
+      ...init.headers,
+    },
+    cache: 'no-store',
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const message = typeof data?.error?.message === 'string' ? data.error.message : ''
+    throw new Error(message || `Gemini رفض الطلب (HTTP ${response.status}). تأكد من المفتاح والموديل.`)
+  }
+  return data
+}
+
+async function waitForCorrectionJob(jobId: string, apiKey: string, signal: AbortSignal): Promise<CorrectionJobResult> {
+  while (true) {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+    const data = await geminiInteractionRequest(`${GEMINI_INTERACTIONS_API}/${encodeURIComponent(jobId)}`, apiKey, { signal })
+    if (data.status === 'completed') return { status: 'completed', result: { raw: interactionOutput(data) } }
+    if (data.status === 'failed') return { status: 'failed', error: data.errors?.map((item: any) => item?.message).filter(Boolean).join('\n') || 'Gemini تعذر عليه إكمال التصحيح.' }
+    if (data.status === 'cancelled') return { status: 'cancelled' }
+    if (data.status === 'incomplete') return { status: 'incomplete', result: { raw: interactionOutput(data) }, error: 'Gemini أنهى المهمة بإجابة غير مكتملة.' }
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        signal.removeEventListener('abort', onAbort)
+        resolve()
+      }, 2500)
+      const onAbort = () => {
+        window.clearTimeout(timer)
+        signal.removeEventListener('abort', onAbort)
+        reject(new DOMException('Aborted', 'AbortError'))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+  }
+}
+
 const CONFETTI_COLORS = ['#14b8a6', '#8b5cf6', '#fb7185', '#f59e0b', '#10b981', '#38bdf8']
 
 export function NoteEditor({
@@ -141,6 +212,8 @@ export function NoteEditor({
   const boardRef = useRef<HandwritingEditorHandle>(null)
   const router = useRouter()
   const gradingAbortRef = useRef<AbortController | null>(null)
+  const activeJobIdRef = useRef<string | null>(null)
+  const userCancelledRef = useRef(false)
   const mountedRef = useRef(true)
   const [keyOpen, setKeyOpen] = useState(false)
   const [grading, setGrading] = useState(false)
@@ -165,6 +238,8 @@ export function NoteEditor({
 
     const controller = new AbortController()
     gradingAbortRef.current = controller
+    activeJobIdRef.current = null
+    userCancelledRef.current = false
     setGrading(true)
     setNotice('')
     setReport(null)
@@ -188,15 +263,62 @@ export function NoteEditor({
         .filter(Boolean)
         .join('\n\n')
       if (controller.signal.aborted) return
-      const raw = await generate(config, prompt, { temperature: 0.1, json: true, images: answerImages, signal: controller.signal })
-      const parsed = parseGradingReport(raw)
-      if (parsed) setReport(parsed)
-      else setRawReply(raw)
+      if (config.provider === 'groq') {
+        // Groq does not expose a compatible persisted background interaction API.
+        // Keep Groq direct-from-browser, but use Gemini Background Interactions when Gemini is selected.
+        const raw = await generate(config, prompt, { temperature: 0.1, json: true, images: answerImages, signal: controller.signal })
+        const parsed = parseGradingReport(raw)
+        if (parsed) setReport(parsed)
+        else setRawReply(raw)
+        return
+      }
+
+      const created = await geminiInteractionRequest(GEMINI_INTERACTIONS_API, config.apiKey, {
+        method: 'POST',
+        body: JSON.stringify({
+          model: config.model,
+          input: [
+            { type: 'text', text: prompt },
+            ...answerImages.map((image) => ({ type: 'image', data: image.data, mime_type: image.mimeType })),
+          ],
+          background: true,
+          generation_config: { temperature: 0.1, max_output_tokens: 8192 },
+        }),
+        signal: controller.signal,
+      })
+      if (typeof created.id !== 'string') throw new Error('جوجل لم ترجع معرف المهمة.')
+      const jobId = created.id as string
+      activeJobIdRef.current = jobId
+      localStorage.setItem(correctionJobStorageKey(lessonId), jobId)
+      if (controller.signal.aborted && userCancelledRef.current) {
+        await geminiInteractionRequest(`${GEMINI_INTERACTIONS_API}/${encodeURIComponent(jobId)}/cancel`, config.apiKey, { method: 'POST' }).catch(() => undefined)
+        localStorage.removeItem(correctionJobStorageKey(lessonId))
+        activeJobIdRef.current = null
+        return
+      }
+      const completed = await waitForCorrectionJob(jobId, config.apiKey, controller.signal)
+      localStorage.removeItem(correctionJobStorageKey(lessonId))
+      activeJobIdRef.current = null
+      if (completed.status === 'completed' && typeof completed.result?.raw === 'string') {
+        const parsed = parseGradingReport(completed.result.raw)
+        if (parsed) setReport(parsed)
+        else setRawReply(completed.result.raw)
+      } else if (completed.status === 'cancelled') {
+        setNotice('تم إيقاف التصحيح.')
+      } else {
+        throw new Error(completed.error || 'تعذر إكمال التصحيح. جرّب مرة أخرى.')
+      }
     } catch (error) {
       if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-        if (mountedRef.current) setNotice('تم إيقاف التصحيح.')
+        if (mountedRef.current && activeJobIdRef.current) setNotice('تم إيقاف متابعة التصحيح محليًا؛ لو لم تُلغَ المهمة ستظل تعمل في الخلفية.')
       } else {
-        if (mountedRef.current) setNotice(error instanceof Error ? error.message : 'تعذر تصحيح التسميع. جرّب مرة أخرى.')
+        // Keep a persisted interaction ID if polling failed: the task may still be
+        // running at Google and can be resumed when the page is reopened.
+        activeJobIdRef.current = null
+        if (mountedRef.current) {
+          setGrading(false)
+          setNotice(error instanceof Error ? error.message + ' معرّف المهمة محفوظ؛ افتح الصفحة مرة أخرى لاستكمال المتابعة.' : 'تعذر الاتصال بمتابعة التصحيح. معرّف المهمة محفوظ؛ افتح الصفحة مرة أخرى لاستكمال المتابعة.')
+        }
       }
     } finally {
       answerImages.length = 0
@@ -206,18 +328,68 @@ export function NoteEditor({
     }
   }
 
-  const cancelGrading = () => {
+  const cancelGrading = async () => {
+    userCancelledRef.current = true
+    const jobId = activeJobIdRef.current
     gradingAbortRef.current?.abort()
+    if (jobId) {
+      try {
+        if (config?.provider !== 'groq' && config?.apiKey) {
+          await geminiInteractionRequest(`${GEMINI_INTERACTIONS_API}/${encodeURIComponent(jobId)}/cancel`, config.apiKey, { method: 'POST' })
+        }
+      } catch {
+        // The browser can stop polling even if Google cannot cancel the interaction.
+      }
+      localStorage.removeItem(correctionJobStorageKey(lessonId))
+      activeJobIdRef.current = null
+    }
     setGrading(false)
-    setNotice('تم إيقاف التصحيح.')
+    setNotice('تم إرسال طلب إيقاف التصحيح.')
+  }
+
+  const showJobResult = (completed: CorrectionJobResult) => {
+    localStorage.removeItem(correctionJobStorageKey(lessonId))
+    activeJobIdRef.current = null
+    if (completed.status === 'completed' && typeof completed.result?.raw === 'string') {
+      const parsed = parseGradingReport(completed.result.raw)
+      if (parsed) setReport(parsed)
+      else setRawReply(completed.result.raw)
+    } else if (completed.status === 'failed') {
+      setNotice(completed.error || 'تعذر إكمال التصحيح. جرّب مرة أخرى.')
+    } else if (completed.status === 'cancelled') {
+      setNotice('تم إيقاف التصحيح.')
+    }
+    setGrading(false)
   }
 
   useEffect(() => {
     mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
+    const storageKey = correctionJobStorageKey(lessonId)
+    const existingJobId = localStorage.getItem(storageKey)
+    if (!existingJobId || !config?.apiKey || config.provider === 'groq') return
+    const controller = new AbortController()
+    gradingAbortRef.current = controller
+    activeJobIdRef.current = existingJobId
+    setGrading(true)
+    void waitForCorrectionJob(existingJobId, config.apiKey, controller.signal)
+      .then((completed) => {
+        if (mountedRef.current) showJobResult(completed)
+      })
+      .catch((error) => {
+        if (mountedRef.current && !(error instanceof Error && error.name === 'AbortError')) {
+          setGrading(false)
+          setNotice(error instanceof Error ? error.message + ' معرّف المهمة محفوظ؛ أعد فتح الصفحة لاستكمال المتابعة.' : 'تعذر استعادة التصحيح. معرّف المهمة محفوظ؛ أعد فتح الصفحة لاستكمال المتابعة.')
+          activeJobIdRef.current = null
+        }
+      })
+      .finally(() => {
+        if (gradingAbortRef.current === controller) gradingAbortRef.current = null
+      })
+    return () => controller.abort()
+  }, [lessonId, config?.apiKey, config?.provider])
 
   useEffect(() => () => {
+    mountedRef.current = false
     gradingAbortRef.current?.abort()
   }, [])
 
