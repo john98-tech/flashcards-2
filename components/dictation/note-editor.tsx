@@ -97,6 +97,7 @@ function blobToBase64(blob: Blob) {
 const CONFETTI_COLORS = ['#14b8a6', '#8b5cf6', '#fb7185', '#f59e0b', '#10b981', '#38bdf8']
 
 export function NoteEditor({
+  lessonId,
   lessonTitle,
   subjectName,
   referenceText,
@@ -104,6 +105,7 @@ export function NoteEditor({
   studentText,
   studentImages,
 }: {
+  lessonId: string
   lessonTitle: string
   subjectName: string
   referenceText: string
