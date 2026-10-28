@@ -29,6 +29,11 @@ function Attachment({ item }: { item: FeedbackMessage }) {
 
 export function FeedbackWidget() {
   const [open, setOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const initialLoadDoneRef = useRef(false)
+  const seenMessageIdsRef = useRef<Set<string>>(new Set())
+  const originalTitleRef = useRef('')
+  const originalFaviconRef = useRef<string | null>(null)
   const [threadId, setThreadId] = useState('')
   const [messages, setMessages] = useState<FeedbackMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -47,19 +52,75 @@ export function FeedbackWidget() {
   const timerRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const playNotificationSound = useCallback(() => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!AudioContextClass) return
+      const context = new AudioContextClass()
+      if (context.state === 'suspended') void context.resume()
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(880, context.currentTime)
+      oscillator.frequency.setValueAtTime(660, context.currentTime + 0.12)
+      gain.gain.setValueAtTime(0.0001, context.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.16, context.currentTime + 0.025)
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.3)
+      oscillator.connect(gain); gain.connect(context.destination)
+      oscillator.start(); oscillator.stop(context.currentTime + 0.32)
+      oscillator.onended = () => void context.close()
+    } catch { /* Audio may be blocked until the user interacts with the page. */ }
+  }, [])
+
   const refresh = useCallback(async (id: string) => {
     if (!id) return
-    try { setMessages(await loadFeedbackMessages(id)); setError('') }
-    catch { setError('تعذر تحميل الرسائل. تأكد من إعداد التعليقات في قاعدة البيانات.') }
-  }, [])
+    try {
+      const loaded = await loadFeedbackMessages(id)
+      const knownIds = seenMessageIdsRef.current
+      if (initialLoadDoneRef.current) {
+        const incoming = loaded.filter(message => message.sender_role === 'admin' && !knownIds.has(message.id))
+        if (incoming.length) {
+          setUnreadCount(count => count + incoming.length)
+          playNotificationSound()
+        }
+      } else {
+        initialLoadDoneRef.current = true
+      }
+      loaded.forEach(message => knownIds.add(message.id))
+      setMessages(loaded)
+      setError('')
+    } catch { setError('تعذر تحميل الرسائل. تأكد من إعداد التعليقات في قاعدة البيانات.') }
+  }, [playNotificationSound])
 
   useEffect(() => { const id = getThreadId(); setThreadId(id); setReady(true); if (id) void refresh(id) }, [refresh])
   useEffect(() => {
-    if (!open || !threadId) return
-    void refresh(threadId)
-    const interval = window.setInterval(() => void refresh(threadId), 10000)
+    if (!threadId) return
+    const interval = window.setInterval(() => void refresh(threadId), 8000)
     return () => window.clearInterval(interval)
-  }, [open, threadId, refresh])
+  }, [threadId, refresh])
+
+  useEffect(() => {
+    if (!ready) return
+    if (!originalTitleRef.current) originalTitleRef.current = document.title
+    if (originalFaviconRef.current === null) {
+      originalFaviconRef.current = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.href || '/logo.png'
+    }
+    const icon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount > 9 ? '9+' : unreadCount}) رسالة جديدة | ${originalTitleRef.current}`
+      if (icon) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><image href="${originalFaviconRef.current}" width="64" height="64"/><circle cx="48" cy="15" r="14" fill="#ef4444" stroke="white" stroke-width="4"/><text x="48" y="20" font-size="14" font-weight="bold" text-anchor="middle" fill="white">${unreadCount > 9 ? '9+' : unreadCount}</text></svg>`
+        icon.href = `data:image/svg+xml,${encodeURIComponent(svg)}`
+      }
+    } else {
+      document.title = originalTitleRef.current
+      if (icon && originalFaviconRef.current) icon.href = originalFaviconRef.current
+    }
+    return () => {
+      document.title = originalTitleRef.current || document.title
+      if (icon && originalFaviconRef.current) icon.href = originalFaviconRef.current
+    }
+  }, [unreadCount, ready])
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, open, pending, selectedImage, recordedAudio])
@@ -208,10 +269,10 @@ export function FeedbackWidget() {
         <p className="mt-1.5 px-1 text-[10px] text-stone-500">Enter للإرسال · Shift + Enter لسطر جديد</p>
       </form>
     </section>}
-    <button type="button" onClick={() => setOpen(value => !value)} className="floating-contact-button relative flex size-14 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#075e54] text-white shadow-lg ring-2 ring-white/90 transition duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#075e54] focus-visible:ring-offset-2" aria-expanded={open} aria-label={open ? 'إغلاق التعليقات' : 'تعليقات الموقع'} title="تعليقات الموقع" style={{ zIndex: 100000, visibility: 'visible', opacity: 1 }}>
-      <span className="floating-contact-hint floating-contact-hint-feedback" aria-hidden="true">اسألنا</span>
+    <button type="button" onClick={() => { const nextOpen = !open; setOpen(nextOpen); if (nextOpen) setUnreadCount(0) }} className="floating-contact-button relative flex size-14 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#075e54] text-white shadow-lg ring-2 ring-white/90 transition duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#075e54] focus-visible:ring-offset-2" aria-expanded={open} aria-label={open ? 'إغلاق التعليقات' : 'تعليقات الموقع'} title="تعليقات الموقع" style={{ zIndex: 100000, visibility: 'visible', opacity: 1 }}>
+      {unreadCount > 0 && !open && <span className="feedback-message-hint" aria-live="polite">رسالة جديدة</span>}
       {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
-      {messages.some(message => message.sender_role === 'admin') && <span className="absolute right-0 top-0 size-3 rounded-full border-2 border-white bg-amber-300" aria-label="يوجد رد" />}
+      {unreadCount > 0 && !open && <span className="absolute -right-1 -top-1 grid min-h-6 min-w-6 place-items-center rounded-full border-2 border-white bg-red-600 px-1 text-xs font-extrabold leading-none text-white shadow-md" aria-label={`${unreadCount} رسالة غير مقروءة`}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
     </button>
   </div>
 }
