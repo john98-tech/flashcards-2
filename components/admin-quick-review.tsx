@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Pencil, RotateCcw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { loadDeck, saveCard } from '@/app/admin/actions'
-import { fromCloze, toCloze, tokenize, type Card, type Deck } from '@/lib/cloze'
+import { fromCloze, toCloze, type Card, type Deck } from '@/lib/cloze'
 import type { DeckSummary } from '@/lib/decks'
 
 type Props = { decks: DeckSummary[]; onClose: () => void }
@@ -24,6 +24,10 @@ export function AdminQuickReview({ decks, onClose }: Props) {
   const current = deck?.cards[position] ?? null
   const parsed = useMemo(() => current ? fromCloze(current.cloze) : null, [current])
   const [selected, setSelected] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    setSelected(parsed?.selected ?? new Set())
+  }, [current?.id, current?.cloze])
 
   useEffect(() => {
     setDeck(null)
@@ -122,9 +126,7 @@ export function AdminQuickReview({ decks, onClose }: Props) {
           <div className="min-h-48 rounded-2xl border bg-background p-5 text-base leading-8 sm:p-7">
             {parsed?.tokens.map((token, index) => {
               if (token.space) return <span key={index}>{token.text}</span>
-              const blank = selected.has(index) || current.cloze.slice(token.start - 2, token.start) === '{{'
-              const clozeToken = current.cloze.includes('{{' + token.text + '}}')
-              const showBlank = editMode ? selected.has(index) || clozeToken : clozeToken
+              const showBlank = editMode ? selected.has(index) : !!parsed?.selected.has(index)
               return <button key={index} type="button" disabled={!editMode} onClick={() => toggleToken(index)} className={editMode ? 'mx-0.5 rounded px-0.5 underline decoration-dotted underline-offset-4 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring' : 'mx-0.5 cursor-default'} aria-label={editMode ? 'تبديل إخفاء الكلمة ' + token.text : undefined}>{showBlank ? <span className="inline-block min-w-12 border-b-2 border-primary/60 px-2 text-center text-transparent select-none">{token.text}</span> : token.text}</button>
             })}
           </div>
