@@ -52,6 +52,11 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
   }, [realGroups])
 
   useEffect(() => {
+    const groupFromUrl = new URLSearchParams(window.location.search).get('group')
+    if (groupFromUrl) setSelectedGroupId(groupFromUrl)
+  }, [])
+
+  useEffect(() => {
     refreshProgress()
     const onStorage = () => refreshProgress()
     const onVisible = () => {
@@ -106,7 +111,7 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
           {selectedGroup.decks.map((deck, index) => (
             <li key={deck.id} className="group-card-enter" style={{ animationDelay: `${Math.min(index * 65, 390)}ms` }}>
               <Link
-                href={`/decks/${deck.id}`}
+                href={`/decks/${deck.id}?group=${encodeURIComponent(selectedGroup.id)}`}
                 onClick={() => {
                   try {
                     sessionStorage.setItem('flashcards-return-group', selectedGroup.id)
