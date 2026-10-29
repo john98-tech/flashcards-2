@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, Lock } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import { SiteHeader } from '@/components/site-header'
+import { BackOneStep } from '@/components/back-one-step'
 import { StudySession } from '@/components/study-session'
 import { RedeemForm } from '@/components/redeem-form'
 import { getDeck, getDeckMeta } from '@/lib/decks'
@@ -18,10 +18,7 @@ function DemoDeckPage() {
       <SiteHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">
         <nav aria-label="Page navigation" className="mb-6">
-          <Link href="/" data-tour="home-link" data-tour-action="return-home" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm backdrop-blur transition-all hover:border-primary/40 hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <ArrowLeft className="size-4" aria-hidden />
-            الرئيسية
-          </Link>
+          <BackOneStep />
         </nav>
         <div className="mb-6">
           <span className="text-xs font-medium text-primary">{demoDeck.subject}</span>
@@ -53,10 +50,7 @@ export default async function DeckPage({ params }: PageProps<'/decks/[id]'>) {
       <SiteHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">
         <nav aria-label="Page navigation" className="mb-6">
-          <Link href="/" data-tour="home-link" data-tour-action="return-home" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border/80 bg-card/80 px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm backdrop-blur transition-all hover:border-primary/40 hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <ArrowLeft className="size-4" aria-hidden />
-            الرئيسية
-          </Link>
+          <BackOneStep />
         </nav>
         <div className="mb-6">
           <span className="text-xs font-medium text-primary">{meta.subject}</span>
