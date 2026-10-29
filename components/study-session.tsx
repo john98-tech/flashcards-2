@@ -39,6 +39,8 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [adminError, setAdminError] = useState('')
   const [adminOverrides, setAdminOverrides] = useState<Record<string, string>>({})
   const [adminSelected, setAdminSelected] = useState<Set<number>>(new Set())
+  const adminSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingAdminSave = useRef<{ card: Deck['cards'][number]; cloze: string; position: number } | null>(null)
   const validCardIds = useMemo(() => new Set(deck.cards.map((item) => item.id)), [deck.cards])
 
   useEffect(() => {
@@ -137,11 +139,57 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     const next = new Set(adminSelected)
     if (next.has(index)) next.delete(index)
     else next.add(index)
+
+    // Update the card immediately so the clicked word never flashes back while
+    // waiting for the network. Batch rapid taps into one save of the latest state.
+    const nextCloze = toCloze(adminParsed.text, adminParsed.tokens, next)
     setAdminSelected(next)
-    void persistAdminCard(toCloze(adminParsed.text, adminParsed.tokens, next))
+    setAdminOverrides((old) => ({ ...old, [card.id]: nextCloze }))
+    pendingAdminSave.current = {
+      card: { ...card },
+      cloze: nextCloze,
+      position: deck.cards.findIndex((item) => item.id === card.id),
+    }
+    setAdminError('')
+    setAdminStatus('تعديلاتك محفوظة محليًا، جاري تجهيز الحفظ...')
+    if (adminSaveTimer.current) clearTimeout(adminSaveTimer.current)
+    adminSaveTimer.current = setTimeout(async () => {
+      const pending = pendingAdminSave.current
+      pendingAdminSave.current = null
+      adminSaveTimer.current = null
+      if (!pending) return
+      setAdminSaving(true)
+      setAdminStatus('جاري الحفظ...')
+      setAdminError('')
+      try {
+        await saveCard(deck.id, { ...pending.card, cloze: pending.cloze }, pending.position)
+        setAdminStatus('تم الحفظ')
+      } catch (error) {
+        setAdminError(error instanceof Error ? error.message : 'فشل الحفظ. حاول مرة أخرى.')
+        setAdminStatus('')
+      } finally {
+        setAdminSaving(false)
+      }
+    }, 300)
   }
 
   const saveAdminText = async () => {
+    // Flush any pending word edits first so an older queued save cannot overwrite
+    // the text the admin is saving now.
+    if (adminSaveTimer.current) {
+      clearTimeout(adminSaveTimer.current)
+      adminSaveTimer.current = null
+      const pending = pendingAdminSave.current
+      pendingAdminSave.current = null
+      if (pending) {
+        try {
+          await saveCard(deck.id, { ...pending.card, cloze: pending.cloze }, pending.position)
+        } catch (error) {
+          setAdminError(error instanceof Error ? error.message : 'فشل حفظ تعديل الكلمات.')
+          return
+        }
+      }
+    }
     const saved = await persistAdminCard(adminTextDraft)
     if (saved) setAdminTextEditing(false)
   }
