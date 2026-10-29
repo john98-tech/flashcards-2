@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Eye, Keyboard, MousePointerClick, RotateCcw, Shuffle, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Eye, Keyboard, MousePointerClick, Pencil, Save, RotateCcw, Shuffle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { sfx } from '@/lib/sound'
-import { normalizeAnswer, parseCloze, type Deck } from '@/lib/cloze'
+import { fromCloze, normalizeAnswer, parseCloze, toCloze, type Deck } from '@/lib/cloze'
+import { saveCard } from '@/app/admin/actions'
 import { renderRichInline } from '@/components/rich-inline'
 import { loadStudentDeckProgress, saveStudentDeckProgress } from '@/app/decks/progress-actions'
 
@@ -20,7 +21,7 @@ function shuffle<T>(items: T[]) {
   return copy
 }
 
-export function StudySession({ deck }: { deck: Deck }) {
+export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: boolean }) {
   const storageKey = `sammaa-progress-${deck.id}`
   const [known, setKnown] = useState<Set<string>>(new Set())
   const [queue, setQueue] = useState(() => deck.cards.map((c) => c.id))
@@ -30,6 +31,14 @@ export function StudySession({ deck }: { deck: Deck }) {
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [baseQueue, setBaseQueue] = useState<string[] | null>(null)
   const [progressLoaded, setProgressLoaded] = useState(false)
+  const [adminEditMode, setAdminEditMode] = useState(false)
+  const [adminTextEditing, setAdminTextEditing] = useState(false)
+  const [adminTextDraft, setAdminTextDraft] = useState('')
+  const [adminSaving, setAdminSaving] = useState(false)
+  const [adminStatus, setAdminStatus] = useState('')
+  const [adminError, setAdminError] = useState('')
+  const [adminOverrides, setAdminOverrides] = useState<Record<string, string>>({})
+  const [adminSelected, setAdminSelected] = useState<Set<number>>(new Set())
   const validCardIds = useMemo(() => new Set(deck.cards.map((item) => item.id)), [deck.cards])
 
   useEffect(() => {
@@ -93,9 +102,49 @@ export function StudySession({ deck }: { deck: Deck }) {
     return () => window.clearTimeout(timer)
   }, [progressLoaded, storageKey, deck.id, known, queue, position, mode, baseQueue, revealed, answers, validCardIds])
 
-  const cardsById = useMemo(() => new Map(deck.cards.map((c) => [c.id, c])), [deck.cards])
+  const cardsById = useMemo(() => new Map(deck.cards.map((c) => [c.id, adminOverrides[c.id] !== undefined ? { ...c, cloze: adminOverrides[c.id] } : c])), [deck.cards, adminOverrides])
   const card = cardsById.get(queue[position])
   const segments = useMemo(() => (card ? parseCloze(card.cloze) : []), [card])
+  const adminParsed = useMemo(() => card ? fromCloze(card.cloze) : null, [card])
+
+  useEffect(() => {
+    setAdminSelected(adminParsed?.selected ?? new Set())
+    setAdminStatus('')
+    setAdminError('')
+  }, [card?.id, card?.cloze])
+
+  const persistAdminCard = async (nextCloze: string) => {
+    if (!isAdmin || !card) return false
+    setAdminSaving(true)
+    setAdminError('')
+    setAdminStatus('')
+    const nextCard = { ...card, cloze: nextCloze }
+    try {
+      await saveCard(deck.id, nextCard, deck.cards.findIndex((item) => item.id === card.id))
+      setAdminOverrides((old) => ({ ...old, [card.id]: nextCloze }))
+      setAdminStatus('تم الحفظ')
+      return true
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : 'فشل الحفظ. حاول مرة أخرى.')
+      return false
+    } finally {
+      setAdminSaving(false)
+    }
+  }
+
+  const toggleAdminToken = (index: number) => {
+    if (!isAdmin || !adminEditMode || !adminParsed || !card) return
+    const next = new Set(adminSelected)
+    if (next.has(index)) next.delete(index)
+    else next.add(index)
+    setAdminSelected(next)
+    void persistAdminCard(toCloze(adminParsed.text, adminParsed.tokens, next))
+  }
+
+  const saveAdminText = async () => {
+    const saved = await persistAdminCard(adminTextDraft)
+    if (saved) setAdminTextEditing(false)
+  }
   const blankCount = segments.filter((s) => s.type === 'blank').length
   const allRevealed = revealed.size >= blankCount
 
@@ -203,7 +252,18 @@ export function StudySession({ deck }: { deck: Deck }) {
   const progress = Math.round((known.size / deck.cards.length) * 100)
 
   return (
+    <>
     <div className="study-session-page flex flex-col gap-4">
+      {isAdmin && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 p-2">
+          <Button type="button" size="sm" variant={adminEditMode ? 'default' : 'outline'} aria-pressed={adminEditMode} onClick={() => { setAdminEditMode((value) => !value); setAdminTextEditing(false); setAdminStatus(''); setAdminError('') }}>
+            <Pencil aria-hidden /> {adminEditMode ? 'إيقاف Edit Mode' : 'Edit Mode'}
+          </Button>
+          {adminEditMode && <Button type="button" size="sm" variant="outline" disabled={adminSaving || !card} onClick={() => { setAdminTextDraft(card?.cloze ?? ''); setAdminTextEditing(true) }}>Edit text</Button>}
+          <span className="text-xs text-muted-foreground">{adminSaving ? 'جاري الحفظ...' : adminStatus || (adminEditMode ? 'اضغط على الكلمات لإخفائها أو إظهارها، والتعديل يُحفظ تلقائيًا.' : 'وضع تعديل خاص بالأدمن')}</span>
+          {adminError && <span role="alert" className="w-full text-xs text-destructive">{adminError}</span>}
+        </div>
+      )}
       <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
         <div className="flex w-full items-center gap-1 rounded-lg border bg-card p-1 sm:w-auto" role="group" aria-label="طريقة التسميع">
           <ModeButton active={mode === 'tap'} onClick={() => switchMode('tap')}>
@@ -303,11 +363,32 @@ export function StudySession({ deck }: { deck: Deck }) {
             const isDivider = (value: string) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(value)
             const renderPlainRange = (start: number, end: number) => positioned.filter((item) => item.end > start && item.start < end).map(({ seg, start: segStart, end: segEnd }, i) => {
               if (seg.type === 'text') {
-                const from = Math.max(start, segStart) - segStart
-                const to = Math.min(end, segEnd) - segStart
+                const rangeStart = Math.max(start, segStart)
+                const rangeEnd = Math.min(end, segEnd)
+                if (isAdmin && adminEditMode && adminParsed) {
+                  return adminParsed.tokens.filter((token) => token.end > rangeStart && token.start < rangeEnd).map((token) => {
+                    const tokenIndex = adminParsed.tokens.indexOf(token)
+                    const from = Math.max(rangeStart, token.start)
+                    const to = Math.min(rangeEnd, token.end)
+                    const value = adminParsed.text.slice(from, to)
+                    const isWord = !token.space && /[\\p{L}\\p{N}]/u.test(token.text)
+                    if (!isWord || from !== token.start || to !== token.end) return <span key={'edit-txt-' + token.start}>{value}</span>
+                    const hidden = adminSelected.has(tokenIndex)
+                    return <button key={'edit-word-' + token.start} type="button" disabled={adminSaving} onClick={() => toggleAdminToken(tokenIndex)} aria-label={(hidden ? 'إظهار ' : 'إخفاء ') + token.text} className={cn('mx-0.5 rounded px-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', hidden ? 'border-b-2 border-primary/60 text-transparent select-none hover:bg-primary/10' : 'hover:bg-primary/10 underline decoration-dotted underline-offset-4')}>{token.text}</button>
+                  })
+                }
+                const from = rangeStart - segStart
+                const to = rangeEnd - segStart
                 return <span key={'t-' + segStart + '-' + i}>{seg.value.slice(from, to)}</span>
               }
               if (segStart < start || segEnd > end) return <span key={'b-' + seg.index}>{seg.value}</span>
+              if (isAdmin && adminEditMode && adminParsed) {
+                const tokenIndex = adminParsed.tokens.findIndex((token) => token.start === segStart && token.end === segEnd && !token.space)
+                if (tokenIndex >= 0) {
+                  const hidden = adminSelected.has(tokenIndex)
+                  return <button key={'edit-blank-' + seg.index} type="button" disabled={adminSaving} onClick={() => toggleAdminToken(tokenIndex)} className={cn('mx-0.5 rounded px-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', hidden ? 'border-b-2 border-primary/60 text-transparent select-none hover:bg-primary/10' : 'hover:bg-primary/10 underline decoration-dotted underline-offset-4')}>{seg.value}</button>
+                }
+              }
               const isOpen = revealed.has(seg.index)
               if (mode === 'type') return <TypedBlank key={card.id + '-' + seg.index} answer={seg.value} value={answers[seg.index] ?? ''} checked={isOpen} onChange={(v) => setAnswers((a) => ({ ...a, [seg.index]: v }))} onCheck={(correct) => { if (correct) sfx.correct(); else sfx.wrong(); setRevealed((r) => new Set(r).add(seg.index)) }} />
               return <button key={seg.index} type="button" data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => revealOne(seg.index)} aria-label={isOpen ? seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\\u00A0'}</button>
@@ -424,6 +505,21 @@ const renderLine = (line: { value: string; start: number; end: number }, key: nu
         </div>
       )}
     </div>
+    {isAdmin && adminTextEditing && card && (
+      <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
+        <section role="dialog" aria-modal="true" aria-labelledby="study-admin-edit-title" className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4 shadow-2xl sm:p-6">
+          <h2 id="study-admin-edit-title" className="font-semibold">Edit card text</h2>
+          <p className="text-sm text-muted-foreground">عدّل النص كما تريد. احتفظ بـ {'{{'} و {'}}'} حول الكلمات التي تريد إخفاءها.</p>
+          <textarea autoFocus dir="auto" value={adminTextDraft} onChange={(event) => setAdminTextDraft(event.target.value)} rows={10} className="w-full rounded-lg border bg-background p-3 text-sm leading-7" />
+          {adminError && <p role="alert" className="text-sm text-destructive">{adminError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" disabled={adminSaving} onClick={() => setAdminTextEditing(false)}>إلغاء</Button>
+            <Button type="button" disabled={adminSaving} onClick={() => void saveAdminText()}><Save aria-hidden /> {adminSaving ? 'جاري الحفظ...' : 'حفظ النص'}</Button>
+          </div>
+        </section>
+      </div>
+    )}
+    </>
   )
 }
 
