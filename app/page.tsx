@@ -39,7 +39,19 @@ export default async function HomePage() {
               ...group,
               decks: decks
                 .filter((deck) => deck.groupId === group.id)
-                .map((deck) => ({ ...deck, open: canOpen(deck, access) })),
+                .map((deck) => ({ ...deck, open: canOpen(deck, access) }))
+                .sort((a, b) => {
+                  const partNumber = (title: string) => {
+                    const match = title.match(/\bPart\s+(\d+)\b/i)
+                    return match ? Number(match[1]) : null
+                  }
+                  const partA = partNumber(a.title)
+                  const partB = partNumber(b.title)
+                  if (partA !== null && partB !== null) return partA - partB
+                  if (partA !== null) return -1
+                  if (partB !== null) return 1
+                  return 0
+                }),
             }))
             .filter((group) => group.decks.length > 0)}
         />
