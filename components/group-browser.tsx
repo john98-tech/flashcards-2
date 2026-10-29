@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, FolderOpen, Layers, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,6 +13,40 @@ type BrowserGroup = DeckGroup & { decks: BrowserDeck[] }
 
 export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] }) {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+  const [deckProgress, setDeckProgress] = useState<Record<string, number>>({})
+
+  const refreshProgress = useCallback(() => {
+    try {
+      const next: Record<string, number> = {}
+      for (const group of realGroups) {
+        for (const deck of group.decks) {
+          const raw = localStorage.getItem(`sammaa-progress-${deck.id}`)
+          const saved: unknown = raw ? JSON.parse(raw) : []
+          const known = Array.isArray(saved) ? new Set(saved.filter((id): id is string => typeof id === 'string')) : new Set<string>()
+          next[deck.id] = deck.cardCount > 0 ? Math.min(100, Math.round((Math.min(known.size, deck.cardCount) / deck.cardCount) * 100)) : 0
+        }
+      }
+      setDeckProgress(next)
+    } catch {
+      // Progress indicators should never prevent the deck browser from rendering.
+    }
+  }, [realGroups])
+
+  useEffect(() => {
+    refreshProgress()
+    const onStorage = () => refreshProgress()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshProgress()
+    }
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('pageshow', onStorage)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('pageshow', onStorage)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refreshProgress])
   const demo = useDemoState()
   // While the guided tour runs, only the tutorial's demo group is listed.
   const groups: BrowserGroup[] = demo.active
@@ -73,6 +107,32 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
                 <p className="mt-1 flex-1 text-sm leading-relaxed text-muted-foreground" dir="auto">
                   {deck.description}
                 </p>
+                <div className="mt-5 rounded-xl border border-border/70 bg-muted/35 px-3.5 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                    <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary" aria-hidden />
+                      Deck progress
+                    </span>
+                    <span className="font-bold tabular-nums text-foreground">{deckProgress[deck.id] ?? 0}%</span>
+                  </div>
+                  <div
+                    className="h-2 overflow-hidden rounded-full bg-muted shadow-inner"
+                    role="progressbar"
+                    aria-label={`Progress for ${deck.title}`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={deckProgress[deck.id] ?? 0}
+                  >
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary via-primary to-success transition-[width] duration-700 ease-out"
+                      style={{ width: `${deckProgress[deck.id] ?? 0}%` }}
+                    />
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{Math.min(Math.round(((deckProgress[deck.id] ?? 0) / 100) * deck.cardCount), deck.cardCount)} of {deck.cardCount} cards mastered</span>
+                    {(deckProgress[deck.id] ?? 0) === 100 && deck.cardCount > 0 && <span className="font-semibold text-success">Completed</span>}
+                  </div>
+                </div>
                 <div className="mt-4 flex items-center justify-between text-sm">
                   <span dir="ltr" className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-muted-foreground">
                     <Layers className="size-4 shrink-0" aria-hidden />
