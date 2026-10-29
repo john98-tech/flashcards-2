@@ -89,8 +89,14 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
                 href={`/decks/${deck.id}`}
                 data-tour="deck-card"
                 data-tour-action="open-deck"
-                className="group flex h-full flex-col rounded-xl border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group relative flex h-full flex-col overflow-hidden rounded-xl border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
+                <div className="absolute inset-x-0 top-0 h-1.5 bg-muted" aria-hidden>
+                  <div
+                    className="h-full rounded-r-full bg-gradient-to-r from-sky-500 via-violet-500 to-emerald-400 transition-[width] duration-700 ease-out"
+                    style={{ width: `${deckProgress[deck.id]?.percent ?? 0}%` }}
+                  />
+                </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="w-fit rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
                     {deck.subject}
@@ -108,32 +114,6 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
                 <p className="mt-1 flex-1 text-sm leading-relaxed text-muted-foreground" dir="auto">
                   {deck.description}
                 </p>
-                <div className="mt-5 rounded-xl border border-border/70 bg-muted/35 px-3.5 py-3">
-                  <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-                    <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                      <span className="size-1.5 rounded-full bg-primary" aria-hidden />
-                      Deck progress
-                    </span>
-                    <span className="font-bold tabular-nums text-foreground">{deckProgress[deck.id]?.percent ?? 0}%</span>
-                  </div>
-                  <div
-                    className="h-2 overflow-hidden rounded-full bg-muted shadow-inner"
-                    role="progressbar"
-                    aria-label={`Progress for ${deck.title}`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={deckProgress[deck.id]?.percent ?? 0}
-                  >
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-primary via-primary to-success transition-[width] duration-700 ease-out"
-                      style={{ width: `${deckProgress[deck.id]?.percent ?? 0}%` }}
-                    />
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{deckProgress[deck.id]?.completed ?? 0} of {deck.cardCount} cards mastered</span>
-                    {(deckProgress[deck.id]?.percent ?? 0) === 100 && deck.cardCount > 0 && <span className="font-semibold text-success">Completed</span>}
-                  </div>
-                </div>
                 <div className="mt-4 flex items-center justify-between text-sm">
                   <span dir="ltr" className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-muted-foreground">
                     <Layers className="size-4 shrink-0" aria-hidden />
