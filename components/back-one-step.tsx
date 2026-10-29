@@ -4,7 +4,7 @@
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 
-export function BackOneStep({ className }: { className?: string }) {
+export function BackOneStep({ className, fallbackHref }: { className?: string; fallbackHref?: string }) {
   const router = useRouter()
   return (
     <button
