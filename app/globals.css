@@ -1167,3 +1167,16 @@ footer.mt-auto::before {
 @media (max-width: 768px), (pointer: coarse) {
   .floating-contact-hint { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
+
+
+/* On the flashcard study screen only, make floating contact icons more compact on phones without moving them or resizing cards. */
+@media (max-width: 768px) {
+  body:has(.study-session-page) .floating-contact-button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  body:has(.study-session-page) .floating-contact-button > svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+}
