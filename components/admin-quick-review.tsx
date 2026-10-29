@@ -148,7 +148,7 @@ export function AdminQuickReview({ decks, onClose }: Props) {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
           <section role="dialog" aria-modal="true" aria-labelledby="quick-review-edit-title" className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4 shadow-2xl sm:p-6">
             <h3 id="quick-review-edit-title" className="font-semibold">Edit card text</h3>
-            <p className="text-sm text-muted-foreground">حافظ على الأقواس المزدوجة {{ و }} حول الكلمات المطلوب إخفاؤها.</p>
+            <p className="text-sm text-muted-foreground">حافظ على الأقواس المزدوجة {'{{'} و {'}}'} حول الكلمات المطلوب إخفاؤها.</p>
             <textarea autoFocus dir="auto" value={textDraft} onChange={(e) => setTextDraft(e.target.value)} rows={9} className="w-full rounded-lg border bg-background p-3 text-sm leading-7" />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setEditingText(false)}>إلغاء</Button>
