@@ -50,7 +50,7 @@ export default async function DeckPage({ params }: PageProps<'/decks/[id]'>) {
       <SiteHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">
         <nav aria-label="Page navigation" className="mb-6">
-          <BackOneStep />
+          <BackOneStep fallbackHref={`/?group=${encodeURIComponent(meta.groupId)}#flashcards`} />
         </nav>
         <div className="mb-6">
           <span className="text-xs font-medium text-primary">{meta.subject}</span>
