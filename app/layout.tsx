@@ -8,6 +8,7 @@ import { OnboardingTour } from '@/components/onboarding-tour'
 import { WhatsAppButton } from '@/components/whatsapp-button'
 import { FacebookButton } from '@/components/facebook-button'
 import { FeedbackWidget } from '@/components/feedback-widget'
+import { MobileContactMenu } from '@/components/mobile-contact-menu'
 import { getSession } from '@/lib/auth'
 import './globals.css'
 
@@ -53,6 +54,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <WhatsAppButton />
         <FacebookButton />
         <FeedbackWidget />
+        <MobileContactMenu />
         <CursorFx />
         <SoundEngine />
         {process.env.NODE_ENV === 'production' && <Analytics />}
