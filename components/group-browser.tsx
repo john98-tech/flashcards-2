@@ -13,6 +13,18 @@ type BrowserGroup = DeckGroup & { decks: BrowserDeck[] }
 
 export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] }) {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const savedGroupId = sessionStorage.getItem('flashcards-return-group')
+      if (savedGroupId && realGroups.some((group) => group.id === savedGroupId)) {
+        setSelectedGroupId(savedGroupId)
+      }
+      sessionStorage.removeItem('flashcards-return-group')
+    } catch {
+      // Browsing still works if session storage is unavailable.
+    }
+  }, [realGroups])
   const [deckProgress, setDeckProgress] = useState<Record<string, { completed: number; percent: number }>>({})
 
   const refreshProgress = useCallback(() => {
@@ -95,6 +107,13 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
             <li key={deck.id} className="group-card-enter" style={{ animationDelay: `${Math.min(index * 65, 390)}ms` }}>
               <Link
                 href={`/decks/${deck.id}`}
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem('flashcards-return-group', selectedGroup.id)
+                  } catch {
+                    // The deck remains accessible if session storage is unavailable.
+                  }
+                }}
                 data-tour="deck-card"
                 data-tour-action="open-deck"
                 className="group relative flex h-full flex-col overflow-hidden rounded-xl border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
