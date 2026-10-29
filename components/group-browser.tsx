@@ -23,7 +23,8 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
           const raw = localStorage.getItem(`sammaa-progress-${deck.id}`)
           const saved: unknown = raw ? JSON.parse(raw) : []
           const known = Array.isArray(saved) ? new Set(saved.filter((id): id is string => typeof id === 'string')) : new Set<string>()
-          const completed = Math.min(known.size, deck.cardCount)\n          next[deck.id] = { completed, percent: deck.cardCount > 0 ? Math.round((completed / deck.cardCount) * 100) : 0 }
+          const completed = Math.min(known.size, deck.cardCount)
+          next[deck.id] = { completed, percent: deck.cardCount > 0 ? Math.round((completed / deck.cardCount) * 100) : 0 }
         }
       }
       setDeckProgress(next)
