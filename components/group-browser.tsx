@@ -13,17 +13,17 @@ type BrowserGroup = DeckGroup & { decks: BrowserDeck[] }
 
 export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] }) {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
-  const [deckProgress, setDeckProgress] = useState<Record<string, number>>({})
+  const [deckProgress, setDeckProgress] = useState<Record<string, { completed: number; percent: number }>>({})
 
   const refreshProgress = useCallback(() => {
     try {
-      const next: Record<string, number> = {}
+      const next: Record<string, { completed: number; percent: number }> = {}
       for (const group of realGroups) {
         for (const deck of group.decks) {
           const raw = localStorage.getItem(`sammaa-progress-${deck.id}`)
           const saved: unknown = raw ? JSON.parse(raw) : []
           const known = Array.isArray(saved) ? new Set(saved.filter((id): id is string => typeof id === 'string')) : new Set<string>()
-          next[deck.id] = deck.cardCount > 0 ? Math.min(100, Math.round((Math.min(known.size, deck.cardCount) / deck.cardCount) * 100)) : 0
+          const completed = Math.min(known.size, deck.cardCount)\n          next[deck.id] = { completed, percent: deck.cardCount > 0 ? Math.round((completed / deck.cardCount) * 100) : 0 }
         }
       }
       setDeckProgress(next)
@@ -113,7 +113,7 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
                       <span className="size-1.5 rounded-full bg-primary" aria-hidden />
                       Deck progress
                     </span>
-                    <span className="font-bold tabular-nums text-foreground">{deckProgress[deck.id] ?? 0}%</span>
+                    <span className="font-bold tabular-nums text-foreground">{deckProgress[deck.id]?.percent ?? 0}%</span>
                   </div>
                   <div
                     className="h-2 overflow-hidden rounded-full bg-muted shadow-inner"
@@ -121,16 +121,16 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
                     aria-label={`Progress for ${deck.title}`}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={deckProgress[deck.id] ?? 0}
+                    aria-valuenow={deckProgress[deck.id]?.percent ?? 0}
                   >
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-primary via-primary to-success transition-[width] duration-700 ease-out"
-                      style={{ width: `${deckProgress[deck.id] ?? 0}%` }}
+                      style={{ width: `${deckProgress[deck.id]?.percent ?? 0}%` }}
                     />
                   </div>
                   <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{Math.min(Math.round(((deckProgress[deck.id] ?? 0) / 100) * deck.cardCount), deck.cardCount)} of {deck.cardCount} cards mastered</span>
-                    {(deckProgress[deck.id] ?? 0) === 100 && deck.cardCount > 0 && <span className="font-semibold text-success">Completed</span>}
+                    <span>{deckProgress[deck.id]?.completed ?? 0} of {deck.cardCount} cards mastered</span>
+                    {(deckProgress[deck.id]?.percent ?? 0) === 100 && deck.cardCount > 0 && <span className="font-semibold text-success">Completed</span>}
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm">
