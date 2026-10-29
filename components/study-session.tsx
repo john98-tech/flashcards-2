@@ -111,9 +111,14 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
 
   useEffect(() => {
     setAdminSelected(adminParsed?.selected ?? new Set())
+  }, [card?.id, card?.cloze])
+
+  // Reset messages only when navigating to a different card, not on each
+  // optimistic text update; otherwise the status line flashes and changes height.
+  useEffect(() => {
     setAdminStatus('')
     setAdminError('')
-  }, [card?.id, card?.cloze])
+  }, [card?.id])
 
   const persistAdminCard = async (nextCloze: string) => {
     if (!isAdmin || !card) return false
@@ -308,7 +313,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
             <Pencil aria-hidden /> {adminEditMode ? 'إيقاف Edit Mode' : 'Edit Mode'}
           </Button>
           {adminEditMode && <Button type="button" size="sm" variant="outline" disabled={adminSaving || !card} onClick={() => { setAdminTextDraft(card?.cloze ?? ''); setAdminTextEditing(true) }}>Edit text</Button>}
-          <span className="text-xs text-muted-foreground">{adminSaving ? 'جاري الحفظ...' : adminStatus || (adminEditMode ? 'اضغط على الكلمات لإخفائها أو إظهارها، والتعديل يُحفظ تلقائيًا.' : 'وضع تعديل خاص بالأدمن')}</span>
+          <span aria-live="polite" className="flex min-h-10 flex-1 items-center text-xs leading-5 text-muted-foreground sm:min-h-5">{adminSaving || adminStatus === 'جاري الحفظ...' ? 'جاري الحفظ...' : adminError ? 'تعذّر الحفظ' : adminStatus === 'تم الحفظ' ? 'تم الحفظ' : adminEditMode ? 'التعديل يُحفظ تلقائيًا' : 'وضع تعديل خاص بالأدمن'}</span>
           {adminError && <span role="alert" className="w-full text-xs text-destructive">{adminError}</span>}
         </div>
       )}
