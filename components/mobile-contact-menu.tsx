@@ -39,7 +39,6 @@ export function MobileContactMenu() {
       onClick={() => setOpen(value => !value)}
       aria-label={open ? 'إغلاق قائمة التواصل' : 'فتح قائمة التواصل'}
       aria-expanded={open}
-      aria-controls="mobile-contact-options"
       title={open ? 'إغلاق قائمة التواصل' : 'خيارات التواصل'}
     >
       {open ? <X className="size-6" aria-hidden /> : <MessageCircle className="size-6" aria-hidden />}
