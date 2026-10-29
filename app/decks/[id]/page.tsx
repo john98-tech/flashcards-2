@@ -9,6 +9,7 @@ import { getDeck, getDeckMeta } from '@/lib/decks'
 import { DemoDeckView } from '@/components/demo-deck-view'
 import { canOpen, getAccess } from '@/lib/access'
 import { DEMO_DECK_ID, demoDeck } from '@/lib/demo-data'
+import { isAdmin } from '@/lib/admin-auth'
 
 // Tutorial-only deck: not stored anywhere, only reachable while the tour runs.
 function DemoDeckPage() {
@@ -42,7 +43,7 @@ export async function generateMetadata({ params }: PageProps<'/decks/[id]'>): Pr
 export default async function DeckPage({ params }: PageProps<'/decks/[id]'>) {
   const { id } = await params
   if (id === DEMO_DECK_ID) return <DemoDeckPage />
-  const [meta, access] = await Promise.all([getDeckMeta(id), getAccess()])
+  const [meta, access, admin] = await Promise.all([getDeckMeta(id), getAccess(), isAdmin()])
   if (!meta) notFound()
   const open = canOpen(meta, access)
   const deck = open ? await getDeck(id) : null
@@ -64,7 +65,7 @@ export default async function DeckPage({ params }: PageProps<'/decks/[id]'>) {
           </h1>
         </div>
         {deck && deck.cards.length > 0 ? (
-          <StudySession deck={deck} />
+          <StudySession deck={deck} isAdmin={admin} />
         ) : deck ? (
           <p className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
             This deck has no cards yet.
