@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, BookOpen, FolderOpen, Layers, PenLine, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, Pencil, FolderOpen, Layers, PenLine, Sparkles } from 'lucide-react'
 import { GroupBrowser } from '@/components/group-browser'
 import { RedeemForm } from '@/components/redeem-form'
 import type { DeckGroup, DeckSummary } from '@/lib/decks'
 import { useDemoState } from '@/lib/demo-tour'
 import { sfx, unlockAudio } from '@/lib/sound'
+import { AdminQuickReview } from '@/components/admin-quick-review'
 
 type BrowserDeck = DeckSummary & { open: boolean }
 type BrowserGroup = DeckGroup & { decks: BrowserDeck[] }
@@ -22,11 +23,12 @@ type Props = {
   groups: BrowserGroup[]
   hasPaid: boolean
   dictation?: DictationHomeSubject[]
+  isAdmin?: boolean
 }
 
-export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
+export function HomeHub({ groups, hasPaid, dictation = [], isAdmin = false }: Props) {
   const demo = useDemoState()
-  const [mode, setMode] = useState<'hub' | 'cards' | 'dictation'>('hub')
+  const [mode, setMode] = useState<'hub' | 'cards' | 'dictation' | 'admin-review'>('hub')
   const [subjectId, setSubjectId] = useState<string | null>(null)
   const showCards = mode === 'cards' || demo.active
 
@@ -56,6 +58,10 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
     setSubjectId(null)
     setMode('hub')
   }, [])
+
+  if (mode === 'admin-review' && isAdmin) {
+    return <div className="home-enter"><AdminQuickReview decks={groups.flatMap((group) => group.decks)} onClose={backToHub} /></div>
+  }
 
   if (showCards) {
     return (
@@ -112,6 +118,13 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="mb-6 flex justify-center">
+          <button type="button" onClick={() => { setMode('admin-review'); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-5 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Pencil className="size-4" aria-hidden /> مراجعة وتعديل الكروت (للأدمن فقط)
+          </button>
+        </div>
+      )}
       <div className="hub-grid">
         <HubCard
           tone="teal"
