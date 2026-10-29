@@ -23,21 +23,34 @@ export async function getDeckGroups(): Promise<DeckGroup[]> {
 }
 
 export async function getDeckSummaries(): Promise<DeckSummary[]> {
-  const [decks, cards, groups] = await Promise.all([
+  const [decks, groups] = await Promise.all([
     db().from('decks').select('id, group_id, title, subject, description, is_free').order('created_at'),
-    db().from('cards').select('deck_id, cloze'),
     db().from('deck_groups').select('id, name'),
   ])
   if (decks.error) throw decks.error
-  if (cards.error) throw cards.error
   if (groups.error) throw groups.error
+
+  // Supabase/PostgREST commonly caps a response at 1,000 rows. Fetch cards in
+  // pages so decks later in the library don't incorrectly display 0 cards/blanks.
+  const allCards: { deck_id: string; cloze: string | null }[] = []
+  const pageSize = 1000
+  for (let from = 0; ; from += pageSize) {
+    const page = await db()
+      .from('cards')
+      .select('deck_id, cloze')
+      .order('deck_id')
+      .range(from, from + pageSize - 1)
+    if (page.error) throw page.error
+    allCards.push(...page.data)
+    if (page.data.length < pageSize) break
+  }
 
   const stats = new Map<string, { cards: number; blanks: number }>()
   const physiologyDeckIds = new Set(
     (decks.data as DeckRow[]).filter((deck) => deck.group_id === 'physiology').map((deck) => deck.id),
   )
   const groupNames = new Map(groups.data.map((group) => [group.id, group.name]))
-  for (const card of cards.data) {
+  for (const card of allCards) {
     const s = stats.get(card.deck_id) ?? { cards: 0, blanks: 0 }
     s.cards++
     // Physiology cards reveal each word inside a multiword cloze separately,
