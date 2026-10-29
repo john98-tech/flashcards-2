@@ -1,6 +1,6 @@
 import 'server-only'
 import { db } from './supabase/admin'
-import { countBlanks, type Deck } from './cloze'
+import { countBlanks, parseCloze, type Deck } from './cloze'
 
 export type DeckGroup = { id: string; name: string }
 export type DeckSummary = Omit<Deck, 'cards'> & { groupName: string; cardCount: number; blankCount: number }
@@ -33,11 +33,18 @@ export async function getDeckSummaries(): Promise<DeckSummary[]> {
   if (groups.error) throw groups.error
 
   const stats = new Map<string, { cards: number; blanks: number }>()
+  const physiologyDeckIds = new Set(
+    (decks.data as DeckRow[]).filter((deck) => deck.group_id === 'physiology').map((deck) => deck.id),
+  )
   const groupNames = new Map(groups.data.map((group) => [group.id, group.name]))
   for (const card of cards.data) {
     const s = stats.get(card.deck_id) ?? { cards: 0, blanks: 0 }
     s.cards++
-    s.blanks += countBlanks(card.cloze)
+    // Physiology cards reveal each word inside a multiword cloze separately,
+    // so the student-facing blank total must count those individual blanks.
+    s.blanks += physiologyDeckIds.has(card.deck_id)
+      ? parseCloze(card.cloze).filter((segment) => segment.type === 'blank').length
+      : countBlanks(card.cloze)
     stats.set(card.deck_id, s)
   }
 
