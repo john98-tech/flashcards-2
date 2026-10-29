@@ -1,17 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 
 export function BackOneStep({ className }: { className?: string }) {
   const router = useRouter()
-  const [canGoBack, setCanGoBack] = useState(false)
-
-  useEffect(() => {
-    setCanGoBack(window.history.length > 1)
-  }, [])
-
   return (
     <button
       type="button"
