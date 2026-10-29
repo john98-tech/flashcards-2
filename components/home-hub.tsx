@@ -32,7 +32,7 @@ export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
 
   // Deep link: /#flashcards opens the flashcards section directly.
   useEffect(() => {
-    if (window.location.hash === '#flashcards') setMode('cards')
+    if (window.location.hash === '#flashcards' || new URLSearchParams(window.location.search).has('group')) setMode('cards')
     if (window.location.hash === '#dictation') setMode('dictation')
   }, [])
 
