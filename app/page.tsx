@@ -4,7 +4,6 @@ import { HomeHub } from '@/components/home-hub'
 import { getDeckGroups, getDeckSummaries } from '@/lib/decks'
 import { canOpen, getAccess } from '@/lib/access'
 import { listLessons, listSubjects } from '@/lib/dictation/data'
-import { isAdmin } from '@/lib/admin-auth'
 
 // Written dictation is read separately so a missing migration can never break the flashcards home.
 async function loadDictation() {
@@ -25,7 +24,7 @@ async function loadDictation() {
 }
 
 export default async function HomePage() {
-  const [decks, groups, access, dictation, admin] = await Promise.all([getDeckSummaries(), getDeckGroups(), getAccess(), loadDictation(), isAdmin()])
+  const [decks, groups, access, dictation] = await Promise.all([getDeckSummaries(), getDeckGroups(), getAccess(), loadDictation()])
   const hasPaid = decks.some((d) => !d.isFree)
 
   return (
@@ -35,7 +34,6 @@ export default async function HomePage() {
         <HomeHub
           hasPaid={hasPaid}
           dictation={dictation}
-          isAdmin={admin}
           groups={groups
             .map((group) => ({
               ...group,
