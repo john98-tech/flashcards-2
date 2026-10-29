@@ -15,6 +15,11 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
 
   useEffect(() => {
+    const groupId = new URLSearchParams(window.location.search).get('group')
+    if (groupId) setSelectedGroupId(groupId)
+  }, [])
+
+  useEffect(() => {
     try {
       const savedGroupId = sessionStorage.getItem('flashcards-return-group')
       if (savedGroupId && realGroups.some((group) => group.id === savedGroupId)) {
