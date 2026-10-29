@@ -22,7 +22,13 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
         for (const deck of group.decks) {
           const raw = localStorage.getItem(`sammaa-progress-${deck.id}`)
           const saved: unknown = raw ? JSON.parse(raw) : []
-          const known = Array.isArray(saved) ? new Set(saved.filter((id): id is string => typeof id === 'string')) : new Set<string>()
+          // StudySession stores progress as an object with a `known` array; older saves may be arrays.
+          const savedIds = Array.isArray(saved)
+            ? saved
+            : saved && typeof saved === 'object' && 'known' in saved && Array.isArray(saved.known)
+              ? saved.known
+              : []
+          const known = new Set(savedIds.filter((id): id is string => typeof id === 'string'))
           const completed = Math.min(known.size, deck.cardCount)
           next[deck.id] = { completed, percent: deck.cardCount > 0 ? Math.round((completed / deck.cardCount) * 100) : 0 }
         }
@@ -41,10 +47,12 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
     }
     window.addEventListener('storage', onStorage)
     window.addEventListener('pageshow', onStorage)
+    window.addEventListener('focus', onStorage)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       window.removeEventListener('storage', onStorage)
       window.removeEventListener('pageshow', onStorage)
+      window.removeEventListener('focus', onStorage)
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [refreshProgress])
