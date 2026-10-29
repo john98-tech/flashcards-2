@@ -41,16 +41,17 @@ export default async function HomePage() {
                 .filter((deck) => deck.groupId === group.id)
                 .map((deck) => ({ ...deck, open: canOpen(deck, access) }))
                 .sort((a, b) => {
-                  const partNumber = (title: string) => {
-                    const match = title.match(/\bPart\s+(\d+)\b/i)
-                    return match ? Number(match[1]) : null
+                  // Sort sequentially by the book's part numbering, including split parts 3A and 3B.
+                  const partOrder = (title: string) => {
+                    const match = title.match(/\bPart\s+(\d+)\s*([A-Z])?\b/i)
+                    if (!match) return { number: Number.MAX_SAFE_INTEGER, suffix: '' }
+                    return { number: Number(match[1]), suffix: (match[2] ?? '').toUpperCase() }
                   }
-                  const partA = partNumber(a.title)
-                  const partB = partNumber(b.title)
-                  if (partA !== null && partB !== null) return partA - partB
-                  if (partA !== null) return -1
-                  if (partB !== null) return 1
-                  return 0
+                  const partA = partOrder(a.title)
+                  const partB = partOrder(b.title)
+                  if (partA.number !== partB.number) return partA.number - partB.number
+                  const suffixOrder = (suffix: string) => suffix ? suffix.charCodeAt(0) - 64 : 0
+                  return suffixOrder(partA.suffix) - suffixOrder(partB.suffix)
                 }),
             }))
             .filter((group) => group.decks.length > 0)}
