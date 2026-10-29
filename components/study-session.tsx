@@ -203,7 +203,7 @@ export function StudySession({ deck }: { deck: Deck }) {
   const progress = Math.round((known.size / deck.cards.length) * 100)
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="study-session-page flex flex-col gap-4">
       <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
         <div className="flex w-full items-center gap-1 rounded-lg border bg-card p-1 sm:w-auto" role="group" aria-label="طريقة التسميع">
           <ModeButton active={mode === 'tap'} onClick={() => switchMode('tap')}>
