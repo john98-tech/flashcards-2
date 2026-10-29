@@ -74,9 +74,9 @@ export function GroupBrowser({ groups: realGroups }: { groups: BrowserGroup[] })
                   {deck.description}
                 </p>
                 <div className="mt-4 flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <Layers className="size-4" aria-hidden />
-                    {deck.cardCount} cards · {deck.blankCount} blanks
+                  <span dir="ltr" className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+                    <Layers className="size-4 shrink-0" aria-hidden />
+                    <span>{deck.cardCount} cards · {deck.blankCount} blanks</span>
                   </span>
                   {deck.open ? (
                     <span className="flex items-center gap-1 font-medium text-primary">
