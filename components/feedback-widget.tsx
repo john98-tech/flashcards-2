@@ -231,7 +231,7 @@ export function FeedbackWidget() {
 
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
 
-  return <div className="flex flex-col items-start gap-3" dir="rtl" style={{ position: 'fixed', right: '20px', left: 'auto', bottom: '156px', zIndex: 99999, isolation: 'isolate' }}>
+  return <div className="feedback-widget-root flex flex-col items-start gap-3" dir="rtl" style={{ position: 'fixed', right: '20px', left: 'auto', bottom: '156px', zIndex: 99999, isolation: 'isolate' }}>
     {open && <section className="feedback-chat-window fixed flex min-h-0 flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-2xl" style={{ right: 'max(12px, env(safe-area-inset-right))', bottom: 'calc(max(12px, env(safe-area-inset-bottom)) + 84px)', width: 'min(400px, calc(100vw - 24px))', height: 'min(620px, calc(100dvh - max(24px, env(safe-area-inset-top)) - max(108px, calc(env(safe-area-inset-bottom) + 108px))))', maxHeight: 'calc(100dvh - max(24px, env(safe-area-inset-top)) - max(108px, calc(env(safe-area-inset-bottom) + 108px)))', zIndex: 100001 }} aria-label="محادثة التعليقات">
       <header className="flex items-center justify-between gap-3 border-b border-border bg-[#075e54] px-4 py-3 text-white">
         <div className="flex min-w-0 items-center gap-3">
