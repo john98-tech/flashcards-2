@@ -371,7 +371,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                     const from = Math.max(rangeStart, token.start)
                     const to = Math.min(rangeEnd, token.end)
                     const value = adminParsed.text.slice(from, to)
-                    const isWord = !token.space && /[\\p{L}\\p{N}]/u.test(token.text)
+                    const isWord = !token.space && /[\p{L}\p{N}]/u.test(token.text)
                     if (!isWord || from !== token.start || to !== token.end) return <span key={'edit-txt-' + token.start}>{value}</span>
                     const hidden = adminSelected.has(tokenIndex)
                     return <button key={'edit-word-' + token.start} type="button" disabled={adminSaving} onClick={() => toggleAdminToken(tokenIndex)} aria-label={(hidden ? 'إظهار ' : 'إخفاء ') + token.text} className={cn('mx-0.5 rounded px-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', hidden ? 'border-b-2 border-primary/60 text-transparent select-none hover:bg-primary/10' : 'hover:bg-primary/10 underline decoration-dotted underline-offset-4')}>{token.text}</button>
