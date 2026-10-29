@@ -22,10 +22,9 @@ type Props = {
   groups: BrowserGroup[]
   hasPaid: boolean
   dictation?: DictationHomeSubject[]
-  isAdmin?: boolean
 }
 
-export function HomeHub({ groups, hasPaid, dictation = [], isAdmin = false }: Props) {
+export function HomeHub({ groups, hasPaid, dictation = [] }: Props) {
   const demo = useDemoState()
   const [mode, setMode] = useState<'hub' | 'cards' | 'dictation'>('hub')
   const [subjectId, setSubjectId] = useState<string | null>(null)
