@@ -763,10 +763,10 @@ export function NoteEditor({
   )
 }
 
-type ContentBlock = { type: 'p'; text: string } | { type: 'heading'; level: 1 | 2; text: string } | { type: 'table'; rows: string[][] }
+type ContentBlock = { type: 'p'; text: string } | { type: 'heading'; level: number; text: string } | { type: 'table'; rows: string[][] }
 
 function parseBlocks(text: string): ContentBlock[] {
-  const lines = text.replace(/\r\n/g, '\n').split('\n')
+  const lines = text.replace(/\\r\\n/g, '\\n').split('\\n')
   const blocks: ContentBlock[] = []
   let i = 0
   while (i < lines.length) {
@@ -774,15 +774,15 @@ function parseBlocks(text: string): ContentBlock[] {
     if (line.startsWith('|')) {
       const rows: string[][] = []
       while (i < lines.length && lines[i].trim().startsWith('|')) {
-        const cells = lines[i].trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
+        const cells = lines[i].trim().replace(/^\\|/, '').replace(/\\|$/, '').split('|').map((cell) => cell.trim())
         if (!cells.every((cell) => /^:?-{3,}:?$/.test(cell))) rows.push(cells)
         i++
       }
       if (rows.length) blocks.push({ type: 'table', rows })
       continue
     }
-    if (line.startsWith('## ')) blocks.push({ type: 'heading', level: 2, text: line.slice(3) })
-    else if (line.startsWith('# ')) blocks.push({ type: 'heading', level: 1, text: line.slice(2) })
+    const heading = line.match(/^(#{1,6})\\s+(.+)$/)
+    if (heading) blocks.push({ type: 'heading', level: heading[1].length, text: heading[2].trim() })
     else blocks.push({ type: 'p', text: lines[i] })
     i++
   }
@@ -797,7 +797,9 @@ function LessonText({ text }: { text: string }) {
         block.type === 'heading' ? (
           block.level === 1
             ? <h2 key={index} dir="auto" className="mt-7 mb-3 rounded-xl border-r-4 border-sky-600 bg-gradient-to-l from-sky-50 to-indigo-50 px-4 py-3 text-xl font-extrabold leading-relaxed text-slate-900 shadow-sm">{block.text}</h2>
-            : <h3 key={index} dir="auto" className="mt-5 mb-2 border-b border-emerald-200 pb-1.5 text-lg font-bold leading-relaxed text-emerald-800">{block.text}</h3>
+            : block.level === 2
+              ? <h3 key={index} dir="auto" className="mt-6 mb-2 border-b-2 border-emerald-200 pb-2 text-lg font-extrabold leading-relaxed text-emerald-800">{block.text}</h3>
+              : <h4 key={index} dir="auto" className={`mt-4 mb-1.5 text-base font-bold leading-relaxed ${block.level >= 4 ? 'pr-3 text-teal-700' : 'text-slate-700'}`}>{block.text}</h4>
         ) : block.type === 'table' ? (
           <div key={index} className="my-3 overflow-x-auto">
             <table className="w-full border-collapse text-[17px]">
