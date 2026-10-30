@@ -1,6 +1,6 @@
 'use client'
 
-import { Eraser, Maximize2, Minimize2, PenLine, Redo2, Trash2, Undo2 } from 'lucide-react'
+import { Eraser, Maximize2, Minimize2, PenLine, Redo2, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import type { DrawingTool } from './useDrawingEngine'
 
 type Props = {
@@ -18,6 +18,7 @@ type Props = {
   onUndo: () => void
   onRedo: () => void
   onClear: () => void
+  onResetHeadings: () => void
   onFullscreen: () => void
 }
 
@@ -38,6 +39,7 @@ export function Toolbar({
   onUndo,
   onRedo,
   onClear,
+  onResetHeadings,
   onFullscreen,
 }: Props) {
   const minSize = tool === 'pen' ? 2 : 12
@@ -103,6 +105,9 @@ export function Toolbar({
         </button>
         <button type="button" onClick={onClear} disabled={isBusy} aria-label="مسح الصفحة" title="مسح الصفحة الحالية" className={`${toolButton} border-transparent px-2 text-rose-600 hover:bg-rose-50`}>
           <Trash2 className="size-4" aria-hidden />
+        </button>
+        <button type="button" onClick={onResetHeadings} disabled={isBusy} aria-label="إعادة ضبط العناوين" title="إعادة ضبط العناوين" className={`${toolButton} border-transparent px-2 text-teal-700 hover:bg-teal-50`}>
+          <RotateCcw className="size-4" aria-hidden />
         </button>
         <button type="button" onClick={onFullscreen} aria-label={isFullscreen ? 'إغلاق ملء الشاشة' : 'ملء الشاشة'} title={isFullscreen ? 'إغلاق ملء الشاشة' : 'ملء الشاشة'} className={`${toolButton} border-slate-200 bg-white px-2 text-slate-600 hover:bg-slate-50`}>
           {isFullscreen ? <Minimize2 className="size-4" aria-hidden /> : <Maximize2 className="size-4" aria-hidden />}
