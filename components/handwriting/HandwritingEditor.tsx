@@ -119,7 +119,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const [draggingHeading, setDraggingHeading] = useState<string | null>(null)
   const guideDragRef = useRef<{ id: string; pointerId: number; startY: number; initialY: number; nextY: number } | null>(null)
   const guideSignature = JSON.stringify(guideHeadings)
-  const [confirmAction, setConfirmAction] = useState<'clear' | 'delete' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'clear' | 'delete' | 'reset-headings' | null>(null)
   const handleEngineError = useCallback((message: string) => {
     setErrorMessage(message)
     onError?.(message)
@@ -189,6 +189,17 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     if (!guideLayoutReady || !storageKey) return
     try { localStorage.setItem(storageKey + ':guide-layout-v1', JSON.stringify(guideLayout)) } catch {}
   }, [guideLayout, guideLayoutReady, storageKey])
+
+  const resetGuideHeadings = useCallback(() => {
+    const source = JSON.parse(guideSignature) as { level: number; text: string }[]
+    setGuideLayout(normalizeGuideOrder(source.map((heading, index) => ({
+      id: index + ':' + heading.text,
+      text: heading.text,
+      level: heading.level,
+      page: Math.floor(index / 3),
+      y: 7 + (index % 3) * 30,
+    }))))
+  }, [guideSignature])
 
   const requiredGuidePages = Math.min(maxPages, Math.max(1, guideLayout.reduce((highest, item) => Math.max(highest, item.page + 1), 1)))
   useEffect(() => {
@@ -602,12 +613,15 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     const action = confirmAction
     setConfirmAction(null)
     if (action === 'clear') clearPage()
-    else if (action === 'delete') runPageAction(deletePage)
+    else if (action === 'delete') runPageAction(removeCurrentPage)
+    else if (action === 'reset-headings') resetGuideHeadings()
   }
 
-  const confirmMessage = confirmAction === 'delete' && pages.length > 1
-    ? 'تحذف الصفحة ' + (currentPage + 1) + ' وكل ما فيها؟'
-    : 'تمسح كل ما كتبته في الصفحة الحالية؟ يمكنك التراجع عن المسح.'
+  const confirmMessage = confirmAction === 'reset-headings'
+    ? 'ترجع كل العناوين لترتيبها ومكانها الأصلي؟ الكتابة الموجودة في الصفحات هتفضل زي ما هي.'
+    : confirmAction === 'delete' && pages.length > 1
+      ? 'تحذف الصفحة ' + (currentPage + 1) + ' وكل ما فيها؟'
+      : 'تمسح كل ما كتبته في الصفحة الحالية؟ يمكنك التراجع عن المسح.'
 
   const editorClass = fullscreenActive
     ? 'fixed inset-0 z-[100] flex h-dvh w-screen flex-col overflow-hidden bg-slate-100 p-2 sm:p-4'
@@ -637,6 +651,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           onUndo={undo}
           onRedo={redo}
           onClear={() => askConfirm('clear')}
+          onResetHeadings={() => setConfirmAction('reset-headings')}
           onFullscreen={() => void toggleFullscreen().catch((error: unknown) => reportError(error))}
         />
 
