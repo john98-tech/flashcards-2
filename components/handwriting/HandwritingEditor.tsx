@@ -656,10 +656,10 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   <div
                     key={heading.id}
                     dir="auto"
-                    className={`pointer-events-none absolute left-[5%] z-20 flex min-h-[5.2%] w-[90%] items-start rounded-xl border border-teal-200/80 bg-white/75 px-3 py-2 shadow-[0_5px_18px_-12px_rgba(15,118,110,.5)] backdrop-blur-[2px] ${heading.level <= 2 ? 'bg-gradient-to-l from-sky-50/85 to-teal-50/85 font-extrabold text-slate-800' : 'font-bold text-slate-700'} ${draggingHeading === heading.id ? 'border-teal-500 shadow-lg ring-2 ring-teal-200' : ''}`}
+                    className={`pointer-events-none absolute left-[5%] z-20 inline-flex w-fit max-w-[90%] min-w-0 items-center gap-2 rounded-lg border-l-[4px] border-teal-600 bg-white/95 px-3 py-2 text-left shadow-[0_3px_12px_-5px_rgba(15,118,110,.28)] backdrop-blur-[2px] ${heading.level <= 2 ? 'border border-teal-200 border-l-[5px] bg-gradient-to-r from-teal-50 to-white font-extrabold text-slate-800' : 'border border-slate-200 border-l-[3px] bg-white/95 font-semibold text-slate-700'} ${draggingHeading === heading.id ? 'border-teal-500 shadow-lg ring-2 ring-teal-200' : ''}`}
                     style={{ top: `${heading.y}%`, fontSize: heading.level <= 2 ? 'clamp(12px, 1.9vw, 19px)' : 'clamp(10px, 1.55vw, 16px)', paddingInlineStart: heading.level >= 4 ? '2rem' : '0.75rem' }}
                   >
-                    <span className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere] leading-snug">{heading.text}</span>
+                    <span className="min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] leading-snug">{heading.text}</span>
                     <button
                       type="button"
                       aria-label={`اضغط مطولًا ثم اسحب لنقل عنوان ${heading.text}`}
