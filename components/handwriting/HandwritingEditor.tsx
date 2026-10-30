@@ -590,7 +590,9 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           && ancestor.scrollHeight > ancestor.clientHeight + 1
         if (canScroll) {
           const before = ancestor.scrollTop
-          ancestor.scrollTop = before - deltaY
+          // Match the faster, more responsive feel of a native note-taking app.
+          // Direct scrollTop updates avoid smooth-scroll animations fighting the finger.
+          ancestor.scrollTop = before - deltaY * 1.7
           scrolled = ancestor.scrollTop !== before
           if (scrolled) break
         }
@@ -600,10 +602,10 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
         const scrollingElement = document.scrollingElement
         if (scrollingElement) {
           const before = scrollingElement.scrollTop
-          scrollingElement.scrollTop = before - deltaY
+          scrollingElement.scrollTop = before - deltaY * 1.7
           scrolled = scrollingElement.scrollTop !== before
         }
-        if (!scrolled) window.scrollBy({ top: -deltaY, left: 0, behavior: 'auto' })
+        if (!scrolled) window.scrollBy({ top: -deltaY * 1.7, left: 0, behavior: 'auto' })
       }
     }
   }
@@ -782,7 +784,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   <div
                     key={heading.id}
                     dir="auto"
-                    className={`pointer-events-auto absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center overflow-hidden rounded-md border border-teal-300/80 bg-white/55 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.12)] ${draggingHeading === heading.id ? 'cursor-grabbing ring-2 ring-teal-400/70' : 'cursor-grab'} ${heading.level <= 2 ? 'bg-teal-50/65 font-bold text-slate-900' : 'font-semibold text-slate-800'}`}
+                    className={`pointer-events-auto absolute left-[2%] z-20 inline-flex h-auto min-h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/80 bg-white/55 px-2 py-1 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.12)] ${draggingHeading === heading.id ? 'cursor-grabbing ring-2 ring-teal-400/70' : 'cursor-grab'} ${heading.level <= 2 ? 'bg-teal-50/65 font-bold text-slate-900' : 'font-semibold text-slate-800'}`}
                     style={{ top: `${heading.y}%`, fontSize: 'clamp(10px, 1.35vw, 13px)', lineHeight: 1, paddingInlineStart: heading.level >= 4 ? '1.5rem' : '0.5rem', touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
                     aria-label={`عنوان إرشادي: ${heading.text}`}
                     onPointerDown={(event) => startGuideHold(event, heading)}
@@ -790,7 +792,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                     onPointerUp={endGuideHold}
                     onPointerCancel={endGuideHold}
                   >
-                    <span className="block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap leading-none">{heading.text}</span>
+                    <span className="block min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] leading-tight">{heading.text}</span>
                   </div>
                 ))}
                 {draggingHeading && guideLayout.some((heading) => heading.id === draggingHeading && heading.y >= 86) && (
