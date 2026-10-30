@@ -36,6 +36,7 @@ export default async function DictationLessonPage({ params }: PageProps<'/dictat
       gradingPrompt={full.reference.prompt}
       studentText={full.studentMaterial.text}
       studentImages={full.studentMaterial.images}
+      guideHeadings={full.headings.map((heading) => ({ id: heading.id, level: heading.level, title: heading.title, order: heading.order }))}
     />
   )
 }
