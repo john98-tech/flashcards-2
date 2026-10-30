@@ -64,8 +64,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png', quality?: n
 }
 
 // Pointer position -> logical page coordinates (independent of the canvas backing resolution).
-function pointFromEvent(event: PointerEvent, canvas: HTMLCanvasElement): Point {
-  const rect = canvas.getBoundingClientRect()
+function pointFromEvent(event: PointerEvent, canvas: HTMLCanvasElement, rect = canvas.getBoundingClientRect()): Point {
   const pressure = event.pointerType === 'pen' && event.pressure > 0
     ? Math.max(0.75, Math.min(1.25, 0.85 + event.pressure * 0.3))
     : 1
@@ -461,7 +460,8 @@ export function useDrawingEngine(
       const onMove = (nativeEvent: PointerEvent) => {
         if (nativeEvent.pointerId !== pointerId) return
         const coalesced = coalescedEventsOf(nativeEvent)
-        schedulePoints(coalesced.map((item) => pointFromEvent(item, target)))
+        const rect = target.getBoundingClientRect()
+        schedulePoints(coalesced.map((item) => pointFromEvent(item, target, rect)))
       }
       const onEnd = (nativeEvent: PointerEvent) => {
         if (nativeEvent.pointerId !== pointerId) return
@@ -503,7 +503,8 @@ export function useDrawingEngine(
     event.preventDefault()
     const nativeEvent = event.nativeEvent
     const coalesced = coalescedEventsOf(nativeEvent)
-    schedulePoints(coalesced.map((item) => pointFromEvent(item, event.currentTarget)))
+    const rect = event.currentTarget.getBoundingClientRect()
+    schedulePoints(coalesced.map((item) => pointFromEvent(item, event.currentTarget, rect)))
   }, [schedulePoints, tool])
 
   const pointerUp = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
