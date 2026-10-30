@@ -1174,7 +1174,7 @@ footer.mt-auto::before {
   display: none;
 }
 @media (max-width: 768px) {
-  body:has(.study-session-page) .mobile-contact-menu-trigger {
+  body:has(.study-session-page, [data-handwriting-editor]) .mobile-contact-menu-trigger {
     position: fixed;
     right: max(16px, env(safe-area-inset-right));
     bottom: max(16px, env(safe-area-inset-bottom));
@@ -1191,33 +1191,33 @@ footer.mt-auto::before {
     transition: transform 180ms ease, box-shadow 180ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  body:has(.study-session-page) .mobile-contact-menu-trigger:active {
+  body:has(.study-session-page, [data-handwriting-editor]) .mobile-contact-menu-trigger:active {
     transform: scale(.94);
   }
-  body:has(.study-session-page) .floating-contact-button {
+  body:has(.study-session-page, [data-handwriting-editor]) .floating-contact-button {
     display: none !important;
   }
-  body:has(.study-session-page).mobile-contact-menu-open .floating-contact-button {
+  body:has(.study-session-page, [data-handwriting-editor]).mobile-contact-menu-open .floating-contact-button {
     display: flex !important;
   }
-  body:has(.study-session-page) a[href*="whatsapp.com"],
-  body:has(.study-session-page) a[href*="wa.me"] {
+  body:has(.study-session-page, [data-handwriting-editor]) a[href*="whatsapp.com"],
+  body:has(.study-session-page, [data-handwriting-editor]) a[href*="wa.me"] {
     bottom: calc(max(16px, env(safe-area-inset-bottom)) + 76px) !important;
     right: max(16px, env(safe-area-inset-right)) !important;
   }
-  body:has(.study-session-page) a[href*="facebook.com"] {
+  body:has(.study-session-page, [data-handwriting-editor]) a[href*="facebook.com"] {
     bottom: calc(max(16px, env(safe-area-inset-bottom)) + 140px) !important;
     right: max(16px, env(safe-area-inset-right)) !important;
   }
-  body:has(.study-session-page) .feedback-widget-root {
+  body:has(.study-session-page, [data-handwriting-editor]) .feedback-widget-root {
     right: max(16px, env(safe-area-inset-right)) !important;
     bottom: calc(max(16px, env(safe-area-inset-bottom)) + 204px) !important;
     gap: 0 !important;
   }
-  body:has(.study-session-page) .floating-contact-hint {
+  body:has(.study-session-page, [data-handwriting-editor]) .floating-contact-hint {
     display: none !important;
   }
-  body:has(.study-session-page) .feedback-chat-window {
+  body:has(.study-session-page, [data-handwriting-editor]) .feedback-chat-window {
     right: max(12px, env(safe-area-inset-right)) !important;
     bottom: calc(max(12px, env(safe-area-inset-bottom)) + 84px) !important;
   }
