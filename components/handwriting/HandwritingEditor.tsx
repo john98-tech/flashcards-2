@@ -39,10 +39,11 @@ type Props = {
   maxPages?: number
   onChange?: (info: PageInfo) => void
   onError?: (message: string) => void
+  guideHeadings?: Array<{ id: string; level: 'main' | 'sub'; title: string; order: number }>
 }
 
 export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(function HandwritingEditor(
-  { storageKey, maxPages = 10, onChange, onError },
+  { storageKey, maxPages = 10, onChange, onError, guideHeadings = [] },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -531,6 +532,28 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                 }}
                 onContextMenu={handleContextMenu}
               >
+                {currentPage === 0 && guideHeadings.length > 0 && (
+                  <div
+                    aria-label="عناوين الدرس"
+                    dir="auto"
+                    className="pointer-events-none absolute inset-x-0 top-0 z-0 border-b border-slate-200/80 bg-white/90 px-5 pb-3 pt-4"
+                  >
+                    <div className="mb-2 text-[10px] font-bold tracking-wide text-slate-400">خريطة الدرس</div>
+                    <div className="grid grid-cols-1 gap-x-5 gap-y-1.5 sm:grid-cols-2">
+                      {[...guideHeadings].sort((a, b) => a.order - b.order).map((heading) => (
+                        <div
+                          key={heading.id}
+                          className={heading.level === 'main'
+                            ? 'text-[12px] font-bold leading-5 text-slate-700'
+                            : 'ps-3 text-[11px] leading-4 text-slate-500'}
+                        >
+                          {heading.level === 'sub' ? '— ' : ''}
+                          {heading.title}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <canvas
                   ref={canvasRef}
                   width={CANVAS_WIDTH}
