@@ -266,6 +266,62 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const [panMode, setPanMode] = useState(false)
   const [panning, setPanning] = useState(false)
   const [controlsVisible, setControlsVisible] = useState(true)
+  const [pageScroll, setPageScroll] = useState({ top: 0, thumb: 80, track: 1, max: 0 })
+  const pageScrollDragRef = useRef<{ pointerId: number; startY: number; startTop: number; max: number; travel: number } | null>(null)
+
+  useEffect(() => {
+    const updatePageScroll = () => {
+      const root = document.documentElement
+      const max = Math.max(0, root.scrollHeight - window.innerHeight)
+      const track = Math.max(1, Math.round(window.innerHeight * 0.56))
+      const thumb = Math.min(track, Math.max(76, Math.round(track * window.innerHeight / Math.max(root.scrollHeight, window.innerHeight))))
+      const travel = Math.max(0, track - thumb)
+      const top = max > 0 ? (window.scrollY / max) * travel : 0
+      setPageScroll((previous) => previous.top === top && previous.thumb === thumb && previous.track === track && previous.max === max ? previous : { top, thumb, track, max })
+    }
+    updatePageScroll()
+    window.addEventListener('scroll', updatePageScroll, { passive: true })
+    window.addEventListener('resize', updatePageScroll)
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updatePageScroll) : null
+    if (document.body) observer?.observe(document.body)
+    return () => {
+      window.removeEventListener('scroll', updatePageScroll)
+      window.removeEventListener('resize', updatePageScroll)
+      observer?.disconnect()
+    }
+  }, [])
+
+  const startPageScrollDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (pageScroll.max <= 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const track = event.currentTarget
+    const rect = track.getBoundingClientRect()
+    const thumb = pageScroll.thumb
+    const travel = Math.max(0, rect.height - thumb)
+    const localY = event.clientY - rect.top
+    const thumbTop = pageScroll.top
+    const grabbedThumb = localY >= thumbTop && localY <= thumbTop + thumb
+    const nextTop = grabbedThumb ? thumbTop : Math.max(0, Math.min(travel, localY - thumb / 2))
+    pageScrollDragRef.current = { pointerId: event.pointerId, startY: event.clientY, startTop: nextTop, max: pageScroll.max, travel }
+    try { track.setPointerCapture(event.pointerId) } catch {}
+    window.scrollTo({ top: (nextTop / Math.max(1, travel)) * pageScroll.max, behavior: 'auto' })
+  }
+
+  const movePageScrollDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = pageScrollDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    const nextTop = Math.max(0, Math.min(drag.travel, drag.startTop + event.clientY - drag.startY))
+    window.scrollTo({ top: (nextTop / Math.max(1, drag.travel)) * drag.max, behavior: 'auto' })
+  }
+
+  const endPageScrollDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (pageScrollDragRef.current?.pointerId !== event.pointerId) return
+    pageScrollDragRef.current = null
+    event.stopPropagation()
+  }
 
   const flashBadge = useCallback(() => {
     setBadgeVisible(true)
@@ -730,6 +786,26 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           </p>
         </div>
       </div>
+      {controlsVisible && pageScroll.max > 0 && (
+        <div
+          aria-label="شريط تمرير الصفحة"
+          title="اسحب المقبض للتنقل في الصفحة"
+          className="fixed right-1.5 top-[22vh] z-[106] w-8 rounded-full border border-slate-200/80 bg-gradient-to-r from-slate-100 via-white to-slate-100 p-[5px] shadow-[0_5px_18px_-8px_rgba(15,23,42,.28)]"
+          style={{ height: pageScroll.track, touchAction: 'none' }}
+          onPointerDown={startPageScrollDrag}
+          onPointerMove={movePageScrollDrag}
+          onPointerUp={endPageScrollDrag}
+          onPointerCancel={endPageScrollDrag}
+        >
+          <div className="absolute inset-x-[5px] rounded-full bg-slate-200/80" style={{ top: 5, bottom: 5 }} />
+          <div
+            className="absolute left-[5px] right-[5px] rounded-full border border-white/40 bg-gradient-to-b from-teal-400 via-teal-600 to-teal-800 shadow-[inset_0_1px_2px_rgba(255,255,255,.35),0_2px_6px_rgba(15,118,110,.28)]"
+            style={{ height: pageScroll.thumb, top: 5 + pageScroll.top, touchAction: 'none' }}
+          >
+            <span className="absolute left-1/2 top-1/2 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/45" />
+          </div>
+        </div>
+      )}
       {controlsVisible && (
         <div
           dir="ltr"
