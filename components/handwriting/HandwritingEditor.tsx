@@ -30,9 +30,13 @@ const clampZoom = (zoom: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
 
 export type HandwritingEditorHandle = {
   exportPages: () => Promise<Blob[]>
+  getContentPageIndices: () => number[]
+  getGuideLayout: () => { text: string; level: number; page: number; y: number }[]
   hasContent: () => boolean
   reset: () => void
 }
+
+type GuideHeadingLayout = { id: string; text: string; level: number; page: number; y: number }
 
 type Props = {
   guideHeadings?: { level: number; text: string }[]
@@ -90,6 +94,11 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     }
   }, [fullscreenActive])
   const [errorMessage, setErrorMessage] = useState('')
+  const [guideLayout, setGuideLayout] = useState<GuideHeadingLayout[]>([])
+  const [guideLayoutReady, setGuideLayoutReady] = useState(false)
+  const [draggingHeading, setDraggingHeading] = useState<string | null>(null)
+  const guideDragRef = useRef<{ id: string; pointerId: number; startY: number; initialY: number; nextY: number } | null>(null)
+  const guideSignature = JSON.stringify(guideHeadings)
   const [confirmAction, setConfirmAction] = useState<'clear' | 'delete' | null>(null)
   const handleEngineError = useCallback((message: string) => {
     setErrorMessage(message)
@@ -131,12 +140,78 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   } = useDrawingEngine(canvasRef, shadowRef, { maxPages, storageKey, onChange, onError: handleEngineError })
 
   useImperativeHandle(ref, () => ({
-    async exportPages() {
-      return exportPages()
-    },
+    async exportPages() { return exportPages() },
+    getContentPageIndices() { return pages.map((page, index) => page.hasContent ? index + 1 : 0).filter(Boolean) },
+    getGuideLayout() { return guideLayout.map(({ text, level, page, y }) => ({ text, level, page: page + 1, y })) },
     hasContent,
     reset,
-  }), [exportPages, hasContent, reset])
+  }), [exportPages, pages, guideLayout, hasContent, reset])
+
+  // Persist a draggable heading layout independently from the student's ink.
+  useEffect(() => {
+    let saved: GuideHeadingLayout[] = []
+    try {
+      const raw = storageKey ? localStorage.getItem(storageKey + ':guide-layout-v1') : null
+      if (raw) saved = JSON.parse(raw) as GuideHeadingLayout[]
+    } catch {}
+    const source = JSON.parse(guideSignature) as { level: number; text: string }[]
+    setGuideLayout(source.map((heading, index) => {
+      const id = index + ':' + heading.text
+      return saved.find((item) => item.id === id) ?? {
+        id, text: heading.text, level: heading.level,
+        page: Math.floor(index / 3), y: 7 + (index % 3) * 30,
+      }
+    }))
+    setGuideLayoutReady(true)
+  }, [guideSignature, storageKey])
+
+  useEffect(() => {
+    if (!guideLayoutReady || !storageKey) return
+    try { localStorage.setItem(storageKey + ':guide-layout-v1', JSON.stringify(guideLayout)) } catch {}
+  }, [guideLayout, guideLayoutReady, storageKey])
+
+  const requiredGuidePages = Math.min(maxPages, Math.max(1, Math.ceil(guideLayout.length / 3)))
+  useEffect(() => {
+    if (!guideLayoutReady || !guideLayout.length || isSwitching || isDrawing) return
+    if (pages.length < requiredGuidePages) runPageAction(addPage)
+    else if (pages.length === requiredGuidePages && currentPage !== 0) runPageAction(() => switchPage(0))
+  }, [guideLayoutReady, guideLayout.length, pages.length, requiredGuidePages, currentPage, isSwitching, isDrawing, addPage, switchPage, runPageAction])
+
+  const startGuideDrag = (event: ReactPointerEvent<HTMLDivElement>, heading: GuideHeadingLayout) => {
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    guideDragRef.current = { id: heading.id, pointerId: event.pointerId, startY: event.clientY, initialY: heading.y, nextY: heading.y }
+    setDraggingHeading(heading.id)
+  }
+  const moveGuideDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = guideDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    const height = paperRef.current?.getBoundingClientRect().height || 1
+    const y = Math.max(3, Math.min(92, drag.initialY + ((event.clientY - drag.startY) / height) * 100))
+    drag.nextY = y
+    setGuideLayout((items) => items.map((item) => item.id === drag.id ? { ...item, y } : item))
+  }
+  const endGuideDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = guideDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    guideDragRef.current = null
+    setDraggingHeading(null)
+    if (drag.nextY < 86) return
+    const nextPage = currentPage + 1
+    const occupied = new Set(guideLayout.filter((item) => item.page === nextPage && item.id !== drag.id).map((item) => Math.round(item.y)))
+    let targetY = [7, 37, 67].find((value) => !occupied.has(value))
+    let targetPage = nextPage
+    if (targetY === undefined) { targetPage = nextPage + 1; targetY = 7 }
+    setGuideLayout((items) => items.map((item) => item.id === drag.id ? { ...item, page: targetPage, y: targetY! } : item))
+    if (pages.length <= targetPage) runPageAction(addPage)
+    runPageAction(() => switchPage(targetPage))
+  }
 
   // ---------------------------------------------------------------------------
   // Zoom / pan. Only the paper layer is transformed (never the page). The canvas maps pointer
@@ -532,30 +607,27 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                 }}
                 onContextMenu={handleContextMenu}
               >
-                {guideHeadings.length > 0 && (
+                {guideLayoutReady && guideLayout.filter((heading) => heading.page === currentPage).map((heading) => (
                   <div
+                    key={heading.id}
                     dir="auto"
-                    aria-label="عناوين الدرس"
-                    className="pointer-events-none absolute inset-x-0 top-0 z-10 max-h-[36%] overflow-hidden border-b-2 border-teal-200/90 bg-white/95 px-[5%] py-[2.5%] shadow-sm"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`اسحب العنوان ${heading.text} لأعلى أو لأسفل، أو إلى أسفل الصفحة لنقله للصفحة التالية`}
+                    onPointerDown={(event) => startGuideDrag(event, heading)}
+                    onPointerMove={moveGuideDrag}
+                    onPointerUp={endGuideDrag}
+                    onPointerCancel={endGuideDrag}
+                    className={`absolute left-[5%] z-20 flex h-[5.2%] w-[90%] touch-none items-center overflow-hidden rounded-xl border border-teal-200/90 bg-white/90 px-3 shadow-[0_5px_18px_-12px_rgba(15,118,110,.5)] backdrop-blur-sm select-none ${heading.level <= 2 ? 'bg-gradient-to-l from-sky-50/95 to-teal-50/95 font-extrabold text-slate-800' : 'font-bold text-slate-700'} ${draggingHeading === heading.id ? 'scale-[1.015] cursor-grabbing border-teal-500 shadow-lg ring-2 ring-teal-200' : 'cursor-grab'}`}
+                    style={{ top: `${heading.y}%`, fontSize: heading.level <= 2 ? 'clamp(12px, 1.9vw, 19px)' : 'clamp(10px, 1.55vw, 16px)', paddingInlineStart: heading.level >= 4 ? '2rem' : '0.75rem' }}
                   >
-                    <div className="mb-2 flex items-center gap-2 text-[clamp(10px,1.6vw,17px)] font-extrabold text-teal-800">
-                      <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
-                      عناوين الدرس
-                    </div>
-                    <div className="space-y-[0.45em]">
-                      {guideHeadings.map((heading, index) => (
-                        <div
-                          key={`${index}-${heading.text}`}
-                          dir="auto"
-                          className={heading.level <= 2
-                            ? 'rounded-md bg-gradient-to-l from-sky-50 to-teal-50 px-2 py-1 text-[clamp(12px,2.1vw,21px)] font-extrabold leading-snug text-slate-800'
-                            : 'border-r-2 border-teal-300 py-0.5 pr-2 text-[clamp(10px,1.7vw,17px)] font-semibold leading-snug text-slate-600'}
-                          style={{ marginInlineStart: heading.level >= 4 ? '1.2em' : heading.level === 3 ? '.5em' : 0 }}
-                        >
-                          {heading.text}
-                        </div>
-                      ))}
-                    </div>
+                    <span className="shrink-0 opacity-50">⠿</span>
+                    <span className="ml-2 min-w-0 flex-1 truncate whitespace-nowrap">{heading.text}</span>
+                  </div>
+                ))}
+                {draggingHeading && guideLayout.some((heading) => heading.id === draggingHeading && heading.y >= 86) && (
+                  <div className="pointer-events-none absolute inset-x-[4%] bottom-[1.5%] z-30 flex h-[10%] items-center justify-center rounded-2xl border border-teal-300/80 bg-white/65 px-3 text-center text-xs font-bold text-teal-900 shadow-[0_8px_35px_-12px_rgba(15,118,15,.45)] backdrop-blur-xl">
+                    اسحب هنا لنقل العنوان إلى الصفحة التالية
                   </div>
                 )}
                 <canvas
