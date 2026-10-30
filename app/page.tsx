@@ -41,9 +41,23 @@ export default async function HomePage() {
                 .filter((deck) => deck.groupId === group.id)
                 .map((deck) => ({ ...deck, open: canOpen(deck, access) }))
                 .sort((a, b) => {
-                  // Sort sequentially by the book's part numbering, including split parts 3A and 3B.
+                  // Follow the textbook's subject sequence first, then each subject's part sequence.
+                  const subjectOrder = (title: string) => {
+                    const normalized = title.toLowerCase()
+                    if (normalized.startsWith('cho chemistry')) return 0
+                    if (normalized.startsWith('lipid chemistry')) return 1
+                    if (normalized.startsWith('protein chemistry')) return 2
+                    if (normalized.startsWith('enzyme chemistry')) return 3
+                    if (normalized.startsWith('molecular biology')) return 4
+                    if (normalized.startsWith('cell signaling')) return 5
+                    return Number.MAX_SAFE_INTEGER
+                  }
+                  const subjectA = subjectOrder(a.title)
+                  const subjectB = subjectOrder(b.title)
+                  if (subjectA !== subjectB) return subjectA - subjectB
+
                   const partOrder = (title: string) => {
-                    const match = title.match(/\bPart\s+(\d+)\s*([A-Z])?\b/i)
+                    const match = title.match(/\\bPart\\s+(\\d+)\\s*([A-Z])?\\b/i)
                     if (!match) return { number: Number.MAX_SAFE_INTEGER, suffix: '' }
                     return { number: Number(match[1]), suffix: (match[2] ?? '').toUpperCase() }
                   }
