@@ -339,6 +339,7 @@ export function useDrawingEngine(
   }, [setRenderScale])
 
   const finishStroke = useCallback((pointerId?: number) => {
+    if (cursorRef.current && strokeRef.current?.data.tool === 'eraser') cursorRef.current.style.opacity = '0'
     const stroke = strokeRef.current
     if (!stroke || (pointerId !== undefined && stroke.pointerId !== pointerId)) return
     if (animationRef.current !== null) {
@@ -407,6 +408,18 @@ export function useDrawingEngine(
     const point = pointFromEvent(event.nativeEvent, canvas)
     const activeTool = tool
     const size = activeTool === 'eraser' ? eraserSizeRef.current : penSizeRef.current
+    if (cursorRef.current && activeTool === 'eraser' && event.pointerType === 'touch') {
+      const rect = event.currentTarget.getBoundingClientRect()
+      const diameter = eraserSizeRef.current * (rect.width / CANVAS_WIDTH)
+      const host = (cursorRef.current.parentElement ?? event.currentTarget).getBoundingClientRect()
+      cursorRef.current.style.width = diameter + 'px'
+      cursorRef.current.style.height = diameter + 'px'
+      cursorRef.current.style.border = '2px solid rgba(13, 148, 136, 0.95)'
+      cursorRef.current.style.background = 'rgba(20, 184, 166, 0.10)'
+      cursorRef.current.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.9), 0 2px 10px rgba(15,23,42,0.18)'
+      cursorRef.current.style.transform = 'translate(' + (event.clientX - host.left - diameter / 2) + 'px, ' + (event.clientY - host.top - diameter / 2) + 'px)'
+      cursorRef.current.style.opacity = '1'
+    }
     const data: StrokeData = {
       tool: activeTool,
       color: activeTool === 'eraser' ? '#000000' : colorRef.current,
@@ -448,13 +461,17 @@ export function useDrawingEngine(
   const pointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (fallbackPointerIdRef.current === event.pointerId) return
     const rect = event.currentTarget.getBoundingClientRect()
-    if (cursorRef.current && tool === 'eraser' && event.pointerType !== 'touch') {
-      const scale = rect.width / CANVAS_WIDTH
-      const diameter = eraserSizeRef.current * scale
+    if (cursorRef.current && tool === 'eraser' && (event.pointerType !== 'touch' || strokeRef.current?.pointerId === event.pointerId)) {
+      const diameter = eraserSizeRef.current * (rect.width / CANVAS_WIDTH)
+      // Keep the eraser outline aligned with the actual eraser diameter at every size.
+      const host = (cursorRef.current.parentElement ?? event.currentTarget).getBoundingClientRect()
       cursorRef.current.style.width = diameter + 'px'
       cursorRef.current.style.height = diameter + 'px'
-      // The cursor ring lives outside the zoomed paper layer, so position it against its own host.
-      const host = (cursorRef.current.parentElement ?? event.currentTarget).getBoundingClientRect()
+      if (event.pointerType === 'touch') {
+        cursorRef.current.style.border = '2px solid rgba(13, 148, 136, 0.95)'
+        cursorRef.current.style.background = 'rgba(20, 184, 166, 0.10)'
+        cursorRef.current.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.9), 0 2px 10px rgba(15,23,42,0.18)'
+      }
       cursorRef.current.style.transform = 'translate(' + (event.clientX - host.left - diameter / 2) + 'px, ' + (event.clientY - host.top - diameter / 2) + 'px)'
       cursorRef.current.style.opacity = '1'
     }
