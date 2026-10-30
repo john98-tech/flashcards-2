@@ -1,7 +1,7 @@
 'use client'
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Hand, Minus, Plus } from 'lucide-react'
+import { Grip, Hand, Minus, Plus } from 'lucide-react'
 // HW_ZOOM_PATCH
 import { PageBar } from './PageBar'
 import { Toolbar } from './Toolbar'
@@ -189,15 +189,18 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
 
   const startGuideHold = (event: ReactPointerEvent<HTMLButtonElement>, heading: GuideHeadingLayout) => {
     if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
+    event.preventDefault()
+    event.stopPropagation()
     const target = event.currentTarget
     const pointerId = event.pointerId
     const startY = event.clientY
     const startX = event.clientX
     guideHoldPointerRef.current = { id: heading.id, pointerId, startY, startX, initialY: heading.y, nextY: heading.y, target }
+    // Capture immediately so the browser cannot take over this touch as page scrolling.
+    try { target.setPointerCapture(pointerId) } catch {}
     guideHoldTimerRef.current = setTimeout(() => {
       const pending = guideHoldPointerRef.current
       if (!pending || pending.pointerId !== pointerId) return
-      try { target.setPointerCapture(pointerId) } catch {}
       guideDragRef.current = { id: heading.id, pointerId, startY, initialY: heading.y, nextY: heading.y }
       setDraggingHeading(heading.id)
     }, 480)
@@ -206,13 +209,13 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const moveGuideHold = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const pending = guideHoldPointerRef.current
     if (!pending || pending.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
     const drag = guideDragRef.current
     if (!drag) {
       if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) > 14) clearGuideHold()
       return
     }
-    event.preventDefault()
-    event.stopPropagation()
     const height = paperRef.current?.getBoundingClientRect().height || 1
     const y = Math.max(3, Math.min(92, drag.initialY + ((event.clientY - drag.startY) / height) * 100))
     drag.nextY = y
@@ -669,9 +672,10 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                       onPointerCancel={endGuideHold}
                       onLostPointerCapture={endGuideHold}
                       onContextMenu={(event) => event.preventDefault()}
-                      className={`pointer-events-auto ml-2 mt-0.5 inline-flex h-7 w-7 shrink-0 touch-none select-none items-center justify-center rounded-lg border border-teal-200 bg-white/90 text-teal-700 shadow-sm ${draggingHeading === heading.id ? 'cursor-grabbing bg-teal-50' : 'cursor-grab active:bg-teal-50'}`}
+                      className={`pointer-events-auto ml-2 inline-flex h-8 w-8 shrink-0 touch-none select-none items-center justify-center rounded-lg border border-teal-200 bg-white/95 text-teal-700 shadow-sm ${draggingHeading === heading.id ? 'cursor-grabbing bg-teal-50' : 'cursor-grab active:bg-teal-50'}`}
+                      style={{ touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
                     >
-                      <span aria-hidden="true">⠿</span>
+                      <Grip className="size-[18px] stroke-[2.5]" aria-hidden="true" />
                     </button>
                   </div>
                 ))}
