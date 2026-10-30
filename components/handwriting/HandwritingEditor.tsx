@@ -266,63 +266,6 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const [panMode, setPanMode] = useState(false)
   const [panning, setPanning] = useState(false)
   const [controlsVisible, setControlsVisible] = useState(true)
-  const [pageScroll, setPageScroll] = useState({ top: 0, thumb: 80, track: 1, max: 0 })
-  const pageScrollDragRef = useRef<{ pointerId: number; startY: number; startTop: number; max: number; travel: number } | null>(null)
-
-  useEffect(() => {
-    const updatePageScroll = () => {
-      const root = document.documentElement
-      const max = Math.max(0, root.scrollHeight - window.innerHeight)
-      const track = Math.max(1, Math.round(window.innerHeight * 0.56))
-      const thumb = Math.min(track, Math.max(76, Math.round(track * window.innerHeight / Math.max(root.scrollHeight, window.innerHeight))))
-      const travel = Math.max(0, track - thumb)
-      const top = max > 0 ? (window.scrollY / max) * travel : 0
-      setPageScroll((previous) => previous.top === top && previous.thumb === thumb && previous.track === track && previous.max === max ? previous : { top, thumb, track, max })
-    }
-    updatePageScroll()
-    window.addEventListener('scroll', updatePageScroll, { passive: true })
-    window.addEventListener('resize', updatePageScroll)
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updatePageScroll) : null
-    if (document.body) observer?.observe(document.body)
-    return () => {
-      window.removeEventListener('scroll', updatePageScroll)
-      window.removeEventListener('resize', updatePageScroll)
-      observer?.disconnect()
-    }
-  }, [])
-
-  const startPageScrollDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (pageScroll.max <= 0) return
-    event.preventDefault()
-    event.stopPropagation()
-    const track = event.currentTarget
-    const rect = track.getBoundingClientRect()
-    const thumb = pageScroll.thumb
-    const travel = Math.max(0, rect.height - thumb)
-    const localY = event.clientY - rect.top
-    const thumbTop = pageScroll.top
-    const grabbedThumb = localY >= thumbTop && localY <= thumbTop + thumb
-    const nextTop = grabbedThumb ? thumbTop : Math.max(0, Math.min(travel, localY - thumb / 2))
-    pageScrollDragRef.current = { pointerId: event.pointerId, startY: event.clientY, startTop: nextTop, max: pageScroll.max, travel }
-    try { track.setPointerCapture(event.pointerId) } catch {}
-    window.scrollTo({ top: (nextTop / Math.max(1, travel)) * pageScroll.max, behavior: 'auto' })
-  }
-
-  const movePageScrollDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = pageScrollDragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    event.preventDefault()
-    event.stopPropagation()
-    const nextTop = Math.max(0, Math.min(drag.travel, drag.startTop + event.clientY - drag.startY))
-    window.scrollTo({ top: (nextTop / Math.max(1, drag.travel)) * drag.max, behavior: 'auto' })
-  }
-
-  const endPageScrollDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (pageScrollDragRef.current?.pointerId !== event.pointerId) return
-    pageScrollDragRef.current = null
-    event.stopPropagation()
-  }
-
   const flashBadge = useCallback(() => {
     setBadgeVisible(true)
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current)
@@ -690,15 +633,15 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
             <div
               ref={stageRef}
               className={fullscreenActive
-                ? 'hw-stage relative min-h-0 flex-1 touch-none overflow-hidden bg-slate-100 p-2'
-                : 'relative aspect-[5/7] w-full touch-none overflow-hidden bg-white'
+                ? 'hw-stage relative min-h-0 flex-1 touch-pan-y overflow-hidden bg-slate-100 p-2'
+                : 'relative aspect-[5/7] w-full touch-pan-y overflow-hidden bg-slate-100'
               }
             >
               <div
                 ref={paperRef}
                 className={fullscreenActive
                   ? 'absolute inset-0 m-auto overflow-hidden bg-white shadow-[0_12px_40px_-16px_rgba(15,23,42,0.3)]'
-                  : 'absolute inset-0 overflow-hidden'
+                  : 'absolute inset-y-0 left-[3.5%] right-[3.5%] overflow-hidden bg-white shadow-[0_2px_12px_-8px_rgba(15,23,42,0.18)]'
                 }
                 style={{
                   transformOrigin: '0 0',
@@ -712,10 +655,10 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   <div
                     key={heading.id}
                     dir="auto"
-                    className={`pointer-events-none absolute left-[5%] z-20 inline-flex w-fit max-w-[90%] min-w-0 items-center gap-2 rounded-lg border-l-[4px] border-teal-600 bg-white/95 px-3 py-2 text-left shadow-[0_3px_12px_-5px_rgba(15,118,110,.28)] backdrop-blur-[2px] ${heading.level <= 2 ? 'border border-teal-200 border-l-[5px] bg-gradient-to-r from-teal-50 to-white font-extrabold text-slate-800' : 'border border-slate-200 border-l-[3px] bg-white/95 font-semibold text-slate-700'} ${draggingHeading === heading.id ? 'border-teal-500 shadow-lg ring-2 ring-teal-200' : ''}`}
-                    style={{ top: `${heading.y}%`, fontSize: heading.level <= 2 ? 'clamp(12px, 1.9vw, 19px)' : 'clamp(10px, 1.55vw, 16px)', paddingInlineStart: heading.level >= 4 ? '2rem' : '0.75rem' }}
+                    className={`pointer-events-none absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 items-center rounded-md border border-teal-300/90 bg-white/95 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.22)] ${heading.level <= 2 ? 'bg-teal-50/90 font-bold text-slate-800' : 'font-semibold text-slate-700'} ${draggingHeading === heading.id ? 'border-teal-600 shadow-sm ring-1 ring-teal-200' : ''}`}
+                    style={{ top: `${heading.y}%`, fontSize: 'clamp(10px, 1.35vw, 13px)', lineHeight: 1, paddingInlineStart: heading.level >= 4 ? '1.5rem' : '0.5rem' }}
                   >
-                    <span className="min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] leading-snug">{heading.text}</span>
+                    <span className="min-w-0 max-w-full whitespace-nowrap leading-none">{heading.text}</span>
                     <button
                       type="button"
                       aria-label={`اضغط مطولًا ثم اسحب لنقل عنوان ${heading.text}`}
@@ -786,26 +729,6 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           </p>
         </div>
       </div>
-      {controlsVisible && pageScroll.max > 0 && (
-        <div
-          aria-label="شريط تمرير الصفحة"
-          title="اسحب المقبض للتنقل في الصفحة"
-          className="fixed right-1.5 top-[22vh] z-[106] w-8 rounded-full border border-slate-200/80 bg-gradient-to-r from-slate-100 via-white to-slate-100 p-[5px] shadow-[0_5px_18px_-8px_rgba(15,23,42,.28)]"
-          style={{ height: pageScroll.track, touchAction: 'none' }}
-          onPointerDown={startPageScrollDrag}
-          onPointerMove={movePageScrollDrag}
-          onPointerUp={endPageScrollDrag}
-          onPointerCancel={endPageScrollDrag}
-        >
-          <div className="absolute inset-x-[5px] rounded-full bg-slate-200/80" style={{ top: 5, bottom: 5 }} />
-          <div
-            className="absolute left-[5px] right-[5px] rounded-full border border-white/40 bg-gradient-to-b from-teal-400 via-teal-600 to-teal-800 shadow-[inset_0_1px_2px_rgba(255,255,255,.35),0_2px_6px_rgba(15,118,110,.28)]"
-            style={{ height: pageScroll.thumb, top: 5 + pageScroll.top, touchAction: 'none' }}
-          >
-            <span className="absolute left-1/2 top-1/2 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/45" />
-          </div>
-        </div>
-      )}
       {controlsVisible && (
         <div
           dir="ltr"
