@@ -1,7 +1,7 @@
 'use client'
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Grip, Hand, Minus, Plus } from 'lucide-react'
+import { Hand, Minus, Plus } from 'lucide-react'
 // HW_ZOOM_PATCH
 import { PageBar } from './PageBar'
 import { Toolbar } from './Toolbar'
@@ -179,7 +179,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   }, [guideLayoutReady, guideLayout.length, pages.length, requiredGuidePages, isSwitching, isDrawing, addPage, reportError])
 
   const guideHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const guideHoldPointerRef = useRef<{ id: string; pointerId: number; startY: number; startX: number; initialY: number; nextY: number; target: HTMLButtonElement } | null>(null)
+  const guideHoldPointerRef = useRef<{ id: string; pointerId: number; startY: number; startX: number; initialY: number; nextY: number; target: HTMLElement } | null>(null)
 
   const clearGuideHold = () => {
     if (guideHoldTimerRef.current) clearTimeout(guideHoldTimerRef.current)
@@ -187,7 +187,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     guideHoldPointerRef.current = null
   }
 
-  const startGuideHold = (event: ReactPointerEvent<HTMLButtonElement>, heading: GuideHeadingLayout) => {
+  const startGuideHold = (event: ReactPointerEvent<HTMLDivElement>, heading: GuideHeadingLayout) => {
     if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
     event.preventDefault()
     event.stopPropagation()
@@ -206,7 +206,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     }, 480)
   }
 
-  const moveGuideHold = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const moveGuideHold = (event: ReactPointerEvent<HTMLDivElement>) => {
     const pending = guideHoldPointerRef.current
     if (!pending || pending.pointerId !== event.pointerId) return
     event.preventDefault()
@@ -222,7 +222,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     setGuideLayout((items) => items.map((item) => item.id === drag.id ? { ...item, y } : item))
   }
 
-  const endGuideHold = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const endGuideHold = (event: ReactPointerEvent<HTMLDivElement>) => {
     const pending = guideHoldPointerRef.current
     if (!pending || pending.pointerId !== event.pointerId) return
     const drag = guideDragRef.current
@@ -658,25 +658,18 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   <div
                     key={heading.id}
                     dir="auto"
-                    className={`pointer-events-none absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 items-center rounded-md border border-teal-300/90 bg-white/95 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.22)] ${heading.level <= 2 ? 'bg-teal-50/90 font-bold text-slate-800' : 'font-semibold text-slate-700'} ${draggingHeading === heading.id ? 'border-teal-600 shadow-sm ring-1 ring-teal-200' : ''}`}
-                    style={{ top: `${heading.y}%`, fontSize: 'clamp(10px, 1.35vw, 13px)', lineHeight: 1, paddingInlineStart: heading.level >= 4 ? '1.5rem' : '0.5rem' }}
+                    className={`pointer-events-auto absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/90 bg-white/95 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.22)] ${heading.level <= 2 ? 'bg-teal-50/90 font-bold text-slate-800' : 'font-semibold text-slate-700'} ${draggingHeading === heading.id ? 'border-teal-600 shadow-sm ring-1 ring-teal-200 cursor-grabbing' : 'cursor-grab active:cursor-grabbing'}`}
+                    style={{ top: `${heading.y}%`, fontSize: 'clamp(10px, 1.35vw, 13px)', lineHeight: 1, paddingInlineStart: heading.level >= 4 ? '1.5rem' : '0.5rem', touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
+                    onPointerDown={(event) => startGuideHold(event, heading)}
+                    onPointerMove={moveGuideHold}
+                    onPointerUp={endGuideHold}
+                    onPointerCancel={endGuideHold}
+                    onLostPointerCapture={endGuideHold}
+                    onContextMenu={(event) => event.preventDefault()}
+                    aria-label={`اضغط مطولًا ثم اسحب العنوان ${heading.text} لتحريكه`}
+                    title="اضغط مطولًا ثم اسحب لتحريك العنوان"
                   >
                     <span className="min-w-0 max-w-full whitespace-nowrap leading-none">{heading.text}</span>
-                    <button
-                      type="button"
-                      aria-label={`اضغط مطولًا ثم اسحب لنقل عنوان ${heading.text}`}
-                      title="اضغط مطولًا ثم اسحب لتحريك العنوان"
-                      onPointerDown={(event) => startGuideHold(event, heading)}
-                      onPointerMove={moveGuideHold}
-                      onPointerUp={endGuideHold}
-                      onPointerCancel={endGuideHold}
-                      onLostPointerCapture={endGuideHold}
-                      onContextMenu={(event) => event.preventDefault()}
-                      className={`pointer-events-auto ml-2 inline-flex h-8 w-8 shrink-0 touch-none select-none items-center justify-center rounded-lg border border-teal-200 bg-white/95 text-teal-700 shadow-sm ${draggingHeading === heading.id ? 'cursor-grabbing bg-teal-50' : 'cursor-grab active:bg-teal-50'}`}
-                      style={{ touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
-                    >
-                      <Grip className="size-[18px] stroke-[2.5]" aria-hidden="true" />
-                    </button>
                   </div>
                 ))}
                 {draggingHeading && guideLayout.some((heading) => heading.id === draggingHeading && heading.y >= 86) && (
