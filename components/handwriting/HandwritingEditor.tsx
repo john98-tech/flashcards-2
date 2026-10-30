@@ -590,9 +590,9 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           && ancestor.scrollHeight > ancestor.clientHeight + 1
         if (canScroll) {
           const before = ancestor.scrollTop
-          // Match the faster, more responsive feel of a native note-taking app.
+          // Keep page scrolling responsive and direct once the paper reaches its edge.
           // Direct scrollTop updates avoid smooth-scroll animations fighting the finger.
-          ancestor.scrollTop = before - deltaY * 1.7
+          ancestor.scrollTop = before - deltaY * 2.5
           scrolled = ancestor.scrollTop !== before
           if (scrolled) break
         }
@@ -602,10 +602,10 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
         const scrollingElement = document.scrollingElement
         if (scrollingElement) {
           const before = scrollingElement.scrollTop
-          scrollingElement.scrollTop = before - deltaY * 1.7
+          scrollingElement.scrollTop = before - deltaY * 2.5
           scrolled = scrollingElement.scrollTop !== before
         }
-        if (!scrolled) window.scrollBy({ top: -deltaY * 1.7, left: 0, behavior: 'auto' })
+        if (!scrolled) window.scrollBy({ top: -deltaY * 2.5, left: 0, behavior: 'auto' })
       }
     }
   }
