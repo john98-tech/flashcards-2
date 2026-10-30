@@ -173,9 +173,10 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const requiredGuidePages = Math.min(maxPages, Math.max(1, Math.ceil(guideLayout.length / 3)))
   useEffect(() => {
     if (!guideLayoutReady || !guideLayout.length || isSwitching || isDrawing) return
+    // Only ensure the initial guide pages exist. Never force the user back to page 1:
+    // that would interrupt a heading being moved to the next page.
     if (pages.length < requiredGuidePages) void addPage().catch(reportError)
-    else if (pages.length === requiredGuidePages && currentPage !== 0) void switchPage(0)
-  }, [guideLayoutReady, guideLayout.length, pages.length, requiredGuidePages, currentPage, isSwitching, isDrawing, addPage, switchPage, reportError])
+  }, [guideLayoutReady, guideLayout.length, pages.length, requiredGuidePages, isSwitching, isDrawing, addPage, reportError])
 
   const guideHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const guideHoldPointerRef = useRef<{ id: string; pointerId: number; startY: number; startX: number; initialY: number; nextY: number; target: HTMLButtonElement } | null>(null)
