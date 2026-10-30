@@ -554,13 +554,33 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
       // Capture is only a convenience here.
     }
     const view = viewRef.current
-    panRef.current = { id: event.pointerId, sx: event.clientX, sy: event.clientY, x: view.x, y: view.y }
+    panRef.current = { id: event.pointerId, sx: event.clientX, sy: event.clientY, lastY: event.clientY, x: view.x, y: view.y }
     setPanning(true)
   }
   const onPanMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const pan = panRef.current
     if (!pan || pan.id !== event.pointerId) return
-    applyView(viewRef.current.z, pan.x + event.clientX - pan.sx, pan.y + event.clientY - pan.sy)
+
+    const stage = stageRef.current
+    const paper = paperRef.current
+    const zoom = viewRef.current.z
+    const deltaY = event.clientY - pan.lastY
+    pan.lastY = event.clientY
+
+    if (stage && paper && deltaY !== 0) {
+      // At the vertical edge of the sheet, hand the remaining drag to the
+      // surrounding page so the user can keep moving down/up without lifting.
+      const minY = Math.min(-paper.offsetTop, stage.clientHeight - paper.offsetTop - paper.offsetHeight * zoom)
+      const maxY = -paper.offsetTop
+      const wantedY = pan.y + event.clientY - pan.sy
+      const atTopEdge = wantedY <= minY + 1 && deltaY < 0
+      const atBottomEdge = wantedY >= maxY - 1 && deltaY > 0
+      if (atTopEdge || atBottomEdge) {
+        window.scrollBy({ top: -deltaY, left: 0, behavior: 'auto' })
+      }
+    }
+
+    applyView(zoom, pan.x + event.clientX - pan.sx, pan.y + event.clientY - pan.sy)
   }
   const onPanEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (panRef.current?.id !== event.pointerId) return
