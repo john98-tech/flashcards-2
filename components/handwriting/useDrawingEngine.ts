@@ -503,7 +503,6 @@ export function useDrawingEngine(
     event.preventDefault()
     const nativeEvent = event.nativeEvent
     const coalesced = coalescedEventsOf(nativeEvent)
-    const rect = event.currentTarget.getBoundingClientRect()
     schedulePoints(coalesced.map((item) => pointFromEvent(item, event.currentTarget, rect)))
   }, [schedulePoints, tool])
 
