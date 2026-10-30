@@ -42,7 +42,7 @@ type Props = {
 }
 
 export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(function HandwritingEditor(
-  { storageKey, maxPages = 10, onChange, onError },
+  { storageKey, maxPages = 10, onChange, onError, guideHeadings = [] },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -531,6 +531,32 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                 }}
                 onContextMenu={handleContextMenu}
               >
+                {guideHeadings.length > 0 && (
+                  <div
+                    dir="auto"
+                    aria-label="عناوين الدرس"
+                    className="pointer-events-none absolute inset-x-0 top-0 z-10 max-h-[36%] overflow-hidden border-b-2 border-teal-200/90 bg-white/95 px-[5%] py-[2.5%] shadow-sm"
+                  >
+                    <div className="mb-2 flex items-center gap-2 text-[clamp(10px,1.6vw,17px)] font-extrabold text-teal-800">
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
+                      عناوين الدرس
+                    </div>
+                    <div className="space-y-[0.45em]">
+                      {guideHeadings.map((heading, index) => (
+                        <div
+                          key={`${index}-${heading.text}`}
+                          dir="auto"
+                          className={heading.level <= 2
+                            ? 'rounded-md bg-gradient-to-l from-sky-50 to-teal-50 px-2 py-1 text-[clamp(12px,2.1vw,21px)] font-extrabold leading-snug text-slate-800'
+                            : 'border-r-2 border-teal-300 py-0.5 pr-2 text-[clamp(10px,1.7vw,17px)] font-semibold leading-snug text-slate-600'}
+                          style={{ marginInlineStart: heading.level >= 4 ? '1.2em' : heading.level === 3 ? '.5em' : 0 }}
+                        >
+                          {heading.text}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <canvas
                   ref={canvasRef}
                   width={CANVAS_WIDTH}
