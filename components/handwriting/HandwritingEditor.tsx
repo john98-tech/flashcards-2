@@ -622,7 +622,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                     style={{ top: `${heading.y}%`, fontSize: heading.level <= 2 ? 'clamp(12px, 1.9vw, 19px)' : 'clamp(10px, 1.55vw, 16px)', paddingInlineStart: heading.level >= 4 ? '2rem' : '0.75rem' }}
                   >
                     <span className="shrink-0 opacity-50">⠿</span>
-                    <span className="ml-2 min-w-0 flex-1 truncate whitespace-nowrap">{heading.text}</span>
+                    <span className="ml-2 min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{heading.text}</span>
                   </div>
                 ))}
                 {draggingHeading && guideLayout.some((heading) => heading.id === draggingHeading && heading.y >= 86) && (
