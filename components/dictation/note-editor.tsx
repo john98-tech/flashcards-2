@@ -763,14 +763,15 @@ export function NoteEditor({
   )
 }
 
-type ContentBlock = { type: 'p'; text: string } | { type: 'table'; rows: string[][] }
+type ContentBlock = { type: 'p'; text: string } | { type: 'heading'; level: 1 | 2; text: string } | { type: 'table'; rows: string[][] }
 
 function parseBlocks(text: string): ContentBlock[] {
   const lines = text.replace(/\r\n/g, '\n').split('\n')
   const blocks: ContentBlock[] = []
   let i = 0
   while (i < lines.length) {
-    if (lines[i].trim().startsWith('|')) {
+    const line = lines[i].trim()
+    if (line.startsWith('|')) {
       const rows: string[][] = []
       while (i < lines.length && lines[i].trim().startsWith('|')) {
         const cells = lines[i].trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
@@ -780,7 +781,9 @@ function parseBlocks(text: string): ContentBlock[] {
       if (rows.length) blocks.push({ type: 'table', rows })
       continue
     }
-    blocks.push({ type: 'p', text: lines[i] })
+    if (line.startsWith('## ')) blocks.push({ type: 'heading', level: 2, text: line.slice(3) })
+    else if (line.startsWith('# ')) blocks.push({ type: 'heading', level: 1, text: line.slice(2) })
+    else blocks.push({ type: 'p', text: lines[i] })
     i++
   }
   return blocks
@@ -791,7 +794,11 @@ function LessonText({ text }: { text: string }) {
   return (
     <div className="flex flex-col text-[19px] leading-[2.1]">
       {blocks.map((block, index) =>
-        block.type === 'table' ? (
+        block.type === 'heading' ? (
+          block.level === 1
+            ? <h2 key={index} dir="auto" className="mt-7 mb-3 rounded-xl border-r-4 border-sky-600 bg-gradient-to-l from-sky-50 to-indigo-50 px-4 py-3 text-xl font-extrabold leading-relaxed text-slate-900 shadow-sm">{block.text}</h2>
+            : <h3 key={index} dir="auto" className="mt-5 mb-2 border-b border-emerald-200 pb-1.5 text-lg font-bold leading-relaxed text-emerald-800">{block.text}</h3>
+        ) : block.type === 'table' ? (
           <div key={index} className="my-3 overflow-x-auto">
             <table className="w-full border-collapse text-[17px]">
               <tbody>
