@@ -297,17 +297,27 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const badgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [zoomPct, setZoomPct] = useState(100)
   const [badgeVisible, setBadgeVisible] = useState(false)
+  const badgeVisibleRef = useRef(false)
+  const zoomUiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const zoomPctRef = useRef(100)
   const [panMode, setPanMode] = useState(false)
   const [panning, setPanning] = useState(false)
   const [controlsVisible, setControlsVisible] = useState(true)
   const flashBadge = useCallback(() => {
-    setBadgeVisible(true)
+    if (!badgeVisibleRef.current) {
+      badgeVisibleRef.current = true
+      setBadgeVisible(true)
+    }
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current)
-    badgeTimerRef.current = setTimeout(() => setBadgeVisible(false), 900)
+    badgeTimerRef.current = setTimeout(() => {
+      badgeVisibleRef.current = false
+      setBadgeVisible(false)
+    }, 900)
   }, [])
 
   useEffect(() => () => {
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current)
+    if (zoomUiTimerRef.current) clearTimeout(zoomUiTimerRef.current)
   }, [])
 
   useEffect(() => () => {
@@ -348,12 +358,19 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     const previousZoom = viewRef.current.z
     viewRef.current = { z: zoom, x: nextX, y: nextY }
     if (paper) paper.style.transform = `translate(${nextX}px, ${nextY}px) scale(${zoom})`
-    setZoomPct(Math.round(zoom * 100))
-    if (Math.abs(zoom - previousZoom) > 0.001) {
-      flashBadge()
-      scheduleResolution()
+    const nextPct = Math.round(zoom * 100)
+    // Keep pinch/wheel gestures from re-rendering this large editor on every pointer event.
+    // The paper itself is transformed directly; the small zoom label updates at most every 80ms.
+    if (nextPct !== zoomPctRef.current && zoomUiTimerRef.current === null) {
+      zoomUiTimerRef.current = setTimeout(() => {
+        zoomUiTimerRef.current = null
+        const latestPct = Math.round(viewRef.current.z * 100)
+        zoomPctRef.current = latestPct
+        setZoomPct(latestPct)
+      }, 80)
     }
-  }, [flashBadge, scheduleResolution])
+    if (Math.abs(zoom - previousZoom) > 0.001) flashBadge()
+  }, [flashBadge])
 
   const zoomAt = useCallback((nextZoom: number, clientX: number, clientY: number) => {
     const stage = stageRef.current
@@ -712,7 +729,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   <div
                     key={heading.id}
                     dir="auto"
-                    className={`pointer-events-none absolute left-[2%] z-0 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/70 bg-white/35 px-2 text-left opacity-45 shadow-[0_1px_4px_-2px_rgba(15,118,110,.12)] ${heading.level <= 2 ? 'bg-teal-50/35 font-bold text-slate-800' : 'font-semibold text-slate-700'}`}
+                    className={`pointer-events-none absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/80 bg-white/55 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.12)] ${heading.level <= 2 ? 'bg-teal-50/65 font-bold text-slate-900' : 'font-semibold text-slate-800'}`}
                     style={{ top: `${heading.y}%`, fontSize: 'clamp(10px, 1.35vw, 13px)', lineHeight: 1, paddingInlineStart: heading.level >= 4 ? '1.5rem' : '0.5rem', touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
                     aria-label={`عنوان إرشادي: ${heading.text}`}
                   >
