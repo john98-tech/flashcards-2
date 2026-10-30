@@ -35,6 +35,7 @@ export type DrawingEngineOptions = {
 
 type ActiveStroke = {
   pointerId: number
+  context: CanvasRenderingContext2D
   data: StrokeData
   last: Point
   lastMidpoint: Point
@@ -310,8 +311,10 @@ export function useDrawingEngine(
   }, [])
 
   const processPoint = useCallback((point: Point, stroke: ActiveStroke) => {
-    const { context } = initializeCanvases()
-    stroke.lastMidpoint = paintSegment(context, stroke.data, stroke.last, stroke.lastMidpoint, point)
+    // The canvas context and transform are captured once at pointer-down. Re-fetching
+    // the context and resetting its transform for every coalesced point adds avoidable
+    // work on tablets while the pen is moving.
+    stroke.lastMidpoint = paintSegment(stroke.context, stroke.data, stroke.last, stroke.lastMidpoint, point)
     stroke.data.points.push(point)
     stroke.last = point
   }, [initializeCanvases])
@@ -369,8 +372,7 @@ export function useDrawingEngine(
     }
     drawPendingPoints()
     try {
-      const { context } = initializeCanvases()
-      paintEnd(context, stroke.data, stroke.last, stroke.lastMidpoint)
+      paintEnd(stroke.context, stroke.data, stroke.last, stroke.lastMidpoint)
       const index = currentPageRef.current
       const page = pagesRef.current[index]
       if (page) {
@@ -447,7 +449,7 @@ export function useDrawingEngine(
       size,
       points: [point],
     }
-    strokeRef.current = { pointerId: event.pointerId, data, last: point, lastMidpoint: point }
+    strokeRef.current = { pointerId: event.pointerId, context, data, last: point, lastMidpoint: point }
     paintDot(context, data, point)
     setIsDrawing(true)
     try {
