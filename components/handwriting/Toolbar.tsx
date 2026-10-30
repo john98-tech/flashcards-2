@@ -41,7 +41,7 @@ export function Toolbar({
   onFullscreen,
 }: Props) {
   const minSize = tool === 'pen' ? 2 : 12
-  const maxSize = tool === 'pen' ? 22 : 96
+  const maxSize = tool === 'pen' ? 40 : 180
 
   return (
     <div className={`${isFullscreen ? 'relative shrink-0' : 'sticky top-[4.25rem] z-20'} flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.45)] backdrop-blur`}>
