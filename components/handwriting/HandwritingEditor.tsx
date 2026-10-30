@@ -207,7 +207,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     if (!pending || pending.pointerId !== event.pointerId) return
     const drag = guideDragRef.current
     if (!drag) {
-      if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) > 9) clearGuideHold()
+      if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) > 14) clearGuideHold()
       return
     }
     event.preventDefault()
@@ -263,6 +263,10 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
 
   useEffect(() => () => {
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current)
+  }, [])
+
+  useEffect(() => () => {
+    if (guideHoldTimerRef.current) clearTimeout(guideHoldTimerRef.current)
   }, [])
 
   // Re-render the vector ink at the real on-screen resolution (debounced) so it never looks pixelated.
