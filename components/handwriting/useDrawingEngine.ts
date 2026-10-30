@@ -615,9 +615,13 @@ export function useDrawingEngine(
       }
       currentPageRef.current = nextIndex
       setCurrentPage(nextIndex)
-      redraw()
+
+      // Commit the page-count/state update immediately after removing the page.
+      // A canvas redraw can fail independently; it must never leave the pager
+      // showing a page that has already been removed from pagesRef.
       updatePageList()
       syncHistoryState()
+      redraw()
     } catch (error) {
       reportError(error)
     } finally {
