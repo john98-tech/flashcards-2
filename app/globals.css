@@ -1226,16 +1226,3 @@ footer.mt-auto::before {
   .mobile-contact-menu-trigger { transition: none !important; }
 }
 
-
-/* Keep floating contact controls out of the way in phone landscape mode. */
-@media (max-width: 900px) and (orientation: landscape) and (max-height: 600px) {
-  body:has(.study-session-page, [data-handwriting-editor]) .mobile-contact-menu-trigger,
-  body:has(.study-session-page, [data-handwriting-editor]) .floating-contact-button,
-  body:has(.study-session-page, [data-handwriting-editor]) .feedback-widget-root,
-  body:has(.study-session-page, [data-handwriting-editor]) .floating-contact-hint {
-    display: none !important;
-  }
-  body:has(.study-session-page, [data-handwriting-editor]) .feedback-chat-window {
-    display: none !important;
-  }
-}
