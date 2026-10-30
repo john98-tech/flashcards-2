@@ -9,7 +9,7 @@ export function MobileContactMenu() {
 
   useEffect(() => {
     const updatePage = () => {
-      const next = Boolean(document.querySelector('.study-session-page'))
+      const next = Boolean(document.querySelector('.study-session-page, [data-handwriting-editor]'))
       setIsStudyPage(next)
       if (!next) {
         setOpen(false)
