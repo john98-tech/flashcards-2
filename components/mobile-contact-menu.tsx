@@ -26,8 +26,17 @@ export function MobileContactMenu() {
   }, [])
 
   useEffect(() => {
-    document.body.classList.toggle('mobile-contact-menu-open', isStudyPage && open)
-    return () => document.body.classList.remove('mobile-contact-menu-open')
+    const landscape = window.matchMedia('(orientation: landscape) and (max-height: 600px)')
+    const closeInLandscape = () => {
+      if (landscape.matches) setOpen(false)
+    }
+    closeInLandscape()
+    landscape.addEventListener('change', closeInLandscape)
+    document.body.classList.toggle('mobile-contact-menu-open', isStudyPage && open && !landscape.matches)
+    return () => {
+      landscape.removeEventListener('change', closeInLandscape)
+      document.body.classList.remove('mobile-contact-menu-open')
+    }
   }, [isStudyPage, open])
 
   if (!isStudyPage) return null
