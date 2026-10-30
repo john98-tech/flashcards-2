@@ -731,7 +731,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
           dir="ltr"
           role="group"
           aria-label="التحكم في الورقة"
-          className="fixed bottom-4 left-1/2 z-[105] flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-[0_16px_48px_-20px_rgba(15,23,42,0.55)] backdrop-blur"
+          className="fixed bottom-3 left-1/2 z-[105] flex -translate-x-1/2 items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-[0_12px_36px_-18px_rgba(15,23,42,0.5)] backdrop-blur"
         >
           <button
             type="button"
@@ -739,27 +739,27 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
             aria-pressed={panMode}
             aria-label="تحريك الورقة"
             title="تحريك الورقة (اسحب في أي مكان)"
-            className={`inline-flex size-11 items-center justify-center rounded-xl border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${panMode ? 'border-teal-700 bg-teal-700 text-white shadow-sm' : 'border-transparent text-slate-700 hover:bg-slate-100'}`}
+            className={`inline-flex size-10 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${panMode ? 'border-teal-700 bg-teal-700 text-white shadow-sm' : 'border-transparent text-slate-700 hover:bg-slate-100'}`}
           >
-            <Hand className="size-5" aria-hidden />
+            <Hand className="size-[18px]" aria-hidden />
           </button>
-          <span className="mx-0.5 h-6 w-px bg-slate-200" aria-hidden />
+          <span className="mx-0.5 h-5 w-px bg-slate-200" aria-hidden />
           <button
             type="button"
             onClick={() => zoomByStep(1 / ZOOM_STEP)}
             disabled={zoomPct <= MIN_ZOOM * 100}
             aria-label="تصغير"
             title="تصغير"
-            className="inline-flex size-11 items-center justify-center rounded-xl text-slate-700 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex size-10 items-center justify-center rounded-lg text-slate-700 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
           >
-            <Minus className="size-4" aria-hidden />
+            <Minus className="size-[15px]" aria-hidden />
           </button>
           <button
             type="button"
             onClick={resetView}
             aria-label="إعادة الحجم إلى 100%"
             title="إعادة الحجم إلى 100%"
-            className="inline-flex h-11 min-w-16 items-center justify-center rounded-xl px-2 text-sm font-bold tabular-nums text-slate-800 transition-colors hover:bg-slate-100"
+            className="inline-flex h-10 min-w-14 items-center justify-center rounded-lg px-1.5 text-[13px] font-bold tabular-nums text-slate-800 transition-colors hover:bg-slate-100"
           >
             {zoomPct}%
           </button>
@@ -769,7 +769,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
             disabled={zoomPct >= MAX_ZOOM * 100}
             aria-label="تكبير"
             title="تكبير"
-            className="inline-flex size-11 items-center justify-center rounded-xl text-slate-700 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex size-10 items-center justify-center rounded-lg text-slate-700 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
           >
             <Plus className="size-4" aria-hidden />
           </button>
