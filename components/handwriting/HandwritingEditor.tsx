@@ -590,6 +590,13 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   }, [reportError])
 
   const removeCurrentPage = useCallback(async () => {
+    // With a single page, the engine clears its writing instead of deleting
+    // the page. Keep its headings in place in that case.
+    if (pages.length <= 1) {
+      await deletePage()
+      return
+    }
+
     const removedPageIndex = currentPage
     await deletePage()
     // Remove headings belonging to the deleted page and shift later headings
@@ -599,7 +606,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
         .filter((item) => item.page !== removedPageIndex)
         .map((item) => item.page > removedPageIndex ? { ...item, page: item.page - 1 } : item)
     ))
-  }, [currentPage, deletePage])
+  }, [currentPage, deletePage, pages.length])
 
   const askConfirm = useCallback((action: 'clear' | 'delete') => {
     if (!pages[currentPage]?.hasContent) {
