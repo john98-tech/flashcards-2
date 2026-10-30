@@ -267,7 +267,7 @@ export function useDrawingEngine(
     // Keep tablets on a lighter backing store; the stored strokes remain vector point data.
     const isTabletViewport = typeof window !== 'undefined'
       && window.innerWidth >= 700
-      && window.innerWidth <= 1400
+      && navigator.maxTouchPoints > 1
     const renderLimit = isTabletViewport ? 1.65 : MAX_RENDER_SCALE
     const next = Math.min(renderLimit, Math.max(MIN_RENDER_SCALE, Math.ceil(requested * 4) / 4))
     if (strokeRef.current) {
