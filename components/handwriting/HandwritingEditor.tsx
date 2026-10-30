@@ -38,7 +38,7 @@ export type HandwritingEditorHandle = {
 
 type GuideHeadingLayout = { id: string; text: string; level: number; page: number; y: number }
 
-const GUIDE_MIN_GAP = 13.5
+const GUIDE_MIN_GAP = 4.2
 const normalizeGuideOrder = (items: GuideHeadingLayout[]): GuideHeadingLayout[] => {
   const ordered = [...items].sort((a, b) => Number(a.id.split(':', 1)[0]) - Number(b.id.split(':', 1)[0]))
   let previous: GuideHeadingLayout | null = null
@@ -712,16 +712,9 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   <div
                     key={heading.id}
                     dir="auto"
-                    className={`pointer-events-auto absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/90 bg-white/95 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.22)] ${heading.level <= 2 ? 'bg-teal-50/90 font-bold text-slate-800' : 'font-semibold text-slate-700'} ${draggingHeading === heading.id ? 'border-teal-600 shadow-sm ring-1 ring-teal-200 cursor-grabbing' : 'cursor-grab active:cursor-grabbing'}`}
+                    className={`pointer-events-none absolute left-[2%] z-0 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/70 bg-white/35 px-2 text-left opacity-45 shadow-[0_1px_4px_-2px_rgba(15,118,110,.12)] ${heading.level <= 2 ? 'bg-teal-50/35 font-bold text-slate-800' : 'font-semibold text-slate-700'}`}
                     style={{ top: `${heading.y}%`, fontSize: 'clamp(10px, 1.35vw, 13px)', lineHeight: 1, paddingInlineStart: heading.level >= 4 ? '1.5rem' : '0.5rem', touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
-                    onPointerDown={(event) => startGuideHold(event, heading)}
-                    onPointerMove={moveGuideHold}
-                    onPointerUp={endGuideHold}
-                    onPointerCancel={endGuideHold}
-                    onLostPointerCapture={endGuideHold}
-                    onContextMenu={(event) => event.preventDefault()}
-                    aria-label={`اضغط مطولًا ثم اسحب العنوان ${heading.text} لتحريكه`}
-                    title="اضغط مطولًا ثم اسحب لتحريك العنوان"
+                    aria-label={`عنوان إرشادي: ${heading.text}`}
                   >
                     <span className="min-w-0 max-w-full whitespace-nowrap leading-none">{heading.text}</span>
                   </div>
