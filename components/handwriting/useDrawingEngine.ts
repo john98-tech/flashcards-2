@@ -181,6 +181,7 @@ export function useDrawingEngine(
   const fallbackListenersRef = useRef<(() => void) | null>(null)
   const renderScaleRef = useRef(MIN_RENDER_SCALE)
   const pendingScaleRef = useRef<number | null>(null)
+  const pendingScaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const toolRef = useRef<DrawingTool>('pen')
   const colorRef = useRef(COLORS[0])
   const penSizeRef = useRef(5)
@@ -331,10 +332,23 @@ export function useDrawingEngine(
     fallbackListenersRef.current?.()
     fallbackListenersRef.current = null
     setIsDrawing(false)
-    const pending = pendingScaleRef.current
-    if (pending !== null) {
-      pendingScaleRef.current = null
-      setRenderScale(pending)
+
+    // Replaying all saved strokes at high zoom is expensive. Wait until the pen
+    // has been idle briefly instead of freezing immediately on pointer-up.
+    if (pendingScaleRef.current !== null) {
+      if (pendingScaleTimerRef.current) clearTimeout(pendingScaleTimerRef.current)
+      const applyWhenIdle = () => {
+        pendingScaleTimerRef.current = null
+        if (strokeRef.current) {
+          pendingScaleTimerRef.current = setTimeout(applyWhenIdle, 350)
+          return
+        }
+        const pending = pendingScaleRef.current
+        if (pending === null) return
+        pendingScaleRef.current = null
+        setRenderScale(pending)
+      }
+      pendingScaleTimerRef.current = setTimeout(applyWhenIdle, 450)
     }
   }, [setRenderScale])
 
@@ -711,6 +725,10 @@ export function useDrawingEngine(
       }
     }
   }, [canvasRef])
+
+  useEffect(() => () => {
+    if (pendingScaleTimerRef.current) clearTimeout(pendingScaleTimerRef.current)
+  }, [])
 
   useEffect(() => {
     if (storageKey) {
