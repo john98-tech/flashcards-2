@@ -599,7 +599,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
 
   const editorClass = fullscreenActive
     ? 'fixed inset-0 z-[100] flex h-dvh w-screen flex-col overflow-hidden bg-slate-100 p-2 sm:p-4'
-    : 'space-y-3'
+    : 'mx-auto w-[94%] max-w-[1600px] space-y-3 touch-pan-y'
   const fullscreenContentClass = fullscreenActive
     ? 'mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col gap-2'
     : 'space-y-3'
@@ -664,7 +664,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                 ref={paperRef}
                 className={fullscreenActive
                   ? 'absolute inset-0 m-auto overflow-hidden bg-white shadow-[0_12px_40px_-16px_rgba(15,23,42,0.3)]'
-                  : 'absolute inset-y-0 left-[3.5%] right-[3.5%] overflow-hidden bg-white shadow-[0_2px_12px_-8px_rgba(15,23,42,0.18)]'
+                  : 'absolute inset-0 overflow-hidden bg-white shadow-[0_2px_12px_-8px_rgba(15,23,42,0.18)]'
                 }
                 style={{
                   transformOrigin: '0 0',
