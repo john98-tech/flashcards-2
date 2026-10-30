@@ -35,6 +35,7 @@ export type HandwritingEditorHandle = {
 }
 
 type Props = {
+  guideHeadings?: { level: number; text: string }[]
   storageKey?: string
   maxPages?: number
   onChange?: (info: PageInfo) => void
