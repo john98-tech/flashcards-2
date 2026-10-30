@@ -737,9 +737,13 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
                   <div
                     key={heading.id}
                     dir="auto"
-                    className={`pointer-events-none absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/80 bg-white/55 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.12)] ${heading.level <= 2 ? 'bg-teal-50/65 font-bold text-slate-900' : 'font-semibold text-slate-800'}`}
+                    className={`pointer-events-auto absolute left-[2%] z-20 inline-flex h-[3.2%] w-fit max-w-[96%] min-w-0 select-none items-center rounded-md border border-teal-300/80 bg-white/55 px-2 text-left shadow-[0_1px_4px_-2px_rgba(15,118,110,.12)] ${draggingHeading === heading.id ? 'cursor-grabbing ring-2 ring-teal-400/70' : 'cursor-grab'} ${heading.level <= 2 ? 'bg-teal-50/65 font-bold text-slate-900' : 'font-semibold text-slate-800'}`}
                     style={{ top: `${heading.y}%`, fontSize: 'clamp(10px, 1.35vw, 13px)', lineHeight: 1, paddingInlineStart: heading.level >= 4 ? '1.5rem' : '0.5rem', touchAction: 'none', WebkitTapHighlightColor: 'transparent' }}
                     aria-label={`عنوان إرشادي: ${heading.text}`}
+                    onPointerDown={(event) => startGuideHold(event, heading)}
+                    onPointerMove={moveGuideHold}
+                    onPointerUp={endGuideHold}
+                    onPointerCancel={endGuideHold}
                   >
                     <span className="min-w-0 max-w-full whitespace-nowrap leading-none">{heading.text}</span>
                   </div>
