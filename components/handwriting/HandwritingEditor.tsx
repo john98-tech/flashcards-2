@@ -332,7 +332,11 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
       const paper = paperRef.current
       if (!paper) return
       const width = paper.getBoundingClientRect().width
-      if (width > 0) setRenderScale((width * (window.devicePixelRatio || 1)) / CANVAS_WIDTH)
+      const zoom = viewRef.current.z
+      if (width > 0) {
+        const deviceScale = (width * zoom * (window.devicePixelRatio || 1)) / CANVAS_WIDTH
+        setRenderScale(deviceScale)
+      }
     }, 160)
   }, [setRenderScale])
 
@@ -369,8 +373,12 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
         setZoomPct(latestPct)
       }, 80)
     }
-    if (Math.abs(zoom - previousZoom) > 0.001) flashBadge()
-  }, [flashBadge])
+    if (Math.abs(zoom - previousZoom) > 0.001) {
+      flashBadge()
+      // Replay original vector strokes once the gesture settles, not on every pinch frame.
+      scheduleResolution()
+    }
+  }, [flashBadge, scheduleResolution])
 
   const zoomAt = useCallback((nextZoom: number, clientX: number, clientY: number) => {
     const stage = stageRef.current
