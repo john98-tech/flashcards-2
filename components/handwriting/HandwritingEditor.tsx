@@ -578,13 +578,25 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     void action().catch((error: unknown) => reportError(error))
   }, [reportError])
 
+  const removeCurrentPage = useCallback(async () => {
+    const removedPageIndex = currentPage
+    await deletePage()
+    // Remove headings belonging to the deleted page and shift later headings
+    // so the guide-page requirement does not silently recreate the deleted page.
+    setGuideLayout((items) => normalizeGuideOrder(
+      items
+        .filter((item) => item.page !== removedPageIndex)
+        .map((item) => item.page > removedPageIndex ? { ...item, page: item.page - 1 } : item)
+    ))
+  }, [currentPage, deletePage])
+
   const askConfirm = useCallback((action: 'clear' | 'delete') => {
     if (!pages[currentPage]?.hasContent) {
-      if (action === 'delete' && pages.length > 1) runPageAction(deletePage)
+      if (action === 'delete' && pages.length > 1) runPageAction(removeCurrentPage)
       return
     }
     setConfirmAction(action)
-  }, [pages, currentPage, deletePage, runPageAction])
+  }, [pages, currentPage, removeCurrentPage, runPageAction])
 
   const runConfirmed = () => {
     const action = confirmAction
