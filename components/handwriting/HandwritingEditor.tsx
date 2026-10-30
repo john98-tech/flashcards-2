@@ -23,7 +23,7 @@ html.cursor-fx-on [data-hw-fs='true'] [data-hw-pan='idle'] { cursor: grab !impor
 html.cursor-fx-on [data-hw-fs='true'] [data-hw-pan='active'] { cursor: grabbing !important; }
 `
 
-const MIN_ZOOM = 0.5
+const MIN_ZOOM = 1
 const MAX_ZOOM = 4
 const ZOOM_STEP = 1.25
 const clampZoom = (zoom: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
