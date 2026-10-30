@@ -238,8 +238,19 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     let targetPage = nextPage
     if (targetY === undefined) { targetPage = nextPage + 1; targetY = 7 }
     setGuideLayout((items) => items.map((item) => item.id === drag.id ? { ...item, page: targetPage, y: targetY! } : item))
-    if (pages.length <= targetPage) runPageAction(addPage)
-    runPageAction(() => switchPage(targetPage))
+    // addPage() already switches to the newly inserted page. Do not race it
+    // with a second switchPage() call: the drawing engine rejects concurrent switches.
+    void (async () => {
+      if (pages.length <= targetPage) {
+        if (pages.length >= Math.min(10, Math.max(1, Math.floor(maxPages) || 10))) {
+          reportError('وصلت إلى الحد الأقصى لعدد الصفحات.')
+          return
+        }
+        await addPage()
+      } else {
+        await switchPage(targetPage)
+      }
+    })().catch((error: unknown) => reportError(error))
   }
 
   // ---------------------------------------------------------------------------
