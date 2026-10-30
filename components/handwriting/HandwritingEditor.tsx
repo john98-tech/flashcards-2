@@ -38,6 +38,26 @@ export type HandwritingEditorHandle = {
 
 type GuideHeadingLayout = { id: string; text: string; level: number; page: number; y: number }
 
+const GUIDE_MIN_GAP = 13.5
+const normalizeGuideOrder = (items: GuideHeadingLayout[]): GuideHeadingLayout[] => {
+  const ordered = [...items].sort((a, b) => Number(a.id.split(':', 1)[0]) - Number(b.id.split(':', 1)[0]))
+  let previous: GuideHeadingLayout | null = null
+  return ordered.map((item) => {
+    let page = Math.max(0, Math.floor(Number.isFinite(item.page) ? item.page : 0))
+    let y = Math.max(7, Math.min(86, Number.isFinite(item.y) ? item.y : 7))
+    if (previous) {
+      page = Math.max(page, previous.page)
+      if (page === previous.page) {
+        y = Math.max(y, previous.y + GUIDE_MIN_GAP)
+        if (y > 86) { page += 1; y = 7 }
+      }
+    }
+    const next = { ...item, page, y }
+    previous = next
+    return next
+  })
+}
+
 type Props = {
   guideHeadings?: { level: number; text: string }[]
   storageKey?: string
@@ -155,13 +175,13 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
       if (raw) saved = JSON.parse(raw) as GuideHeadingLayout[]
     } catch {}
     const source = JSON.parse(guideSignature) as { level: number; text: string }[]
-    setGuideLayout(source.map((heading, index) => {
+    setGuideLayout(normalizeGuideOrder(source.map((heading, index) => {
       const id = index + ':' + heading.text
       return saved.find((item) => item.id === id) ?? {
         id, text: heading.text, level: heading.level,
         page: Math.floor(index / 3), y: 7 + (index % 3) * 30,
       }
-    }))
+    })))
     setGuideLayoutReady(true)
   }, [guideSignature, storageKey])
 
@@ -170,7 +190,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     try { localStorage.setItem(storageKey + ':guide-layout-v1', JSON.stringify(guideLayout)) } catch {}
   }, [guideLayout, guideLayoutReady, storageKey])
 
-  const requiredGuidePages = Math.min(maxPages, Math.max(1, Math.ceil(guideLayout.length / 3)))
+  const requiredGuidePages = Math.min(maxPages, Math.max(1, guideLayout.reduce((highest, item) => Math.max(highest, item.page + 1), 1)))
   useEffect(() => {
     if (!guideLayoutReady || !guideLayout.length || isSwitching || isDrawing) return
     // Only ensure the initial guide pages exist. Never force the user back to page 1:
@@ -219,7 +239,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     const height = paperRef.current?.getBoundingClientRect().height || 1
     const y = Math.max(3, Math.min(92, drag.initialY + ((event.clientY - drag.startY) / height) * 100))
     drag.nextY = y
-    setGuideLayout((items) => items.map((item) => item.id === drag.id ? { ...item, y } : item))
+    setGuideLayout((items) => normalizeGuideOrder(items.map((item) => item.id === drag.id ? { ...item, y } : item)))
   }
 
   const endGuideHold = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -241,7 +261,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     let targetY = [7, 37, 67].find((value) => !occupied.has(value))
     let targetPage = nextPage
     if (targetY === undefined) { targetPage = nextPage + 1; targetY = 7 }
-    setGuideLayout((items) => items.map((item) => item.id === drag.id ? { ...item, page: targetPage, y: targetY! } : item))
+    setGuideLayout((items) => normalizeGuideOrder(items.map((item) => item.id === drag.id ? { ...item, page: targetPage, y: targetY! } : item)))
     // addPage() already switches to the newly inserted page. Do not race it
     // with a second switchPage() call: the drawing engine rejects concurrent switches.
     void (async () => {
