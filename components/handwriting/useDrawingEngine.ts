@@ -262,7 +262,14 @@ export function useDrawingEngine(
   // fullscreen. Re-renders the vector strokes at the new resolution so nothing looks pixelated.
   const setRenderScale = useCallback((requested: number) => {
     if (!Number.isFinite(requested)) return
-    const next = Math.min(MAX_RENDER_SCALE, Math.max(MIN_RENDER_SCALE, Math.ceil(requested * 4) / 4))
+    // Large tablets can report a high CSS width and devicePixelRatio at the same time.
+    // That combination creates a 10–15MP backing canvas at high zoom and makes live ink stutter.
+    // Keep tablets on a lighter backing store; the stored strokes remain vector point data.
+    const isTabletViewport = typeof window !== 'undefined'
+      && window.innerWidth >= 700
+      && window.innerWidth <= 1400
+    const renderLimit = isTabletViewport ? 1.65 : MAX_RENDER_SCALE
+    const next = Math.min(renderLimit, Math.max(MIN_RENDER_SCALE, Math.ceil(requested * 4) / 4))
     if (strokeRef.current) {
       pendingScaleRef.current = next
       return
