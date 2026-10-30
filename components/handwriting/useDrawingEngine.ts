@@ -507,11 +507,11 @@ export function useDrawingEngine(
   const changeBrushSize = useCallback((size: number) => {
     if (!Number.isFinite(size)) return
     if (toolRef.current === 'pen') {
-      const next = Math.max(2, Math.min(22, size))
+      const next = Math.max(2, Math.min(40, size))
       penSizeRef.current = next
       setPenSize(next)
     } else {
-      const next = Math.max(12, Math.min(96, size))
+      const next = Math.max(12, Math.min(180, size))
       eraserSizeRef.current = next
       setEraserSize(next)
     }
@@ -725,8 +725,8 @@ export function useDrawingEngine(
             nextPageIdRef.current = Math.max(saved.nextPageId ?? 1, ...pagesRef.current.map((page) => page.id + 1))
             if (saved.tool === 'pen' || saved.tool === 'eraser') { toolRef.current = saved.tool; setTool(saved.tool) }
             if (typeof saved.color === 'string' && COLORS.includes(saved.color)) { colorRef.current = saved.color; setColor(saved.color) }
-            if (Number.isFinite(saved.penSize)) { penSizeRef.current = Math.max(2, Math.min(22, saved.penSize!)); setPenSize(penSizeRef.current) }
-            if (Number.isFinite(saved.eraserSize)) { eraserSizeRef.current = Math.max(12, Math.min(96, saved.eraserSize!)); setEraserSize(eraserSizeRef.current) }
+            if (Number.isFinite(saved.penSize)) { penSizeRef.current = Math.max(2, Math.min(40, saved.penSize!)); setPenSize(penSizeRef.current) }
+            if (Number.isFinite(saved.eraserSize)) { eraserSizeRef.current = Math.max(12, Math.min(180, saved.eraserSize!)); setEraserSize(eraserSizeRef.current) }
           }
         }
       } catch (error) {
