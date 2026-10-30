@@ -293,7 +293,7 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   // positions with getBoundingClientRect(), so CSS transforms need no change to the drawing code.
   // ---------------------------------------------------------------------------
   const viewRef = useRef({ z: 1, x: 0, y: 0 })
-  const panRef = useRef<{ id: number; sx: number; sy: number; x: number; y: number } | null>(null)
+  const panRef = useRef<{ id: number; sx: number; sy: number; lastY: number; x: number; y: number } | null>(null)
   const badgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [zoomPct, setZoomPct] = useState(100)
   const [badgeVisible, setBadgeVisible] = useState(false)
@@ -561,26 +561,51 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
     const pan = panRef.current
     if (!pan || pan.id !== event.pointerId) return
 
+    event.preventDefault()
     const stage = stageRef.current
     const paper = paperRef.current
     const zoom = viewRef.current.z
     const deltaY = event.clientY - pan.lastY
     pan.lastY = event.clientY
 
+    const wantedY = pan.y + event.clientY - pan.sy
+    let reachedVerticalEdge = false
     if (stage && paper && deltaY !== 0) {
-      // At the vertical edge of the sheet, hand the remaining drag to the
-      // surrounding page so the user can keep moving down/up without lifting.
+      // The paper moves first. Only after it reaches its top/bottom limit
+      // does the remaining finger movement scroll the surrounding document.
       const minY = Math.min(-paper.offsetTop, stage.clientHeight - paper.offsetTop - paper.offsetHeight * zoom)
       const maxY = -paper.offsetTop
-      const wantedY = pan.y + event.clientY - pan.sy
-      const atTopEdge = wantedY <= minY + 1 && deltaY < 0
-      const atBottomEdge = wantedY >= maxY - 1 && deltaY > 0
-      if (atTopEdge || atBottomEdge) {
-        window.scrollBy({ top: -deltaY, left: 0, behavior: 'auto' })
-      }
+      reachedVerticalEdge = (wantedY <= minY + 1 && deltaY < 0)
+        || (wantedY >= maxY - 1 && deltaY > 0)
     }
 
-    applyView(zoom, pan.x + event.clientX - pan.sx, pan.y + event.clientY - pan.sy)
+    applyView(zoom, pan.x + event.clientX - pan.sx, wantedY)
+
+    if (reachedVerticalEdge && deltaY !== 0 && stage) {
+      let ancestor: HTMLElement | null = stage.parentElement
+      let scrolled = false
+      while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+        const style = window.getComputedStyle(ancestor)
+        const canScroll = /(auto|scroll|overlay)/.test(style.overflowY)
+          && ancestor.scrollHeight > ancestor.clientHeight + 1
+        if (canScroll) {
+          const before = ancestor.scrollTop
+          ancestor.scrollTop = before - deltaY
+          scrolled = ancestor.scrollTop !== before
+          if (scrolled) break
+        }
+        ancestor = ancestor.parentElement
+      }
+      if (!scrolled) {
+        const scrollingElement = document.scrollingElement
+        if (scrollingElement) {
+          const before = scrollingElement.scrollTop
+          scrollingElement.scrollTop = before - deltaY
+          scrolled = scrollingElement.scrollTop !== before
+        }
+        if (!scrolled) window.scrollBy({ top: -deltaY, left: 0, behavior: 'auto' })
+      }
+    }
   }
   const onPanEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (panRef.current?.id !== event.pointerId) return
