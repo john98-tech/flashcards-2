@@ -173,9 +173,9 @@ export const HandwritingEditor = forwardRef<HandwritingEditorHandle, Props>(func
   const requiredGuidePages = Math.min(maxPages, Math.max(1, Math.ceil(guideLayout.length / 3)))
   useEffect(() => {
     if (!guideLayoutReady || !guideLayout.length || isSwitching || isDrawing) return
-    if (pages.length < requiredGuidePages) runPageAction(addPage)
-    else if (pages.length === requiredGuidePages && currentPage !== 0) runPageAction(() => switchPage(0))
-  }, [guideLayoutReady, guideLayout.length, pages.length, requiredGuidePages, currentPage, isSwitching, isDrawing, addPage, switchPage, runPageAction])
+    if (pages.length < requiredGuidePages) void addPage().catch(reportError)
+    else if (pages.length === requiredGuidePages && currentPage !== 0) void switchPage(0)
+  }, [guideLayoutReady, guideLayout.length, pages.length, requiredGuidePages, currentPage, isSwitching, isDrawing, addPage, switchPage, reportError])
 
   const startGuideDrag = (event: ReactPointerEvent<HTMLDivElement>, heading: GuideHeadingLayout) => {
     if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
