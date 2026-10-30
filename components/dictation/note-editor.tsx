@@ -338,6 +338,7 @@ export function NoteEditor({
   gradingPrompt,
   studentText,
   studentImages,
+  guideHeadings,
 }: {
   lessonId: string
   lessonTitle: string
@@ -346,6 +347,7 @@ export function NoteEditor({
   gradingPrompt: string
   studentText: string
   studentImages: LessonImage[]
+  guideHeadings: Array<{ id: string; level: 'main' | 'sub'; title: string; order: number }>
 }) {
   const boardRef = useRef<HandwritingEditorHandle>(null)
   const router = useRouter()
@@ -719,7 +721,7 @@ export function NoteEditor({
         <section aria-label="مساحة التسميع" className="space-y-3">
           <span className="ux-pill"><PenLine className="size-3.5" aria-hidden />اكتب إجابتك</span>
           <div className="ux-glow">
-            <HandwritingEditor ref={boardRef} storageKey={`sammaa-dictation-answer-v1-${lessonId}`} />
+            <HandwritingEditor ref={boardRef} storageKey={`sammaa-dictation-answer-v1-${lessonId}`} guideHeadings={guideHeadings} />
           </div>
         </section>
       </main>
