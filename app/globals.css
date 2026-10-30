@@ -816,15 +816,15 @@ html:has([data-handwriting-editor]) {
   scrollbar-color: #0f766e #e8eef0;
 }
 html:has([data-handwriting-editor])::-webkit-scrollbar {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
 }
 html:has([data-handwriting-editor])::-webkit-scrollbar-track {
   background: #e8eef0;
   border-inline: 1px solid #d8e2e5;
 }
 html:has([data-handwriting-editor])::-webkit-scrollbar-thumb {
-  min-height: 56px;
+  min-height: 88px;
   border: 3px solid #e8eef0;
   border-radius: 9999px;
   background: linear-gradient(180deg, #0f766e 0%, #159b91 55%, #64748b 100%);
