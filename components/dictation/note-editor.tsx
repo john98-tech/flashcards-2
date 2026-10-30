@@ -696,30 +696,31 @@ export function NoteEditor({
       </header>
 
       <main className="relative mx-auto w-full max-w-5xl flex-1 space-y-5 px-2 py-4 sm:px-4 sm:py-6">
-        {(studentText.trim() || studentImages.length > 0) && (
-          <section className="ux-card p-4 pt-6 text-neutral-900 sm:p-6 sm:pt-7" aria-label="محتوى الدرس">
-            <span className="ux-pill mb-3"><BookOpen className="size-3.5" aria-hidden />محتوى الدرس</span>
-            {studentText.trim() && <LessonText text={studentText} />}
-            {studentImages.length > 0 && (
-              <div className="mt-4 flex flex-col items-center gap-4">
-                {studentImages.map((image) => (
-                  <img
-                    key={image.path}
-                    src={image.url}
-                    alt={image.name}
-                    className="h-auto max-w-full rounded-lg object-contain shadow-md"
-                    loading="lazy"
-                  />
-                ))}
-              </div>
-            )}
+        {studentImages.length > 0 && (
+          <section className="ux-card p-4 pt-6 text-neutral-900 sm:p-6 sm:pt-7" aria-label="مرفقات الدرس">
+            <span className="ux-pill mb-3"><BookOpen className="size-3.5" aria-hidden />مرفقات الدرس</span>
+            <div className="flex flex-col items-center gap-4">
+              {studentImages.map((image) => (
+                <img
+                  key={image.path}
+                  src={image.url}
+                  alt={image.name}
+                  className="h-auto max-w-full rounded-lg object-contain shadow-md"
+                  loading="lazy"
+                />
+              ))}
+            </div>
           </section>
         )}
 
         <section aria-label="مساحة التسميع" className="space-y-3">
           <span className="ux-pill"><PenLine className="size-3.5" aria-hidden />اكتب إجابتك</span>
           <div className="ux-glow">
-            <HandwritingEditor ref={boardRef} storageKey={`sammaa-dictation-answer-v1-${lessonId}`} />
+            <HandwritingEditor
+              ref={boardRef}
+              storageKey={`sammaa-dictation-answer-v1-${lessonId}`}
+              guideHeadings={parseBlocks(studentText).filter((block): block is Extract<ContentBlock, { type: 'heading' }> => block.type === 'heading').map((block) => ({ level: block.level, text: block.text }))}
+            />
           </div>
         </section>
       </main>
