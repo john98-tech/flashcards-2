@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   if (!deckId || !cardId) return NextResponse.json({ error: 'بيانات الكارد غير صحيحة.' }, { status: 400 })
   const client = db()
   const { data, error } = await client.from('card_audio_assets')
-    .select('audio_path,source_hash').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
+    .select('audio_path,source_hash,timings,status').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!data) return NextResponse.json({ url: null })
   const { data: card } = await client.from('cards').select('cloze').eq('deck_id', deckId).eq('id', cardId).maybeSingle()
@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     .join('\n').replace(/\n{3,}/g, '\n\n').trim()
   const hash = createHash('sha256').update(text).digest('hex')
   if (hash !== data.source_hash) return NextResponse.json({ url: null })
-  const url = client.storage.from('card-audio').getPublicUrl(data.audio_path).data.publicUrl
-  return NextResponse.json({ url })
+  const { data: signed, error: signedError } = await client.storage.from('card-audio').createSignedUrl(data.audio_path, 60 * 60)
+  if (signedError || !signed?.signedUrl) return NextResponse.json({ error: 'تعذر تجهيز رابط الصوت.' }, { status: 500 })
+  return NextResponse.json({ url: signed.signedUrl, timings: data.timings ?? [], status: data.status ?? 'ready' })
 }
