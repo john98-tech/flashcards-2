@@ -12,7 +12,7 @@ function spokenText(cloze: string) {
   return plainText(cloze)
     .split(/\r?\n/)
     .filter(line => !/^\s*>>/.test(line))
-    .map(line => line.replace(/^\s*#{1,4}\s*/, '').replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/\|/g, ', ').trimEnd())
+    .map(line => line.replace(/^\s*#{1,4}\s*/, '').replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/&/g, 'and').replace(/\|/g, ', ').trimEnd())
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
