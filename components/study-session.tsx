@@ -69,6 +69,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [audioError, setAudioError] = useState('')
   const [audioTimings, setAudioTimings] = useState<AudioWordTiming[]>([])
   const [activeAudioWord, setActiveAudioWord] = useState(-1)
+  const [audioPlaying, setAudioPlaying] = useState(false)
   const [audioBatchBusy, setAudioBatchBusy] = useState(false)
   const [audioBatchProgress, setAudioBatchProgress] = useState({ done: 0, total: 0 })
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -541,11 +542,11 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
             <div className="flex items-center gap-2">
               {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>}
               {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>{audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBatchBusy ? `تجهيز ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}</Button>}
-              {audioUrl && <Button type="button" size="sm" variant="outline" onClick={() => { const audio = audioRef.current; if (audio) { audio.currentTime = 0; void audio.play() } }}><Volume2 className="size-4" /> استمع</Button>}
+              {audioUrl && <Button type="button" size="sm" variant="outline" onClick={() => { const audio = audioRef.current; if (!audio) return; if (audio.paused) { if (audio.ended) audio.currentTime = 0; void audio.play() } else audio.pause() }}><Volume2 className="size-4" /> {audioPlaying ? 'إيقاف مؤقت' : 'استمع'}</Button>}
               {known.has(card.id) && <span className="flex items-center gap-1 text-success"><Check className="size-3.5" aria-hidden /> محفوظ</span>}
             </div>
           </div>
-          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onTimeUpdate={(event) => {
+          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onPlay={() => setAudioPlaying(true)} onPause={() => setAudioPlaying(false)} onTimeUpdate={(event) => {
             const now = event.currentTarget.currentTime * 1000
             const index = audioTimings.findIndex((item) => now >= item.startMs && now <= item.endMs)
             if (index !== activeAudioWord) setActiveAudioWord(index)
@@ -632,7 +633,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               const isOpen = revealed.has(seg.index)
               const blankTimingIndex = audioWordRanges.find((range) => range.start >= segStart && range.end <= segEnd)?.timingIndex
               if (mode === 'type') return <TypedBlank key={card.id + '-' + seg.index} answer={seg.value} value={answers[seg.index] ?? ''} checked={isOpen} onChange={(v) => setAnswers((a) => ({ ...a, [seg.index]: v }))} onCheck={(correct) => { if (correct) sfx.correct(); else sfx.wrong(); setRevealed((r) => new Set(r).add(seg.index)); if (pendingAudioBlankRef.current === seg.index) { pendingAudioBlankRef.current = null; void audioRef.current?.play() } }} />
-              return <button key={seg.index} type="button" data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => revealOne(seg.index)} aria-label={isOpen ? seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', activeAudioWord === blankTimingIndex && 'bg-primary/20 ring-1 ring-primary/30', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\\u00A0'}</button>
+              return <button key={seg.index} type="button" data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => { if (isOpen && blankTimingIndex !== undefined) { const audio = audioRef.current; const timing = audioTimings[blankTimingIndex]; if (audio && timing) { audio.currentTime = timing.startMs / 1000; setActiveAudioWord(blankTimingIndex); void audio.play() } } else revealOne(seg.index) }} aria-label={isOpen ? 'ابدأ القراءة من ' + seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', activeAudioWord === blankTimingIndex && 'bg-primary/20 ring-1 ring-primary/30', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\\u00A0'}</button>
             })
             const renderRange = (start: number, end: number) => renderRichInline(fullText, start, end, renderPlainRange, `study-${start}-${end}`)
             const HEADING_CLASS = [
