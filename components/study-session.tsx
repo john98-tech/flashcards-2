@@ -20,8 +20,12 @@ function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
   let timingIndex = 0
   for (const line of source.split('\n')) {
     const crumb = /^\s*>>/.test(line)
-    const bullet = line.match(/^\s*\d+[.)]\s+/)
+    const heading = line.match(/^\s*#{1,4}\s+/)
+    const afterHeading = heading ? line.slice(heading[0].length) : line
+    const bullet = afterHeading.match(/^\s*(?:[-*•]|\d+[.)])\s+/)
     if (!crumb) {
+      // Skip heading/list prefixes removed before transcription, retaining original text offsets.
+      const from = (heading?.[0].length ?? 0) + (bullet?.[0].length ?? 0)
       const from = bullet ? bullet[0].length : 0
       const expression = /&|[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu
       expression.lastIndex = from
