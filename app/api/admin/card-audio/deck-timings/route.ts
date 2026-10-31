@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       client.from('card_audio_assets').select('audio_path,source_hash').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle(),
     ])
     const card = { cloze }
-    if (cardError || assetError) return NextResponse.json({ error: cardError?.message || assetError?.message }, { status: 500 })
+    if (assetError) return NextResponse.json({ error: assetError.message }, { status: 500 })
     if (!asset) return NextResponse.json({ error: 'صوت الكارد رقم ' + (index + 1) + ' في الجروب غير جاهز. جهّز أصوات كل ديكس الجروب أولًا.' }, { status: 409 })
     const text = spokenText(card.cloze)
     const hash = createHash('sha256').update(text).digest('hex')
@@ -113,12 +113,14 @@ export async function POST(request: Request) {
     const durationMs = parsed.pcm.length / (sampleRate * 2) * 1000
     cardRanges.push({ id: cardId, deckId, text, cloze: card.cloze, startMs: cursorMs, endMs: cursorMs + durationMs })
     pieces.push(parsed.pcm); totalBytes += parsed.pcm.length; cursorMs += durationMs
-    if (index < cardIds.length - 1) {
+    if (index < allCards.length - 1) {
       const silence = Buffer.alloc(Math.round(sampleRate * silenceMs / 1000) * 2)
       pieces.push(silence); totalBytes += silence.length; cursorMs += silenceMs
     }
     if (totalBytes > 45 * 1024 * 1024) return NextResponse.json({ error: 'حجم صوت الجروب أكبر من الحد الآمن للرفع. قسّم الجروب إلى مجموعتين أصغر.' }, { status: 413 })
   }
+
+  if (cursorMs > 30 * 60 * 1000) return NextResponse.json({ error: 'مدة صوت الجروب تتجاوز 30 دقيقة، وهو الحد المدعوم لتوقيتات الكلمات. قسّم الجروب إلى جزأين.' }, { status: 413 })
 
   try {
     const pcm = Buffer.concat(pieces, totalBytes)
@@ -156,7 +158,6 @@ export async function POST(request: Request) {
     }
     visit(transcriptData)
     if (!found.length) throw new Error('Gemini لم يرجع توقيتات كلمات. لم يتم تعديل توقيتات الكروت المحفوظة.')
-    if (cursorMs > 30 * 60 * 1000) throw new Error('مدة صوت الجروب تتجاوز 30 دقيقة، وهو الحد المدعوم لتوقيتات الكلمات. قسّم الجروب إلى جزأين.')
     const summaries: { cardId: string; status: string; words: number }[] = []
     for (const item of cardRanges) {
       const segment = found.filter(word => word.startMs >= item.startMs - 100 && word.endMs <= item.endMs + 150)
