@@ -84,6 +84,8 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [audioBatchProgress, setAudioBatchProgress] = useState({ done: 0, total: 0 })
   const [deckAudioExportBusy, setDeckAudioExportBusy] = useState(false)
   const [deckAudioGenerated, setDeckAudioGenerated] = useState(false)
+  const [deckTimingsBusy, setDeckTimingsBusy] = useState(false)
+  const [deckTimingsResult, setDeckTimingsResult] = useState('')
   useEffect(() => {
     try {
       const saved = localStorage.getItem('card-audio-tts-model')
@@ -329,6 +331,33 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       setAudioError(error instanceof Error ? error.message : 'تعذر تنزيل ملف صوت الديك.')
     } finally {
       setDeckAudioExportBusy(false)
+    }
+  }
+
+  const synchronizeDeckTimings = async () => {
+    if (deckTimingsBusy || !deck.cards.length) return
+    setDeckTimingsBusy(true)
+    setDeckTimingsResult('')
+    setAudioError('')
+    try {
+      const response = await fetch('/api/admin/card-audio/deck-timings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deckId: deck.id, cardIds: deck.cards.map((item) => item.id) }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error || 'تعذر استخراج توقيتات الديك.')
+      setDeckTimingsResult(`اكتملت المزامنة: ${data.readyCards} كارد جاهز، و${data.reviewCards} يحتاج مراجعة.`)
+      // Refresh the currently displayed card's saved timings after the batch update.
+      if (card?.id) {
+        const refresh = await fetch(`/api/card-audio?deckId=${encodeURIComponent(deck.id)}&cardId=${encodeURIComponent(card.id)}`)
+        const refreshed = refresh.ok ? await refresh.json().catch(() => null) : null
+        if (refreshed) setAudioTimings(Array.isArray(refreshed.timings) ? refreshed.timings : [])
+      }
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : 'تعذر استخراج توقيتات الديك.')
+    } finally {
+      setDeckTimingsBusy(false)
     }
   }
 
@@ -629,8 +658,13 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                     {deckAudioExportBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
                     {deckAudioExportBusy ? 'تجميع الملف...' : 'تنزيل صوت الديك كاملًا'}
                   </Button>}
+                  {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckTimingsBusy || deckAudioExportBusy || audioBatchBusy} onClick={() => void synchronizeDeckTimings()}>
+                    {deckTimingsBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
+                    {deckTimingsBusy ? 'تحليل الديك مرة واحدة...' : 'مزامنة كلمات الديك (طلب واحد)'}
+                  </Button>}
                 </>
               )}
+              {deckTimingsResult && <span role="status" className="text-xs text-success">{deckTimingsResult}</span>}
               {audioUrl && (
                 <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" onClick={() => { const audio = audioRef.current; if (!audio) return; if (audio.paused) { if (audio.ended) audio.currentTime = 0; void audio.play() } else audio.pause() }}>
                   <Volume2 className="size-4" /> {audioPlaying ? 'إيقاف مؤقت' : 'استمع للصوت'}
