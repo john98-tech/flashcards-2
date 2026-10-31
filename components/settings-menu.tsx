@@ -22,6 +22,9 @@ export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton
   const [open, setOpen] = useState(false)
   const settings = useSoundSettings()
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [panelPosition, setPanelPosition] = useState<{ top: number; left: number } | null>(null)
   const panelId = useId()
 
   useEffect(() => {
@@ -35,6 +38,33 @@ export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton
     return () => {
       document.removeEventListener('pointerdown', onDown)
       document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) {
+      setPanelPosition(null)
+      return
+    }
+
+    const placePanel = () => {
+      const trigger = triggerRef.current
+      const panel = panelRef.current
+      if (!trigger || !panel) return
+      const anchor = trigger.getBoundingClientRect()
+      const width = Math.min(288, window.innerWidth - 16)
+      const left = Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8))
+      const height = Math.min(panel.scrollHeight, window.innerHeight - 16)
+      const top = Math.max(8, Math.min(anchor.bottom + 8, window.innerHeight - height - 8))
+      setPanelPosition({ top, left })
+    }
+
+    placePanel()
+    window.addEventListener('resize', placePanel)
+    window.addEventListener('scroll', placePanel, true)
+    return () => {
+      window.removeEventListener('resize', placePanel)
+      window.removeEventListener('scroll', placePanel, true)
     }
   }, [open])
 
@@ -68,7 +98,8 @@ export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton
           role="dialog"
           aria-label="Settings"
           data-tour="settings-panel"
-          className="pop-in absolute right-0 top-11 z-50 w-72 rounded-2xl border bg-card/95 p-4 shadow-xl backdrop-blur-md"
+          style={{ position: 'fixed', top: panelPosition?.top ?? 8, left: panelPosition?.left ?? 8, width: 'min(18rem, calc(100vw - 1rem))', maxHeight: 'calc(100dvh - 1rem)', overflowY: 'auto', overscrollBehavior: 'contain' }}
+          className="pop-in z-[100] rounded-2xl border bg-card/95 p-4 shadow-xl backdrop-blur-md"
         >
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sound</p>
           <div className="flex flex-col gap-1">
