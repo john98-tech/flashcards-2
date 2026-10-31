@@ -26,7 +26,6 @@ function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
     if (!crumb) {
       // Skip heading/list prefixes removed before transcription, retaining original text offsets.
       const from = (heading?.[0].length ?? 0) + (bullet?.[0].length ?? 0)
-      const from = bullet ? bullet[0].length : 0
       const expression = /&|[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu
       expression.lastIndex = from
       for (const match of line.matchAll(expression)) {
