@@ -82,6 +82,8 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [audioBatchBusy, setAudioBatchBusy] = useState(false)
   const [audioModel, setAudioModel] = useState('gemini-3.8-live')
   const [audioBatchProgress, setAudioBatchProgress] = useState({ done: 0, total: 0 })
+  const [deckAudioExportBusy, setDeckAudioExportBusy] = useState(false)
+  const [deckAudioGenerated, setDeckAudioGenerated] = useState(false)
   useEffect(() => {
     try {
       const saved = localStorage.getItem('card-audio-tts-model')
@@ -270,11 +272,13 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const generateDeckAudio = async () => {
     if (audioBatchBusy) return
     setAudioBatchBusy(true)
+    setDeckAudioGenerated(false)
     setAudioError('')
     setAudioBatchProgress({ done: 0, total: deck.cards.length })
     let completed = 0
-    let timingIssues = 0
     try {
+      // Generate and persist each card's audio in deck order. Timing extraction
+      // is intentionally deferred so this workflow never consumes Transcribe quota.
       for (const item of deck.cards) {
         const response = await fetch('/api/admin/card-audio', {
           method: 'POST',
@@ -285,29 +289,46 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
         if (!response.ok) throw new Error('الكارد ' + (completed + 1) + ': ' + (data.error || 'تعذر تجهيز الصوت.'))
         completed++
         setAudioBatchProgress({ done: completed, total: deck.cards.length })
-        let timings: AudioWordTiming[] = Array.isArray(data.timings) ? data.timings : []
-        try {
-          const timingResponse = await fetch('/api/admin/card-audio/timings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deckId: deck.id, cardId: item.id }),
-          })
-          const timingData = await timingResponse.json()
-          if (timingResponse.ok) timings = Array.isArray(timingData.timings) ? timingData.timings : []
-          else timingIssues++
-        } catch {
-          timingIssues++
-        }
         if (item.id === card?.id && data.url) {
           setAudioUrl(data.url)
-          setAudioTimings(timings)
+          setAudioTimings(Array.isArray(data.timings) ? data.timings : [])
         }
       }
-      if (timingIssues) setAudioError('تم تجهيز صوت الديك، لكن ' + timingIssues + ' كارد يحتاج مراجعة مزامنة الكلمات.')
+      setDeckAudioGenerated(true)
     } catch (error) {
       setAudioError(error instanceof Error ? error.message : 'توقف تجهيز أصوات الديك.')
     } finally {
       setAudioBatchBusy(false)
+    }
+  }
+
+  const exportDeckAudio = async () => {
+    if (deckAudioExportBusy || !deck.cards.length) return
+    setDeckAudioExportBusy(true)
+    setAudioError('')
+    try {
+      const response = await fetch('/api/admin/card-audio/deck-export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deckId: deck.id, cardIds: deck.cards.map((item) => item.id) }),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error || 'تعذر تجميع ملف صوت الديك.')
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = (deck.title || 'deck').replace(/[^\\p{L}\\p{N}._-]+/gu, '-') + '-full-audio.wav'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : 'تعذر تنزيل ملف صوت الديك.')
+    } finally {
+      setDeckAudioExportBusy(false)
     }
   }
 
@@ -599,10 +620,14 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                 </div>
               )}
               {isAdmin && (
-                <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy || audioModel.includes('live')} title={audioModel.includes('live') ? 'موديلات Live تجريبية: اختبر كاردًا واحدًا أولًا' : undefined} onClick={() => void generateDeckAudio()}>
+                <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>
                   {audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
                   {audioBatchBusy ? `تجهيز الديك ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}
                 </Button>
+                {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckAudioExportBusy || audioBatchBusy} onClick={() => void exportDeckAudio()}>
+                  {deckAudioExportBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
+                  {deckAudioExportBusy ? 'تجميع الملف...' : 'تنزيل صوت الديك كاملًا'}
+                </Button>}
               )}
               {audioUrl && (
                 <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" onClick={() => { const audio = audioRef.current; if (!audio) return; if (audio.paused) { if (audio.ended) audio.currentTime = 0; void audio.play() } else audio.pause() }}>
