@@ -281,19 +281,24 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     let completed = 0
     let currentDeckTitle = ''
     try {
-      // Fetch every deck/card in this group, preserving deck creation order
-      // and card position order, then generate and persist audio sequentially.
+      // The server checks saved assets against each card's current text and model.
+      // A retry therefore resumes at the first card whose audio is still missing.
       const manifestResponse = await fetch('/api/admin/card-audio/group', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: deck.groupId }),
+        body: JSON.stringify({ groupId: deck.groupId, model: audioModel }),
       })
       const manifest = await manifestResponse.json().catch(() => null)
       if (!manifestResponse.ok) throw new Error(manifest?.error || 'تعذر تحميل كروت الجروب.')
       const items: { deckId: string; deckTitle: string; cardId: string }[] = manifest.items ?? []
+      const completedIds: string[] = manifest.completedIds ?? []
       if (!items.length) throw new Error('الجروب لا يحتوي على كروت.')
-      setAudioBatchProgress({ done: 0, total: items.length })
+      const completedSet = new Set(completedIds)
+      completed = completedSet.size
+      setAudioBatchProgress({ done: completed, total: items.length })
       for (const item of items) {
+        const progressKey = item.deckId + ':' + item.cardId
+        if (completedSet.has(progressKey)) continue
         currentDeckTitle = item.deckTitle
         const response = await fetch('/api/admin/card-audio', {
           method: 'POST',
@@ -302,6 +307,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
         })
         const data = await response.json().catch(() => null)
         if (!response.ok) throw new Error('ديك "' + currentDeckTitle + '" — كارد ' + (completed + 1) + ' من ' + items.length + ': ' + (data?.error || 'تعذر تجهيز الصوت.'))
+        completedSet.add(progressKey)
         completed++
         setAudioBatchProgress({ done: completed, total: items.length })
         if (item.cardId === card?.id && item.deckId === deck.id && data?.url) {
@@ -310,8 +316,9 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
         }
       }
       setDeckAudioGenerated(true)
+      setDeckTimingsResult(completed === items.length ? 'اكتمل تجهيز صوت الجروب كله.' : '')
     } catch (error) {
-      setAudioError(error instanceof Error ? error.message : 'توقف تجهيز أصوات الجروب.')
+      setAudioError(error instanceof Error ? error.message : 'توقف تجهيز أصوات الجروب. اضغط استكمال للمتابعة من آخر كارت محفوظ.')
     } finally {
       setAudioBatchBusy(false)
     }
