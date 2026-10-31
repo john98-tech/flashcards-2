@@ -189,7 +189,12 @@ export async function POST(request: Request) {
       message: aligned ? undefined : 'الصوت محفوظ، لكن التفريغ لم يطابق نص الكارد بدقة؛ تم تعطيل التظليل الآلي لهذا الكارد لحين المراجعة.',
     })
   } catch (error) {
-    await client.from('card_audio_assets').update({ status: 'needs_review', timings: [], updated_at: new Date().toISOString() }).eq('deck_id', deckId).eq('card_id', cardId)
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'تعذر تحليل توقيتات الصوت.' }, { status: 502 })
+    // A transcription quota/network failure must not erase previously saved
+    // word timings. Keep the current asset state so a temporary 429 cannot
+    // destroy working hover/highlight synchronization.
+    const message = error instanceof Error ? error.message : 'تعذر تحليل توقيتات الصوت.'
+    const rateLimited = /rate.?limit|quota|429|resource_exhausted/i.test(message)
+    await client.from('card_audio_assets').update({ updated_at: new Date().toISOString() }).eq('deck_id', deckId).eq('card_id', cardId)
+    return NextResponse.json({ error: message, code: rateLimited ? 'TRANSCRIPTION_RATE_LIMIT' : 'TIMING_ANALYSIS_FAILED' }, { status: rateLimited ? 429 : 502 })
   }
 }
