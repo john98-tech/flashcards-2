@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Eye, Keyboard, MousePointerClick, Pencil, Save, RotateCcw, Shuffle, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Eye, Keyboard, MousePointerClick, Pencil, Save, RotateCcw, Shuffle, X, Volume2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { sfx } from '@/lib/sound'
-import { fromCloze, normalizeAnswer, parseCloze, toCloze, type Deck } from '@/lib/cloze'
+import { fromCloze, normalizeAnswer, parseCloze, plainText, toCloze, type Deck } from '@/lib/cloze'
 import { saveCard } from '@/app/admin/actions'
 import { renderRichInline } from '@/components/rich-inline'
 import { loadStudentDeckProgress, saveStudentDeckProgress } from '@/app/decks/progress-actions'
@@ -39,6 +39,10 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [adminError, setAdminError] = useState('')
   const [adminOverrides, setAdminOverrides] = useState<Record<string, string>>({})
   const [adminSelected, setAdminSelected] = useState<Set<number>>(new Set())
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [audioBusy, setAudioBusy] = useState(false)
+  const [audioError, setAudioError] = useState('')
+  const audioRef = useRef<HTMLAudioElement>(null)
   const adminSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAdminSave = useRef<{ card: Deck['cards'][number]; cloze: string; position: number } | null>(null)
   const validCardIds = useMemo(() => new Set(deck.cards.map((item) => item.id)), [deck.cards])
@@ -112,6 +116,32 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   useEffect(() => {
     setAdminSelected(adminParsed?.selected ?? new Set())
   }, [card?.id, card?.cloze])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (audio) { audio.pause(); audio.currentTime = 0 }
+    setAudioUrl(null)
+    setAudioError('')
+    if (!card) return
+    let cancelled = false
+    fetch(`/api/card-audio?deckId=${encodeURIComponent(deck.id)}&cardId=${encodeURIComponent(card.id)}`)
+      .then(async response => response.ok ? response.json() : null)
+      .then(data => { if (!cancelled && data?.url) setAudioUrl(data.url) })
+      .catch(() => {})
+    return () => { cancelled = true; if (audio) { audio.pause(); audio.currentTime = 0 } }
+  }, [card?.id, deck.id])
+
+  const generateCardAudio = async () => {
+    if (!card || audioBusy) return
+    setAudioBusy(true); setAudioError('')
+    try {
+      const response = await fetch('/api/admin/card-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deckId: deck.id, cardId: card.id }) })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'تعذر تجهيز الصوت.')
+      setAudioUrl(data.url)
+    } catch (error) { setAudioError(error instanceof Error ? error.message : 'تعذر تجهيز الصوت.') }
+    finally { setAudioBusy(false) }
+  }
 
   // Reset messages only when navigating to a different card, not on each
   // optimistic text update; otherwise the status line flashes and changes height.
@@ -368,7 +398,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
 
       {card ? (
         <article key={`${card.id}-${position}`} className="card-flip rounded-2xl border bg-card/95 p-4 shadow-lg backdrop-blur sm:p-6 md:p-8">
-          <div className="mb-5 flex items-center justify-between text-xs text-muted-foreground">
+          <div className="mb-5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -391,12 +421,14 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                 <ChevronLeft className="size-4" aria-hidden />
               </button>
             </div>
-            {known.has(card.id) && (
-              <span className="flex items-center gap-1 text-success">
-                <Check className="size-3.5" aria-hidden /> محفوظ
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>}
+              {audioUrl && <Button type="button" size="sm" variant="outline" onClick={() => { const audio = audioRef.current; if (audio) { audio.currentTime = 0; void audio.play() } }}><Volume2 className="size-4" /> استمع</Button>}
+              {known.has(card.id) && <span className="flex items-center gap-1 text-success"><Check className="size-3.5" aria-hidden /> محفوظ</span>}
+            </div>
           </div>
+          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" />
+          {audioError && <p role="alert" className="mb-3 text-xs text-destructive">{audioError}</p>}
 
           {(() => {
             let offset = 0
