@@ -6,7 +6,7 @@ import { plainText } from '@/lib/cloze'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300
+export const maxDuration = 60
 
 function spokenText(cloze: string) {
   return plainText(cloze).split(/\r?\n/)
