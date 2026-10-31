@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         input: [{ type: 'audio', uri: fileUri, mime_type: 'audio/wav' }],
         generation_config: {
           transcription_config: {
-            language_codes: ['ar-EG', 'en-US'],
+            language_codes: [],
             mode: { type: 'verbatim', timestamp_granularities: ['word'] },
           },
         },
@@ -120,7 +120,10 @@ export async function POST(request: Request) {
     }
     visit(transcriptData)
 
-    const normalize = (value: string) => value.toLocaleLowerCase('en-US').replace(/[^\p{L}\p{N}]+/gu, '')
+    const normalize = (value: string) => value.normalize('NFKC').toLocaleLowerCase('en-US')
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+      .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+      .replace(/[^\p{L}\p{N}]+/gu, '')
     const expected = text.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
     const actual = found.map(item => item.word)
     // Align the transcript to the source instead of requiring the ASR to return
@@ -166,9 +169,12 @@ export async function POST(request: Request) {
       const key = normalize(expected[item.sourceIndex])
       matchedCounts.set(key, (matchedCounts.get(key) ?? 0) + 1)
     }
-    const allBlankWordsMatched = blankWords.every(word => (matchedCounts.get(word) ?? 0) > 0)
+    const requiredBlankCounts = new Map<string, number>()
+    for (const word of blankWords) requiredBlankCounts.set(word, (requiredBlankCounts.get(word) ?? 0) + 1)
+    const allBlankWordsMatched = [...requiredBlankCounts].every(([word, count]) => (matchedCounts.get(word) ?? 0) >= count)
     const coverage = expected.length ? matched.length / expected.length : 0
-    const aligned = expected.length > 0 && coverage >= 0.88 && allBlankWordsMatched
+    // Source-index alignment keeps missed words from shifting later highlights.
+    const aligned = expected.length > 0 && coverage >= 0.78 && allBlankWordsMatched
     const timings = aligned ? matched : []
     const status = aligned ? 'ready' : 'needs_review'
     const { error: saveError } = await client.from('card_audio_assets').update({
