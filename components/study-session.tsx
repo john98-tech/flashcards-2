@@ -778,6 +778,8 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                       key={`audio-word-${wordRange.start}`}
                       type="button"
                       data-audio-word-index={wordRange.timingIndex}
+                      onMouseEnter={() => { if (!audioPlaying) setActiveAudioWord(wordRange.timingIndex) }}
+                      onMouseLeave={() => { if (!audioPlaying) setActiveAudioWord(-1) }}
                       onClick={() => {
                         const audio = audioRef.current
                         if (audio && timing) {
@@ -786,7 +788,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                           void audio.play()
                         }
                       }}
-                      className={cn('rounded-sm transition-colors', activeAudioWord === wordRange.timingIndex && 'bg-primary/20 text-primary ring-1 ring-primary/30')}
+                      className={cn('rounded-sm transition-colors hover:bg-primary/10 hover:text-primary', activeAudioWord === wordRange.timingIndex && 'bg-primary/20 text-primary ring-1 ring-primary/30')}
                       aria-label={`ابدأ القراءة من ${fullText.slice(wordRange.start, wordRange.end)}`}
                     >{fullText.slice(wordRange.start, wordRange.end)}</button>,
                   )
