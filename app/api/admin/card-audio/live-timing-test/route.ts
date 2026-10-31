@@ -127,7 +127,7 @@ export async function GET(request: Request) {
         })
       }
     }
-    return await new Promise((resolve, reject) => {
+    const result = await new Promise<any>((resolve, reject) => {
       timeout = setTimeout(() => finish(resolve, reject, new Error('انتهت مهلة اختبار Gemini Live.')), 45000)
       socket.addEventListener('open', () => {
         socket.send(JSON.stringify({
@@ -183,6 +183,7 @@ export async function GET(request: Request) {
         if (!settled && event.code !== 1000) finish(resolve, reject, new Error('اتصال Gemini Live اتقفل (code ' + event.code + ').'))
       })
     })
+    return NextResponse.json(result)
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'فشل اختبار Live API.' }, { status: 502 })
   }
