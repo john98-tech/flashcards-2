@@ -363,7 +363,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       const response = await fetch('/api/admin/card-audio/deck-timings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deckId: deck.id, cardIds: deck.cards.map((item) => item.id) }),
+        body: JSON.stringify({ groupId: deck.groupId }),
       })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || 'تعذر استخراج توقيتات الديك.')
