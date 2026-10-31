@@ -88,6 +88,86 @@ export async function POST(request: Request) {
   if (audio.length < 1000 || audio.length > 50 * 1024 * 1024 || audio.toString('ascii', 0, 4) !== 'RIFF') {
     return NextResponse.json({ error: 'ملف الصوت الناتج غير صالح أو ليس WAV مكتملًا.' }, { status: 502 })
   }
+  let wordTimings: { word: string; startMs: number; endMs: number }[] = []
+  let timingStatus: 'ready' | 'review' = 'review'
+  try {
+    const startUpload = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': apiKey,
+        'X-Goog-Upload-Protocol': 'resumable',
+        'X-Goog-Upload-Command': 'start',
+        'X-Goog-Upload-Header-Content-Length': String(audio.length),
+        'X-Goog-Upload-Header-Content-Type': 'audio/wav',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ file: { display_name: `card-${cardId}` } }),
+      signal: AbortSignal.timeout(15000),
+    })
+    const uploadUrl = startUpload.headers.get('x-goog-upload-url')
+    if (!startUpload.ok || !uploadUrl) throw new Error('Gemini file upload could not be initialized.')
+    const uploaded = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Length': String(audio.length),
+        'X-Goog-Upload-Offset': '0',
+        'X-Goog-Upload-Command': 'upload, finalize',
+      },
+      body: new Blob([new Uint8Array(audio)], { type: 'audio/wav' }),
+      signal: AbortSignal.timeout(20000),
+    })
+    const fileData = await uploaded.json().catch(() => null)
+    const fileUri = fileData?.file?.uri
+    if (!uploaded.ok || typeof fileUri !== 'string') throw new Error('Gemini file upload failed.')
+
+    const transcription = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemini-3.5-transcribe',
+        input: [{ type: 'audio', uri: fileUri, mime_type: 'audio/wav' }],
+        generation_config: {
+          transcription_config: {
+            language_codes: ['en-US'],
+            mode: { type: 'verbatim', timestamp_granularities: ['word'] },
+          },
+        },
+      }),
+      signal: AbortSignal.timeout(25000),
+    })
+    const transcriptData = await transcription.json().catch(() => null)
+    if (transcription.ok) {
+      const found: { word: string; startMs: number; endMs: number }[] = []
+      const visit = (value: any) => {
+        if (!value || typeof value !== 'object') return
+        if (Array.isArray(value)) { value.forEach(visit); return }
+        if (value.type === 'word_info' && typeof value.text === 'string') {
+          const toMs = (v: unknown) => {
+            if (typeof v !== 'string') return NaN
+            const n = Number.parseFloat(v)
+            return Number.isFinite(n) ? (v.endsWith('ms') ? n : n * 1000) : NaN
+          }
+          const startMs = toMs(value.start_offset)
+          const endMs = toMs(value.end_offset)
+          if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
+            found.push({ word: value.text, startMs, endMs })
+          }
+        }
+        Object.values(value).forEach(visit)
+      }
+      visit(transcriptData)
+      const normalize = (v: string) => v.toLocaleLowerCase('en-US').replace(/[^\p{L}\p{N}]+/gu, '')
+      const expected = text.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
+      const actual = found.map(item => item.word)
+      if (expected.length === actual.length && expected.every((word, i) => normalize(word) === normalize(actual[i]))) {
+        wordTimings = found
+        timingStatus = 'ready'
+      }
+    }
+  } catch {
+    // Audio is still usable; timing data remains unavailable until a successful reprocessing.
+  }
+
   const path = `${deckId}/${cardId}-${sourceHash.slice(0, 16)}.wav`
   const { error: uploadError } = await client.storage.from('card-audio').upload(path, audio, {
     contentType: 'audio/wav', upsert: true, cacheControl: '31536000',
@@ -97,9 +177,9 @@ export async function POST(request: Request) {
   const { error: saveError } = await client.from('card_audio_assets').upsert({
     deck_id: deckId, card_id: cardId, source_hash: sourceHash, audio_path: path,
     mime_type: 'audio/wav', model: 'gemini-3.8-flash-tts', voice: 'Kore',
-    timings: [], status: 'ready', updated_at: new Date().toISOString(),
+    timings: wordTimings, status: timingStatus, updated_at: new Date().toISOString(),
   }, { onConflict: 'deck_id,card_id' })
   if (saveError) return NextResponse.json({ error: `تم إنشاء الصوت لكن تعذر حفظ بياناته: ${saveError.message}` }, { status: 500 })
 
-  return NextResponse.json({ url: await signedAudioUrl(path), reused: false, model: 'gemini-3.8-flash-tts', voice: 'Kore', timings: [] })
+  return NextResponse.json({ url: await signedAudioUrl(path), reused: false, model: 'gemini-3.8-flash-tts', voice: 'Kore', timings: wordTimings, timingStatus })
 }
