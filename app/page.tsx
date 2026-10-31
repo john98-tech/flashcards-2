@@ -4,6 +4,7 @@ import { HomeHub } from '@/components/home-hub'
 import { getDeckGroups, getDeckSummaries } from '@/lib/decks'
 import { canOpen, getAccess } from '@/lib/access'
 
+// Home page now loads flashcards only; the removed study sections are not passed to HomeHub.
 export default async function HomePage() {
   const [decks, groups, access] = await Promise.all([getDeckSummaries(), getDeckGroups(), getAccess()])
   const hasPaid = decks.some((d) => !d.isFree)
