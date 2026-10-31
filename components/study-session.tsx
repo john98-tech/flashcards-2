@@ -320,11 +320,11 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = (deck.title || 'deck').replace(/[^\\p{L}\\p{N}._-]+/gu, '-') + '-full-audio.wav'
+      link.download = (deck.title || 'deck').replace(/[^\p{L}\p{N}._-]+/gu, '-') + '-full-audio.wav'
       document.body.appendChild(link)
       link.click()
       link.remove()
-      URL.revokeObjectURL(url)
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (error) {
       setAudioError(error instanceof Error ? error.message : 'تعذر تنزيل ملف صوت الديك.')
     } finally {
