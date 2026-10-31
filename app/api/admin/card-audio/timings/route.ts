@@ -123,9 +123,53 @@ export async function POST(request: Request) {
     const normalize = (value: string) => value.toLocaleLowerCase('en-US').replace(/[^\p{L}\p{N}]+/gu, '')
     const expected = text.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
     const actual = found.map(item => item.word)
-    const aligned = expected.length > 0 && expected.length === actual.length
-      && expected.every((word, index) => normalize(word) === normalize(actual[index]))
-    const timings = aligned ? found : []
+    // Align the transcript to the source instead of requiring the ASR to return
+    // exactly the same token count. Unmatched words stay unhighlighted; sourceIndex
+    // prevents one omitted article from shifting every later word.
+    const rows = expected.length + 1
+    const cols = actual.length + 1
+    const dp = Array.from({ length: rows }, () => new Array<number>(cols).fill(0))
+    const back = Array.from({ length: rows }, () => new Array<'match' | 'delete' | 'insert' | 'substitute'>(cols))
+    for (let i = 1; i < rows; i++) { dp[i][0] = i; back[i][0] = 'delete' }
+    for (let j = 1; j < cols; j++) { dp[0][j] = j; back[0][j] = 'insert' }
+    for (let i = 1; i < rows; i++) {
+      for (let j = 1; j < cols; j++) {
+        const same = normalize(expected[i - 1]) === normalize(actual[j - 1])
+        const choices = [
+          { cost: dp[i - 1][j - 1] + (same ? 0 : 1), op: same ? 'match' as const : 'substitute' as const },
+          { cost: dp[i - 1][j] + 1, op: 'delete' as const },
+          { cost: dp[i][j - 1] + 1, op: 'insert' as const },
+        ]
+        const best = choices.reduce((a, b) => b.cost < a.cost ? b : a)
+        dp[i][j] = best.cost
+        back[i][j] = best.op
+      }
+    }
+    const matched: (typeof found[number] & { sourceIndex: number })[] = []
+    let i = expected.length
+    let j = actual.length
+    while (i > 0 || j > 0) {
+      const op = back[i][j]
+      if (op === 'match') { matched.push({ ...found[j - 1], sourceIndex: i - 1 }); i--; j-- }
+      else if (op === 'substitute') { i--; j-- }
+      else if (op === 'delete') i--
+      else if (op === 'insert') j--
+      else break
+    }
+    matched.reverse()
+    const blankWords = [...String(card.cloze).matchAll(/\{\{([\s\S]+?)\}\}/g)]
+      .flatMap(match => match[1].match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? [])
+      .map(normalize)
+      .filter(Boolean)
+    const matchedCounts = new Map<string, number>()
+    for (const item of matched) {
+      const key = normalize(expected[item.sourceIndex])
+      matchedCounts.set(key, (matchedCounts.get(key) ?? 0) + 1)
+    }
+    const allBlankWordsMatched = blankWords.every(word => (matchedCounts.get(word) ?? 0) > 0)
+    const coverage = expected.length ? matched.length / expected.length : 0
+    const aligned = expected.length > 0 && coverage >= 0.88 && allBlankWordsMatched
+    const timings = aligned ? matched : []
     const status = aligned ? 'ready' : 'needs_review'
     const { error: saveError } = await client.from('card_audio_assets').update({
       timings,
