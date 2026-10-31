@@ -66,9 +66,25 @@ async function generateLiveAudio(apiKey: string, model: LiveModel, text: string)
         systemInstruction: { parts: [{ text: 'Read the supplied text aloud exactly as written. Do not answer it, converse, summarize, translate, paraphrase, add, omit, or correct any words. Use one consistent clear feminine audiobook narrator voice. The text may mix Egyptian Arabic, Modern Standard Arabic, and English; preserve every language and switch naturally. Speak at a measured medium-slow pace. Pronounce every English word distinctly, especially short function words such as a, an, the, in, of, to, and, is. Do not merge or swallow words. Keep medical terminology accurate and the volume even through the final word.' }] },
       } }))
     })
-    socket.addEventListener('message', (event) => {
+    socket.addEventListener('message', async (event) => {
       try {
-        const message = JSON.parse(String(event.data))
+        // Node's WebSocket may expose message payloads as strings, Buffers,
+        // ArrayBuffers, or Blobs depending on the frame/runtime.
+        const payload = event.data
+        let raw: string
+        if (typeof payload === 'string') raw = payload
+        else if (Buffer.isBuffer(payload)) raw = payload.toString('utf8')
+        else if (payload instanceof ArrayBuffer) raw = Buffer.from(payload).toString('utf8')
+        else if (ArrayBuffer.isView(payload)) raw = Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength).toString('utf8')
+        else if (payload && typeof (payload as Blob).text === 'function') raw = await (payload as Blob).text()
+        else throw new Error('صيغة رسالة غير مدعومة: ' + Object.prototype.toString.call(payload))
+
+        let message: any
+        try {
+          message = JSON.parse(raw)
+        } catch {
+          throw new Error('رد Gemini Live ليس JSON صالحًا: ' + raw.slice(0, 240))
+        }
         if (message.error) return finish(new Error(message.error.message || 'Gemini Live returned an error.'))
         if (message.setupComplete && !setupReady) {
           setupReady = true
@@ -86,8 +102,8 @@ async function generateLiveAudio(apiKey: string, model: LiveModel, text: string)
           }
         }
         if (message.serverContent?.turnComplete) finish()
-      } catch {
-        finish(new Error('تعذر قراءة استجابة Gemini Live.'))
+      } catch (error) {
+        finish(new Error(error instanceof Error ? error.message : 'تعذر قراءة استجابة Gemini Live.'))
       }
     })
     socket.addEventListener('error', () => finish(new Error('تعذر الاتصال بـ Gemini Live. تحقق من إتاحة الموديل ومفتاح API.')))
