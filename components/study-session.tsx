@@ -80,18 +80,19 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [activeAudioWord, setActiveAudioWord] = useState(-1)
   const [audioPlaying, setAudioPlaying] = useState(false)
   const [audioBatchBusy, setAudioBatchBusy] = useState(false)
-  const [audioModel, setAudioModel] = useState('gemini-3.8-flash-lite-tts')
+  const [audioModel, setAudioModel] = useState('gemini-3.8-live')
   const [audioBatchProgress, setAudioBatchProgress] = useState({ done: 0, total: 0 })
   useEffect(() => {
     try {
       const saved = localStorage.getItem('card-audio-tts-model')
       const allowed = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-native-audio-preview-12-2025', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking']
-      if (saved && allowed.includes(saved)) setAudioModel(saved)
+      if (saved && allowed.includes(saved) && saved !== 'gemini-3.8-flash-lite-tts') setAudioModel(saved)
+      else localStorage.setItem('card-audio-tts-model', 'gemini-3.8-live')
     } catch {}
   }, [])
   const changeAudioModel = (value: string) => {
     const allowed = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-native-audio-preview-12-2025', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking']
-    const next = allowed.includes(value) ? value : 'gemini-3.8-flash-lite-tts'
+    const next = allowed.includes(value) ? value : 'gemini-3.8-live'
     setAudioModel(next)
     try { localStorage.setItem('card-audio-tts-model', next) } catch {}
   }
