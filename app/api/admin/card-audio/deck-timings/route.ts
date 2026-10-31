@@ -73,25 +73,35 @@ export async function POST(request: Request) {
   if (!session?.isAdmin) return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 })
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY غير موجود في إعدادات Vercel.' }, { status: 500 })
-  const body = await request.json().catch(() => null) as { deckId?: string; cardIds?: string[] } | null
-  const deckId = body?.deckId?.trim(), cardIds = Array.isArray(body?.cardIds) ? body.cardIds : []
-  if (!deckId || deckId.length > 160 || !cardIds.length || cardIds.length > 200 || cardIds.some(id => typeof id !== 'string' || !id.trim() || id.length > 160) || new Set(cardIds).size !== cardIds.length) {
-    return NextResponse.json({ error: 'بيانات الديك أو ترتيب الكروت غير صحيحة.' }, { status: 400 })
-  }
+  const body = await request.json().catch(() => null) as { groupId?: string } | null
+  const groupId = body?.groupId?.trim()
+  if (!groupId || groupId.length > 160) return NextResponse.json({ error: 'معرّف الجروب غير صحيح.' }, { status: 400 })
 
   const client = db()
+  const { data: decks, error: decksError } = await client.from('decks').select('id').eq('group_id', groupId).order('created_at')
+  if (decksError) return NextResponse.json({ error: decksError.message }, { status: 500 })
+  if (!decks?.length) return NextResponse.json({ error: 'الجروب لا يحتوي على ديكس.' }, { status: 404 })
+  const allCards: { id: string; deckId: string; cloze: string }[] = []
+  for (const deckRow of decks) {
+    const { data, error } = await client.from('cards').select('id,cloze').eq('deck_id', deckRow.id).order('position')
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    for (const card of data ?? []) allCards.push({ id: card.id, deckId: deckRow.id, cloze: card.cloze })
+  }
+  if (!allCards.length) return NextResponse.json({ error: 'الجروب لا يحتوي على كروت.' }, { status: 404 })
+  if (allCards.length > 2000) return NextResponse.json({ error: 'الجروب يحتوي على أكثر من 2000 كارد؛ قسّمه إلى مجموعتين للمزامنة.' }, { status: 413 })
+
   const silenceMs = 900
   const pieces: Buffer[] = []
-  const cardRanges: { id: string; text: string; startMs: number; endMs: number; cloze: string }[] = []
+  const cardRanges: { id: string; deckId: string; text: string; startMs: number; endMs: number; cloze: string }[] = []
   let sampleRate = 0, totalBytes = 0, cursorMs = 0
-  for (let index = 0; index < cardIds.length; index++) {
-    const cardId = cardIds[index]
-    const [{ data: card, error: cardError }, { data: asset, error: assetError }] = await Promise.all([
-      client.from('cards').select('cloze').eq('deck_id', deckId).eq('id', cardId).maybeSingle(),
+  for (let index = 0; index < allCards.length; index++) {
+    const { id: cardId, deckId, cloze } = allCards[index]
+    const [{ data: asset, error: assetError }] = await Promise.all([
       client.from('card_audio_assets').select('audio_path,source_hash').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle(),
     ])
+    const card = { cloze }
     if (cardError || assetError) return NextResponse.json({ error: cardError?.message || assetError?.message }, { status: 500 })
-    if (!card || !asset) return NextResponse.json({ error: 'صوت الكارد رقم ' + (index + 1) + ' غير جاهز. جهّز صوت الديك كله أولًا.' }, { status: 409 })
+    if (!asset) return NextResponse.json({ error: 'صوت الكارد رقم ' + (index + 1) + ' في الجروب غير جاهز. جهّز أصوات كل ديكس الجروب أولًا.' }, { status: 409 })
     const text = spokenText(card.cloze)
     const hash = createHash('sha256').update(text).digest('hex')
     if (hash !== asset.source_hash) return NextResponse.json({ error: 'نص الكارد رقم ' + (index + 1) + ' اتغير؛ أعد تجهيز صوته.' }, { status: 409 })
@@ -101,13 +111,13 @@ export async function POST(request: Request) {
     if (!sampleRate) sampleRate = parsed.sampleRate
     if (parsed.sampleRate !== sampleRate) return NextResponse.json({ error: 'معدل الصوت مختلف بين الكروت.' }, { status: 409 })
     const durationMs = parsed.pcm.length / (sampleRate * 2) * 1000
-    cardRanges.push({ id: cardId, text, cloze: card.cloze, startMs: cursorMs, endMs: cursorMs + durationMs })
+    cardRanges.push({ id: cardId, deckId, text, cloze: card.cloze, startMs: cursorMs, endMs: cursorMs + durationMs })
     pieces.push(parsed.pcm); totalBytes += parsed.pcm.length; cursorMs += durationMs
     if (index < cardIds.length - 1) {
       const silence = Buffer.alloc(Math.round(sampleRate * silenceMs / 1000) * 2)
       pieces.push(silence); totalBytes += silence.length; cursorMs += silenceMs
     }
-    if (totalBytes > 45 * 1024 * 1024) return NextResponse.json({ error: 'حجم صوت الديك أكبر من الحد الآمن. قسّم الديك إلى مجموعتين أصغر.' }, { status: 413 })
+    if (totalBytes > 45 * 1024 * 1024) return NextResponse.json({ error: 'حجم صوت الجروب أكبر من الحد الآمن للرفع. قسّم الجروب إلى مجموعتين أصغر.' }, { status: 413 })
   }
 
   try {
@@ -118,7 +128,7 @@ export async function POST(request: Request) {
     const startUpload = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
       method: 'POST',
       headers: { 'x-goog-api-key': apiKey, 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(wav.length), 'X-Goog-Upload-Header-Content-Type': 'audio/wav', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file: { display_name: 'deck-' + deckId + '-full-audio' } }),
+      body: JSON.stringify({ file: { display_name: 'group-' + groupId + '-full-audio' } }),
       signal: AbortSignal.timeout(20000),
     })
     const uploadUrl = startUpload.headers.get('x-goog-upload-url')
@@ -133,7 +143,7 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(180000),
     })
     const transcriptData = await transcription.json().catch(() => null)
-    if (!transcription.ok) throw new Error(transcriptData?.error?.message || 'Gemini Transcribe لم يتمكن من تحليل صوت الديك.')
+    if (!transcription.ok) throw new Error(transcriptData?.error?.message || 'Gemini Transcribe لم يتمكن من تحليل صوت الجروب.')
     const found: { word: string; startMs: number; endMs: number }[] = []
     const visit = (value: any) => {
       if (!value || typeof value !== 'object') return
@@ -146,6 +156,7 @@ export async function POST(request: Request) {
     }
     visit(transcriptData)
     if (!found.length) throw new Error('Gemini لم يرجع توقيتات كلمات. لم يتم تعديل توقيتات الكروت المحفوظة.')
+    if (cursorMs > 30 * 60 * 1000) throw new Error('مدة صوت الجروب تتجاوز 30 دقيقة، وهو الحد المدعوم لتوقيتات الكلمات. قسّم الجروب إلى جزأين.')
     const summaries: { cardId: string; status: string; words: number }[] = []
     for (const item of cardRanges) {
       const segment = found.filter(word => word.startMs >= item.startMs - 100 && word.endMs <= item.endMs + 150)
@@ -160,13 +171,13 @@ export async function POST(request: Request) {
       const coverage = expected.length ? matched.length / expected.length : 0
       const ready = expected.length > 0 && coverage >= 0.78 && blanksFound
       const timings = ready ? matched.map(word => ({ ...word, startMs: Math.max(0, word.startMs - item.startMs), endMs: Math.max(0, word.endMs - item.startMs) })) : []
-      const { error } = await client.from('card_audio_assets').update({ timings, status: ready ? 'ready' : 'needs_review', updated_at: new Date().toISOString() }).eq('deck_id', deckId).eq('card_id', item.id)
+      const { error } = await client.from('card_audio_assets').update({ timings, status: ready ? 'ready' : 'needs_review', updated_at: new Date().toISOString() }).eq('deck_id', item.deckId).eq('card_id', item.id)
       if (error) throw new Error('تعذر حفظ توقيتات أحد الكروت: ' + error.message)
       summaries.push({ cardId: item.id, status: ready ? 'ready' : 'needs_review', words: timings.length })
     }
     return NextResponse.json({ ok: true, cards: summaries, transcribedWords: found.length, readyCards: summaries.filter(item => item.status === 'ready').length, reviewCards: summaries.filter(item => item.status !== 'ready').length })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'تعذر تحليل صوت الديك.'
+    const message = error instanceof Error ? error.message : 'تعذر تحليل صوت الجروب.'
     const rateLimited = /rate.?limit|quota|429|resource_exhausted/i.test(message)
     return NextResponse.json({ error: message, code: rateLimited ? 'TRANSCRIPTION_RATE_LIMIT' : 'DECK_TIMING_FAILED' }, { status: rateLimited ? 429 : 502 })
   }
