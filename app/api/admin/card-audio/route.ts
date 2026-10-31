@@ -130,7 +130,7 @@ export async function POST(request: Request) {
   const sourceHash = createHash('sha256').update(text).digest('hex')
   const { data: existing } = await client.from('card_audio_assets')
     .select('source_hash,audio_path,model,voice,timings,status').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
-  const assetModel = `${model}:ar-en-v5-live-experiment`
+  const assetModel = isLiveModel ? `${model}:live-audio-test-v1` : `${model}:ar-en-v4-clear-words`
   // Prefer Fyra/Fira if present; otherwise choose a clear female audiobook
   // voice from Google's catalog. Aoede is the stable fallback.
   let voice = 'Aoede'
