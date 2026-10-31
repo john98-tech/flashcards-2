@@ -35,7 +35,7 @@ function offsetMs(value: unknown) {
   const match = value.match(/^(\d+(?:\.\d+)?)(ms|s)$/)
   return match ? Number(match[1]) * (match[2] === 's' ? 1000 : 1) : NaN
 }
-const normalize = (value: string) => value.normalize('NFKC').toLocaleLowerCase('en-US')
+const normalize = (value: string) => (value.trim() === '&' ? 'and' : value).normalize('NFKC').toLocaleLowerCase('en-US')
   .replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/[^\p{L}\p{N}]+/gu, '')
 
 function alignWords(expected: string[], actual: { word: string; startMs: number; endMs: number }[]) {
@@ -186,9 +186,10 @@ export async function POST(request: Request) {
     const summaries: { cardId: string; status: string; words: number }[] = []
     for (const item of cardRanges) {
       const segment = found.filter(word => word.startMs >= item.startMs - 100 && word.endMs <= item.endMs + 150)
-      const expected = item.text.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
+      // Include ampersands as spoken "and" tokens so UI word indices stay aligned.
+      const expected = item.text.match(/&|[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
       const matched = alignWords(expected, segment)
-      const blankWords = [...item.cloze.matchAll(/\{\{([\\s\\S]+?)\}\}/g)]
+      const blankWords = [...item.cloze.matchAll(/\{\{([\s\S]+?)\}\}/g)]
         .flatMap(match => match[1].match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []).map(normalize).filter(Boolean)
       const matchedCounts = new Map<string, number>()
       for (const word of matched) { const key = normalize(expected[word.sourceIndex]); matchedCounts.set(key, (matchedCounts.get(key) ?? 0) + 1) }
@@ -196,8 +197,30 @@ export async function POST(request: Request) {
       for (const word of blankWords) required.set(word, (required.get(word) ?? 0) + 1)
       const blanksFound = [...required].every(([word, count]) => (matchedCounts.get(word) ?? 0) >= count)
       const coverage = expected.length ? matched.length / expected.length : 0
-      const ready = expected.length > 0 && coverage >= 0.78 && blanksFound
-      const timings = ready ? matched.map(word => ({ word: word.word, startMs: Math.max(0, word.startMs - item.startMs), endMs: Math.max(0, word.endMs - item.startMs) })) : []
+
+      // Keep every source word hoverable. Exact transcript matches act as timing
+      // anchors; gaps are interpolated between adjacent anchors on the card timeline.
+      const anchors = matched
+        .map(word => ({ index: word.sourceIndex, startMs: word.startMs - item.startMs, endMs: word.endMs - item.startMs }))
+        .sort((a, b) => a.index - b.index)
+      const timings = expected.map((word, index) => {
+        const exact = anchors.find(anchor => anchor.index === index)
+        if (exact) return { word, sourceIndex: index, startMs: Math.max(0, exact.startMs), endMs: Math.max(exact.startMs + 30, exact.endMs) }
+        const before = [...anchors].reverse().find(anchor => anchor.index < index)
+        const after = anchors.find(anchor => anchor.index > index)
+        const duration = item.endMs - item.startMs
+        const left = before ? before.endMs : 0
+        const right = after ? after.startMs : duration
+        const leftIndex = before ? before.index + 1 : 0
+        const rightIndex = after ? after.index : expected.length
+        const span = Math.max(1, rightIndex - leftIndex)
+        const fractionStart = (index - leftIndex) / span
+        const fractionEnd = (index - leftIndex + 1) / span
+        const startMs = left + Math.max(0, right - left) * fractionStart
+        const endMs = left + Math.max(0, right - left) * fractionEnd
+        return { word, sourceIndex: index, startMs: Math.max(0, startMs), endMs: Math.max(startMs + 30, endMs) }
+      })
+      const ready = expected.length > 0 && coverage >= 0.55 && blanksFound
       const { error } = await client.from('card_audio_assets').update({ timings, status: ready ? 'ready' : 'needs_review', updated_at: new Date().toISOString() }).eq('deck_id', item.deckId).eq('card_id', item.id)
       if (error) throw new Error('تعذر حفظ توقيتات أحد الكروت: ' + error.message)
       summaries.push({ cardId: item.id, status: ready ? 'ready' : 'needs_review', words: timings.length })
