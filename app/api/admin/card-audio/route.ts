@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { deckId?: string; cardId?: string; model?: string } | null
   const deckId = body?.deckId?.trim()
   const cardId = body?.cardId?.trim()
-  const allowedModels = new Set(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'])
+  const allowedModels = new Set(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'])
   const model = body?.model && allowedModels.has(body.model) ? body.model : 'gemini-3.8-flash-lite-tts'
   if (!deckId || !cardId || deckId.length > 160 || cardId.length > 160) {
     return NextResponse.json({ error: 'بيانات الكارد غير صحيحة.' }, { status: 400 })
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   const sourceHash = createHash('sha256').update(text).digest('hex')
   const { data: existing } = await client.from('card_audio_assets')
     .select('source_hash,audio_path,model,voice,timings,status').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
-  const assetModel = `${model}:ar-en-v2`
+  const assetModel = `${model}:ar-en-v3`
   // Prefer Fyra/Fira if present; otherwise choose a clear female audiobook
   // voice from Google's catalog. Aoede is the stable fallback.
   let voice = 'Aoede'
