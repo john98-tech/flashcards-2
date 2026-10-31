@@ -19,7 +19,7 @@ const plex = IBM_Plex_Sans_Arabic({
 })
 
 export const metadata: Metadata = {
-  title: 'كارت وكتاب | فلاش كاردز طبية وتسميع ذكي',
+  title: 'kart w ketab',
   description:
     'ذاكر المواد الطبية بذكاء مع الفلاش كاردز، والتسميع بالكتابة، والمراجعة اليومية، وتقارير تساعدك تثبّت المعلومات.',
   applicationName: 'Kart w Ketab',
