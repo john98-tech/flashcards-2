@@ -73,7 +73,7 @@ export async function POST(request: Request) {
   if (!session?.isAdmin) return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 })
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY غير موجود في إعدادات Vercel.' }, { status: 500 })
-  const body = await request.json().catch(() => null) as { groupId?: string } | null
+  const body = await request.json().catch(() => null) as { groupId?: string; startCardIndex?: number } | null
   const groupId = body?.groupId?.trim()
   if (!groupId || groupId.length > 160) return NextResponse.json({ error: 'معرّف الجروب غير صحيح.' }, { status: 400 })
 
@@ -90,125 +90,108 @@ export async function POST(request: Request) {
   if (!allCards.length) return NextResponse.json({ error: 'الجروب لا يحتوي على كروت.' }, { status: 404 })
   if (allCards.length > 2000) return NextResponse.json({ error: 'الجروب يحتوي على أكثر من 2000 كارد؛ قسّمه إلى مجموعتين للمزامنة.' }, { status: 413 })
 
-  const silenceMs = 900
-  const pieces: Buffer[] = []
-  const cardRanges: { id: string; deckId: string; text: string; startMs: number; endMs: number; cloze: string }[] = []
-  let sampleRate = 0, totalBytes = 0, cursorMs = 0
-  for (let index = 0; index < allCards.length; index++) {
-    const { id: cardId, deckId, cloze } = allCards[index]
-    const [{ data: asset, error: assetError }] = await Promise.all([
-      client.from('card_audio_assets').select('audio_path,source_hash').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle(),
-    ])
-    const card = { cloze }
-    if (assetError) return NextResponse.json({ error: assetError.message }, { status: 500 })
-    if (!asset) return NextResponse.json({ error: 'صوت الكارد رقم ' + (index + 1) + ' في الجروب غير جاهز. جهّز أصوات كل ديكس الجروب أولًا.' }, { status: 409 })
-    const text = spokenText(card.cloze)
-    const hash = createHash('sha256').update(text).digest('hex')
-    if (hash !== asset.source_hash) return NextResponse.json({ error: 'نص الكارد رقم ' + (index + 1) + ' اتغير؛ أعد تجهيز صوته.' }, { status: 409 })
-    const { data: file, error: downloadError } = await client.storage.from('card-audio').download(asset.audio_path)
-    if (downloadError || !file) return NextResponse.json({ error: 'تعذر تحميل صوت الكارد رقم ' + (index + 1) }, { status: 500 })
-    const parsed = readPcmWav(Buffer.from(await file.arrayBuffer()))
-    if (!sampleRate) sampleRate = parsed.sampleRate
-    if (parsed.sampleRate !== sampleRate) return NextResponse.json({ error: 'معدل الصوت مختلف بين الكروت.' }, { status: 409 })
-    const durationMs = parsed.pcm.length / (sampleRate * 2) * 1000
-    cardRanges.push({ id: cardId, deckId, text, cloze: card.cloze, startMs: cursorMs, endMs: cursorMs + durationMs })
-    pieces.push(parsed.pcm); totalBytes += parsed.pcm.length; cursorMs += durationMs
-    if (index < allCards.length - 1) {
-      const silence = Buffer.alloc(Math.round(sampleRate * silenceMs / 1000) * 2)
-      pieces.push(silence); totalBytes += silence.length; cursorMs += silenceMs
-    }
-  }
+  const body = await request.clone().json().catch(() => null) as { groupId?: string; startCardIndex?: number } | null
+  const startCardIndex = Number.isInteger(body?.startCardIndex) ? Math.max(0, Number(body?.startCardIndex)) : 0
+  if (startCardIndex >= allCards.length) return NextResponse.json({ error: 'موضع الجزء غير صحيح.' }, { status: 400 })
 
   try {
+    // Each HTTP invocation prepares and transcribes exactly ONE bounded audio part.
+    // Card boundaries are kept intact, so a card can never be split between Gemini calls.
+    const silenceMs = 900
+    const maxChunkMs = 20 * 60 * 1000
+    const maxChunkBytes = 32 * 1024 * 1024
+    const pieces: Buffer[] = []
+    const cardRanges: { id: string; deckId: string; text: string; startMs: number; endMs: number; cloze: string }[] = []
+    let sampleRate = 0
+    let totalBytes = 0
+    let cursorMs = 0
+    let nextCardIndex = startCardIndex
+
+    for (; nextCardIndex < allCards.length; nextCardIndex++) {
+      const { id: cardId, deckId, cloze } = allCards[nextCardIndex]
+      const { data: asset, error: assetError } = await client.from('card_audio_assets')
+        .select('audio_path,source_hash').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
+      if (assetError) return NextResponse.json({ error: assetError.message }, { status: 500 })
+      if (!asset) return NextResponse.json({ error: 'صوت الكارد رقم ' + (nextCardIndex + 1) + ' في الجروب غير جاهز. جهّز أصوات كل ديكس الجروب أولًا.' }, { status: 409 })
+      const text = spokenText(cloze)
+      const hash = createHash('sha256').update(text).digest('hex')
+      if (hash !== asset.source_hash) return NextResponse.json({ error: 'نص الكارد رقم ' + (nextCardIndex + 1) + ' اتغير؛ أعد تجهيز صوته.' }, { status: 409 })
+      const { data: file, error: downloadError } = await client.storage.from('card-audio').download(asset.audio_path)
+      if (downloadError || !file) return NextResponse.json({ error: 'تعذر تحميل صوت الكارد رقم ' + (nextCardIndex + 1) }, { status: 500 })
+      const parsed = readPcmWav(Buffer.from(await file.arrayBuffer()))
+      if (!sampleRate) sampleRate = parsed.sampleRate
+      if (parsed.sampleRate !== sampleRate) return NextResponse.json({ error: 'معدل الصوت مختلف بين الكروت.' }, { status: 409 })
+      const durationMs = parsed.pcm.length / (sampleRate * 2) * 1000
+      const silenceBytes = cardRanges.length ? Math.round(sampleRate * silenceMs / 1000) * 2 : 0
+      const wouldExceed = cardRanges.length > 0 && (
+        cursorMs + silenceMs + durationMs > maxChunkMs ||
+        totalBytes + silenceBytes + parsed.pcm.length > maxChunkBytes
+      )
+      if (wouldExceed) break
+      if (durationMs > maxChunkMs || parsed.pcm.length > maxChunkBytes) {
+        return NextResponse.json({ error: 'صوت الكارد رقم ' + (nextCardIndex + 1) + ' أطول من الحد الآمن للجزء الواحد. قصّر صوت هذا الكارد ثم أعد المزامنة.' }, { status: 413 })
+      }
+      if (silenceBytes) {
+        pieces.push(Buffer.alloc(silenceBytes))
+        totalBytes += silenceBytes
+        cursorMs += silenceMs
+      }
+      cardRanges.push({ id: cardId, deckId, text, cloze, startMs: cursorMs, endMs: cursorMs + durationMs })
+      pieces.push(parsed.pcm)
+      totalBytes += parsed.pcm.length
+      cursorMs += durationMs
+    }
+
+    if (!cardRanges.length) return NextResponse.json({ error: 'تعذر تكوين الجزء الصوتي التالي.' }, { status: 500 })
     const pcm = Buffer.concat(pieces, totalBytes)
-    // Keep each upload comfortably below both Gemini's ~30-minute audio limit
-    // and the practical file-size ceiling. 40 MiB leaves room for the WAV header.
-    const maxChunkMs = 27 * 60 * 1000
-    const maxChunkBytes = 40 * 1024 * 1024
-    const bytesPerMs = sampleRate * 2 / 1000
-    const maxChunkSamples = Math.floor(Math.min(maxChunkMs * bytesPerMs, maxChunkBytes) / 2)
-    const cardBoundaries = cardRanges.slice(0, -1).map(card => Math.round(card.endMs * sampleRate / 1000))
-    const chunkRanges: { startSample: number; endSample: number; startMs: number; endMs: number }[] = []
-    const findQuietBoundary = (desired: number, minimum: number, maximum: number) => {
-      // Search around the ideal boundary for a quiet 100 ms window so we avoid
-      // cutting through spoken words whenever the audio contains a pause.
-      const frameSamples = Math.max(1, Math.round(sampleRate * 0.01))
-      const windowFrames = 10
-      const radius = Math.round(sampleRate * 30)
-      const from = Math.max(minimum, desired - radius)
-      const to = Math.min(maximum, desired + radius)
-      let best = desired, bestEnergy = Number.POSITIVE_INFINITY
-      for (let sample = Math.ceil(from / frameSamples) * frameSamples; sample + frameSamples * windowFrames <= to; sample += frameSamples) {
-        let energy = 0, count = 0
-        for (let s = sample; s < sample + frameSamples * windowFrames; s += 1) {
-          const value = pcm.readInt16LE(s * 2)
-          energy += value * value
-          count++
-        }
-        const rms = Math.sqrt(energy / Math.max(1, count))
-        if (rms < bestEnergy) { bestEnergy = rms; best = sample + Math.floor(frameSamples * windowFrames / 2) }
-        if (rms < 260) return sample + Math.floor(frameSamples * windowFrames / 2)
-      }
-      // Prefer a card boundary near the target if no clear silence was found.
-      const nearbyCardBoundary = cardBoundaries.find(value => value >= minimum && value <= maximum && Math.abs(value - desired) < Math.abs(best - desired))
-      return nearbyCardBoundary ?? best
-    }
-    let startSample = 0
-    const totalSamples = pcm.length / 2
-    while (totalSamples - startSample > maxChunkSamples) {
-      const desired = startSample + maxChunkSamples
-      const minimum = Math.max(startSample + 1, desired - Math.round(sampleRate * 30))
-      const maximum = desired
-      const endSample = Math.max(minimum, Math.min(maximum, findQuietBoundary(desired, minimum, maximum)))
-      chunkRanges.push({ startSample, endSample, startMs: startSample / sampleRate * 1000, endMs: endSample / sampleRate * 1000 })
-      startSample = endSample
-    }
-    chunkRanges.push({ startSample, endSample: totalSamples, startMs: startSample / sampleRate * 1000, endMs: totalSamples / sampleRate * 1000 })
+    const wav = Buffer.alloc(44 + pcm.length)
+    wav.write('RIFF', 0); wav.writeUInt32LE(36 + pcm.length, 4); wav.write('WAVE', 8); wav.write('fmt ', 12)
+    wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22)
+    wav.writeUInt32LE(sampleRate, 24); wav.writeUInt32LE(sampleRate * 2, 28)
+    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36)
+    wav.writeUInt32LE(pcm.length, 40); pcm.copy(wav, 44)
 
+    const partNumber = Math.floor(startCardIndex / Math.max(1, cardRanges.length)) + 1
+    const startUpload = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
+      method: 'POST',
+      headers: { 'x-goog-api-key': apiKey, 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(wav.length), 'X-Goog-Upload-Header-Content-Type': 'audio/wav', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: { display_name: 'group-' + groupId + '-from-card-' + startCardIndex } }),
+      signal: AbortSignal.timeout(20000),
+    })
+    const uploadUrl = startUpload.headers.get('x-goog-upload-url')
+    if (!startUpload.ok || !uploadUrl) throw new Error('تعذر بدء رفع الجزء الصوتي إلى Gemini.')
+    const uploaded = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Length': String(wav.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), signal: AbortSignal.timeout(60000) })
+    const fileData = await uploaded.json().catch(() => null)
+    const fileUri = fileData?.file?.uri
+    if (!uploaded.ok || typeof fileUri !== 'string') throw new Error('فشل رفع الجزء الصوتي إلى Gemini.')
+    const transcription = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gemini-3.5-transcribe', input: [{ type: 'audio', uri: fileUri, mime_type: 'audio/wav' }], generation_config: { transcription_config: { language_codes: [], mode: { type: 'verbatim', timestamp_granularities: ['word'] } } } }),
+      signal: AbortSignal.timeout(180000),
+    })
+    const transcriptData = await transcription.json().catch(() => null)
+    if (!transcription.ok) throw new Error(transcriptData?.error?.message || 'Gemini Transcribe فشل في تحليل الجزء الصوتي.')
     const found: { word: string; startMs: number; endMs: number }[] = []
-    for (let partIndex = 0; partIndex < chunkRanges.length; partIndex++) {
-      const part = chunkRanges[partIndex]
-      const partPcm = pcm.subarray(part.startSample * 2, part.endSample * 2)
-      const wav = Buffer.alloc(44 + partPcm.length)
-      wav.write('RIFF', 0); wav.writeUInt32LE(36 + partPcm.length, 4); wav.write('WAVE', 8); wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sampleRate, 24); wav.writeUInt32LE(sampleRate * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(partPcm.length, 40); partPcm.copy(wav, 44)
-
-      const startUpload = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
-        method: 'POST',
-        headers: { 'x-goog-api-key': apiKey, 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(wav.length), 'X-Goog-Upload-Header-Content-Type': 'audio/wav', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file: { display_name: 'group-' + groupId + '-part-' + (partIndex + 1) } }),
-        signal: AbortSignal.timeout(20000),
-      })
-      const uploadUrl = startUpload.headers.get('x-goog-upload-url')
-      if (!startUpload.ok || !uploadUrl) throw new Error('تعذر بدء رفع الجزء ' + (partIndex + 1) + ' إلى Gemini.')
-      const uploaded = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Length': String(wav.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), signal: AbortSignal.timeout(60000) })
-      const fileData = await uploaded.json().catch(() => null)
-      const fileUri = fileData?.file?.uri
-      if (!uploaded.ok || typeof fileUri !== 'string') throw new Error('فشل رفع الجزء ' + (partIndex + 1) + ' إلى Gemini.')
-      const transcription = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-        method: 'POST', headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gemini-3.5-transcribe', input: [{ type: 'audio', uri: fileUri, mime_type: 'audio/wav' }], generation_config: { transcription_config: { language_codes: [], mode: { type: 'verbatim', timestamp_granularities: ['word'] } } } }),
-        signal: AbortSignal.timeout(150000),
-      })
-      const transcriptData = await transcription.json().catch(() => null)
-      if (!transcription.ok) throw new Error(transcriptData?.error?.message || 'Gemini Transcribe فشل في تحليل الجزء ' + (partIndex + 1) + '.')
-      const visit = (value: any) => {
-        if (!value || typeof value !== 'object') return
-        if (Array.isArray(value)) { value.forEach(visit); return }
-        if (value.type === 'word_info' && typeof value.text === 'string') {
-          const startMs = offsetMs(value.start_offset), endMs = offsetMs(value.end_offset)
-          if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) found.push({ word: value.text, startMs: startMs + part.startMs, endMs: endMs + part.startMs })
-        }
-        Object.values(value).forEach(visit)
+    const visit = (value: any) => {
+      if (!value || typeof value !== 'object') return
+      if (Array.isArray(value)) { value.forEach(visit); return }
+      if (value.type === 'word_info' && typeof value.text === 'string') {
+        const startMs = offsetMs(value.start_offset), endMs = offsetMs(value.end_offset)
+        if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) found.push({ word: value.text, startMs, endMs })
       }
-      visit(transcriptData)
+      Object.values(value).forEach(visit)
     }
+    visit(transcriptData)
     if (!found.length) throw new Error('Gemini لم يرجع توقيتات كلمات. لم يتم تعديل توقيتات الكروت المحفوظة.')
+
     const summaries: { cardId: string; status: string; words: number }[] = []
     for (const item of cardRanges) {
       const segment = found.filter(word => word.startMs >= item.startMs - 100 && word.endMs <= item.endMs + 150)
-      const expected = item.text.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
+      const expected = item.text.match(/[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu) ?? []
       const matched = alignWords(expected, segment)
-      const blankWords = [...item.cloze.matchAll(/\{\{([\s\S]+?)\}\}/g)].flatMap(match => match[1].match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []).map(normalize).filter(Boolean)
+      const blankWords = [...item.cloze.matchAll(/\\{\\{([\\s\\S]+?)\\}\\}/g)]
+        .flatMap(match => match[1].match(/[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu) ?? []).map(normalize).filter(Boolean)
       const matchedCounts = new Map<string, number>()
       for (const word of matched) { const key = normalize(expected[word.sourceIndex]); matchedCounts.set(key, (matchedCounts.get(key) ?? 0) + 1) }
       const required = new Map<string, number>()
@@ -216,12 +199,19 @@ export async function POST(request: Request) {
       const blanksFound = [...required].every(([word, count]) => (matchedCounts.get(word) ?? 0) >= count)
       const coverage = expected.length ? matched.length / expected.length : 0
       const ready = expected.length > 0 && coverage >= 0.78 && blanksFound
-      const timings = ready ? matched.map(word => ({ ...word, startMs: Math.max(0, word.startMs - item.startMs), endMs: Math.max(0, word.endMs - item.startMs) })) : []
+      const timings = ready ? matched.map(word => ({ word: word.word, startMs: Math.max(0, word.startMs - item.startMs), endMs: Math.max(0, word.endMs - item.startMs) })) : []
       const { error } = await client.from('card_audio_assets').update({ timings, status: ready ? 'ready' : 'needs_review', updated_at: new Date().toISOString() }).eq('deck_id', item.deckId).eq('card_id', item.id)
       if (error) throw new Error('تعذر حفظ توقيتات أحد الكروت: ' + error.message)
       summaries.push({ cardId: item.id, status: ready ? 'ready' : 'needs_review', words: timings.length })
     }
-    return NextResponse.json({ ok: true, cards: summaries, parts: chunkRanges.length, totalDurationMs: cursorMs, chunkDurationsMs: chunkRanges.map(part => Math.round(part.endMs - part.startMs)), transcribedWords: found.length, readyCards: summaries.filter(item => item.status === 'ready').length, reviewCards: summaries.filter(item => item.status !== 'ready').length })
+
+    const done = nextCardIndex >= allCards.length
+    return NextResponse.json({
+      ok: true, done, nextCardIndex, processedCards: cardRanges.length,
+      partDurationMs: Math.round(cursorMs), transcribedWords: found.length,
+      cards: summaries, readyCards: summaries.filter(item => item.status === 'ready').length,
+      reviewCards: summaries.filter(item => item.status !== 'ready').length,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'تعذر تحليل صوت الجروب.'
     const rateLimited = /rate.?limit|quota|429|resource_exhausted/i.test(message)
