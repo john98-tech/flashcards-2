@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { deckId?: string; cardId?: string; model?: string } | null
   const deckId = body?.deckId?.trim()
   const cardId = body?.cardId?.trim()
-  const allowedModels = new Set(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'])
+  const allowedModels = new Set(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'])
   const model = body?.model && allowedModels.has(body.model) ? body.model : 'gemini-3.8-flash-lite-tts'
   if (!deckId || !cardId || deckId.length > 160 || cardId.length > 160) {
     return NextResponse.json({ error: 'بيانات الكارد غير صحيحة.' }, { status: 400 })
