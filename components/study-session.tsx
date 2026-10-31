@@ -91,6 +91,11 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     try { localStorage.setItem('card-audio-tts-model', next) } catch {}
   }
   const audioRef = useRef<HTMLAudioElement>(null)
+  useEffect(() => {
+    if (!audioPlaying || activeAudioWord < 0) return
+    const highlighted = document.querySelector<HTMLElement>(`[data-audio-word-index="${activeAudioWord}"]`)
+    highlighted?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  }, [activeAudioWord, audioPlaying])
   const pendingAudioBlankRef = useRef<number | null>(null)
   const adminSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAdminSave = useRef<{ card: Deck['cards'][number]; cloze: string; position: number } | null>(null)
@@ -648,6 +653,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                     <button
                       key={`audio-word-${wordRange.start}`}
                       type="button"
+                      data-audio-word-index={wordRange.timingIndex}
                       onClick={() => {
                         const audio = audioRef.current
                         if (audio && timing) {
@@ -678,7 +684,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               const isOpen = revealed.has(seg.index)
               const blankTimingIndex = audioWordRanges.find((range) => range.start >= segStart && range.end <= segEnd)?.timingIndex
               if (mode === 'type') return <TypedBlank key={card.id + '-' + seg.index} answer={seg.value} value={answers[seg.index] ?? ''} checked={isOpen} onChange={(v) => setAnswers((a) => ({ ...a, [seg.index]: v }))} onCheck={(correct) => { if (correct) sfx.correct(); else sfx.wrong(); setRevealed((r) => new Set(r).add(seg.index)); if (pendingAudioBlankRef.current === seg.index) { pendingAudioBlankRef.current = null; void audioRef.current?.play() } }} />
-              return <button key={seg.index} type="button" data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => { if (isOpen && blankTimingIndex !== undefined) { const audio = audioRef.current; const timing = audioTimings[blankTimingIndex]; if (audio && timing) { audio.currentTime = timing.startMs / 1000; setActiveAudioWord(blankTimingIndex); void audio.play() } } else revealOne(seg.index) }} aria-label={isOpen ? 'ابدأ القراءة من ' + seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', activeAudioWord === blankTimingIndex && 'bg-primary/20 ring-1 ring-primary/30', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\\u00A0'}</button>
+              return <button key={seg.index} type="button" data-audio-word-index={blankTimingIndex} data-no-click-sound data-tour="study-reveal" data-tour-action="reveal-word" onClick={() => { if (isOpen && blankTimingIndex !== undefined) { const audio = audioRef.current; const timing = audioTimings[blankTimingIndex]; if (audio && timing) { audio.currentTime = timing.startMs / 1000; setActiveAudioWord(blankTimingIndex); void audio.play() } } else revealOne(seg.index) }} aria-label={isOpen ? 'ابدأ القراءة من ' + seg.value : 'فراغ رقم ' + (seg.index + 1) + '، اضغط للكشف'} className={cn('mx-0.5 inline-block rounded-md px-1.5 align-baseline leading-normal transition-colors', activeAudioWord === blankTimingIndex && 'bg-primary/20 ring-1 ring-primary/30', isOpen ? 'word-pop bg-highlight font-semibold text-highlight-foreground' : 'border-b-2 border-dashed border-primary bg-accent text-transparent hover:bg-accent/70', !isOpen && seg.index === nextHidden && 'blank-next')} style={isOpen ? undefined : { minWidth: Math.min(Math.max(seg.value.length, 4), 24) + 'ch' }}>{isOpen ? seg.value : '\\u00A0'}</button>
             })
             const renderRange = (start: number, end: number) => renderRichInline(fullText, start, end, renderPlainRange, `study-${start}-${end}`)
             const HEADING_CLASS = [
