@@ -594,7 +594,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                 </div>
               )}
               {isAdmin && (
-                <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>
+                <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy || audioModel.includes('live')} title={audioModel.includes('live') ? 'موديلات Live تجريبية: اختبر كاردًا واحدًا أولًا' : undefined} onClick={() => void generateDeckAudio()}>
                   {audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
                   {audioBatchBusy ? `تجهيز الديك ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}
                 </Button>
