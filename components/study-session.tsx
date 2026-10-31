@@ -5,7 +5,7 @@ import { Check, ChevronLeft, ChevronRight, Eye, Keyboard, MousePointerClick, Pen
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { sfx } from '@/lib/sound'
-import { fromCloze, normalizeAnswer, parseCloze, plainText, toCloze, type Deck } from '@/lib/cloze'
+import { fromCloze, normalizeAnswer, parseCloze, toCloze, type Deck } from '@/lib/cloze'
 import { saveCard } from '@/app/admin/actions'
 import { renderRichInline } from '@/components/rich-inline'
 import { loadStudentDeckProgress, saveStudentDeckProgress } from '@/app/decks/progress-actions'
