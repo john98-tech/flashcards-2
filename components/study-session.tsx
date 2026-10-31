@@ -12,7 +12,7 @@ import { loadStudentDeckProgress, saveStudentDeckProgress } from '@/app/decks/pr
 
 type Mode = 'tap' | 'type'
 
-type AudioWordTiming = { word: string; startMs: number; endMs: number }
+type AudioWordTiming = { word: string; startMs: number; endMs: number; sourceIndex?: number }
 
 function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
   const ranges: { start: number; end: number; timingIndex: number }[] = []
@@ -26,9 +26,14 @@ function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
       const expression = /&|[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu
       expression.lastIndex = from
       for (const match of line.matchAll(expression)) {
-        if (timingIndex >= timings.length) break
+        const sourceIndex = timingIndex
+        const mappedTiming = timings.findIndex((item) =>
+          typeof (item as AudioWordTiming & { sourceIndex?: number }).sourceIndex === 'number'
+            ? (item as AudioWordTiming & { sourceIndex?: number }).sourceIndex === sourceIndex
+            : timings.length > sourceIndex,
+        )
         const start = offset + (match.index ?? 0)
-        ranges.push({ start, end: start + match[0].length, timingIndex })
+        if (mappedTiming >= 0) ranges.push({ start, end: start + match[0].length, timingIndex: mappedTiming })
         timingIndex++
       }
     }
@@ -158,6 +163,35 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     }
     return result
   }, [segments, audioTimings])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !audioTimings.length) return
+    let frame = 0
+    let stopped = false
+    const tick = () => {
+      if (stopped) return
+      if (!audio.paused && !audio.ended) {
+        const now = audio.currentTime * 1000
+        const index = audioTimings.findIndex(item => now >= item.startMs && now <= item.endMs)
+        setActiveAudioWord(current => current === index ? current : index)
+        // Pause 140ms before the hidden answer starts. timeupdate alone is too
+        // coarse (often ~250ms), which can leak the first syllable.
+        const upcoming = audioTimings.findIndex((item, timingIndex) =>
+          audioBlankByTiming.has(timingIndex) &&
+          !revealed.has(audioBlankByTiming.get(timingIndex)!) &&
+          now >= Math.max(0, item.startMs - 140) && now < item.endMs,
+        )
+        if (upcoming >= 0) {
+          pendingAudioBlankRef.current = audioBlankByTiming.get(upcoming) ?? null
+          audio.pause()
+        }
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => { stopped = true; cancelAnimationFrame(frame) }
+  }, [audioTimings, audioBlankByTiming, revealed, audioUrl])
 
   useEffect(() => {
     setAdminSelected(adminParsed?.selected ?? new Set())
@@ -546,16 +580,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               {known.has(card.id) && <span className="flex items-center gap-1 text-success"><Check className="size-3.5" aria-hidden /> محفوظ</span>}
             </div>
           </div>
-          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onPlay={() => setAudioPlaying(true)} onPause={() => setAudioPlaying(false)} onTimeUpdate={(event) => {
-            const now = event.currentTarget.currentTime * 1000
-            const index = audioTimings.findIndex((item) => now >= item.startMs && now <= item.endMs)
-            if (index !== activeAudioWord) setActiveAudioWord(index)
-            const blankIndex = index >= 0 ? audioBlankByTiming.get(index) : undefined
-            if (blankIndex !== undefined && !revealed.has(blankIndex)) {
-              pendingAudioBlankRef.current = blankIndex
-              event.currentTarget.pause()
-            }
-          }} />
+          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onPlay={() => setAudioPlaying(true)} onPause={() => setAudioPlaying(false)} onEnded={() => setActiveAudioWord(-1)} />
           {audioError && <p role="alert" className="mb-3 text-xs text-destructive">{audioError}</p>}
 
           {(() => {
