@@ -18,8 +18,10 @@ function spokenText(cloze: string) {
     .trim()
 }
 
-function publicAudioUrl(path: string) {
-  return db().storage.from('card-audio').getPublicUrl(path).data.publicUrl
+async function signedAudioUrl(path: string) {
+  const { data, error } = await db().storage.from('card-audio').createSignedUrl(path, 60 * 60)
+  if (error || !data?.signedUrl) throw new Error(error?.message || 'تعذر إنشاء رابط الصوت.')
+  return data.signedUrl
 }
 
 export async function POST(request: Request) {
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
   const { data: existing } = await client.from('card_audio_assets')
     .select('source_hash,audio_path,model,voice').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
   if (existing?.source_hash === sourceHash) {
-    return NextResponse.json({ url: publicAudioUrl(existing.audio_path), reused: true, model: existing.model, voice: existing.voice })
+    return NextResponse.json({ url: await signedAudioUrl(existing.audio_path), reused: true, model: existing.model, voice: existing.voice })
   }
 
   const ttsResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
@@ -95,9 +97,9 @@ export async function POST(request: Request) {
   const { error: saveError } = await client.from('card_audio_assets').upsert({
     deck_id: deckId, card_id: cardId, source_hash: sourceHash, audio_path: path,
     mime_type: 'audio/wav', model: 'gemini-3.8-flash-tts', voice: 'Kore',
-    word_timings: [], updated_at: new Date().toISOString(),
+    timings: [], status: 'ready', updated_at: new Date().toISOString(),
   }, { onConflict: 'deck_id,card_id' })
   if (saveError) return NextResponse.json({ error: `تم إنشاء الصوت لكن تعذر حفظ بياناته: ${saveError.message}` }, { status: 500 })
 
-  return NextResponse.json({ url: publicAudioUrl(path), reused: false, model: 'gemini-3.8-flash-tts', voice: 'Kore' })
+  return NextResponse.json({ url: await signedAudioUrl(path), reused: false, model: 'gemini-3.8-flash-tts', voice: 'Kore', timings: [] })
 }
