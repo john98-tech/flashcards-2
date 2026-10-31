@@ -88,7 +88,12 @@ async function generateLiveAudio(apiKey: string, model: LiveModel, text: string)
         if (message.error) return finish(new Error(message.error.message || 'Gemini Live returned an error.'))
         if (message.setupComplete && !setupReady) {
           setupReady = true
-          socket.send(JSON.stringify({ realtimeInput: { text } }))
+          socket.send(JSON.stringify({
+            clientContent: {
+              turns: [{ role: 'user', parts: [{ text }] }],
+              turnComplete: true,
+            },
+          }))
           return
         }
         const parts = message.serverContent?.modelTurn?.parts ?? []
