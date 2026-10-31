@@ -157,8 +157,8 @@ export async function POST(request: Request) {
     const totalSamples = pcm.length / 2
     while (totalSamples - startSample > maxChunkSamples) {
       const desired = startSample + maxChunkSamples
-      const minimum = startSample + Math.floor(maxChunkSamples * 0.82)
-      const maximum = Math.min(totalSamples, startSample + Math.floor(maxChunkSamples * 1.08))
+      const minimum = Math.max(startSample + 1, desired - Math.round(sampleRate * 30))
+      const maximum = desired
       const endSample = Math.max(minimum, Math.min(maximum, findQuietBoundary(desired, minimum, maximum)))
       chunkRanges.push({ startSample, endSample, startMs: startSample / sampleRate * 1000, endMs: endSample / sampleRate * 1000 })
       startSample = endSample
