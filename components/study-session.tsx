@@ -360,15 +360,34 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     setDeckTimingsResult('')
     setAudioError('')
     try {
-      const response = await fetch('/api/admin/card-audio/deck-timings', {
+      // Load the full group's card manifest, then transcribe small batches so
+      // each Vercel invocation finishes before the 60-second Hobby timeout.
+      const manifestResponse = await fetch('/api/admin/card-audio/group', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: deck.groupId }),
+        body: JSON.stringify({ groupId: deck.groupId, model: audioModel }),
       })
-      const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || 'تعذر استخراج توقيتات الديك.')
-      setDeckTimingsResult(`اكتملت مزامنة الجروب: ${data.readyCards} كارد جاهز، و${data.reviewCards} يحتاج مراجعة.`)
-      // Refresh the currently displayed card's saved timings after the batch update.
+      const manifest = await manifestResponse.json().catch(() => null)
+      if (!manifestResponse.ok) throw new Error(manifest?.error || 'تعذر تحميل كروت الجروب.')
+      const items: { deckId: string; deckTitle: string; cardId: string }[] = manifest?.items ?? []
+      if (!items.length) throw new Error('الجروب لا يحتوي على كروت.')
+      const batchSize = 4
+      let readyCards = 0
+      let reviewCards = 0
+      for (let offset = 0; offset < items.length; offset += batchSize) {
+        const batch = items.slice(offset, offset + batchSize)
+        setDeckTimingsResult(`جارٍ مزامنة الكلمات: ${Math.min(offset + batch.length, items.length)} من ${items.length} كارد...`)
+        const response = await fetch('/api/admin/card-audio/deck-timings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId: deck.groupId, cardIds: batch.map((item) => item.cardId) }),
+        })
+        const data = await response.json().catch(() => null)
+        if (!response.ok) throw new Error(data?.error || `فشلت مزامنة الكروت من ${offset + 1} إلى ${offset + batch.length}.`)
+        readyCards += Number(data?.readyCards || 0)
+        reviewCards += Number(data?.reviewCards || 0)
+      }
+      setDeckTimingsResult(`اكتملت مزامنة الجروب: ${readyCards} كارد جاهز، و${reviewCards} يحتاج مراجعة.`)
       if (card?.id) {
         const refresh = await fetch(`/api/card-audio?deckId=${encodeURIComponent(deck.id)}&cardId=${encodeURIComponent(card.id)}`)
         const refreshed = refresh.ok ? await refresh.json().catch(() => null) : null
