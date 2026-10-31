@@ -181,15 +181,31 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
 
   const generateCardAudio = async () => {
     if (!card || audioBusy) return
-    setAudioBusy(true); setAudioError('')
+    setAudioBusy(true)
+    setAudioError('')
     try {
-      const response = await fetch('/api/admin/card-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deckId: deck.id, cardId: card.id }) })
+      const response = await fetch('/api/admin/card-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deckId: deck.id, cardId: card.id }),
+      })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'تعذر تجهيز الصوت.')
       setAudioUrl(data.url)
-      setAudioTimings(Array.isArray(data.timings) ? data.timings : [])
-    } catch (error) { setAudioError(error instanceof Error ? error.message : 'تعذر تجهيز الصوت.') }
-    finally { setAudioBusy(false) }
+      const timingResponse = await fetch('/api/admin/card-audio/timings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deckId: deck.id, cardId: card.id }),
+      })
+      const timingData = await timingResponse.json()
+      if (!timingResponse.ok) throw new Error(timingData.error || 'الصوت اتحفظ لكن تعذر استخراج توقيتات الكلمات.')
+      setAudioTimings(Array.isArray(timingData.timings) ? timingData.timings : [])
+      if (timingData.status === 'review') setAudioError(timingData.message || 'الصوت جاهز، لكن مزامنة الكلمات تحتاج مراجعة.')
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : 'تعذر تجهيز الصوت.')
+    } finally {
+      setAudioBusy(false)
+    }
   }
 
   const generateDeckAudio = async () => {
@@ -198,6 +214,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     setAudioError('')
     setAudioBatchProgress({ done: 0, total: deck.cards.length })
     let completed = 0
+    let timingIssues = 0
     try {
       for (const item of deck.cards) {
         const response = await fetch('/api/admin/card-audio', {
@@ -206,14 +223,28 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
           body: JSON.stringify({ deckId: deck.id, cardId: item.id }),
         })
         const data = await response.json()
-        if (!response.ok) throw new Error(`الكارد ${completed + 1}: ${data.error || 'تعذر تجهيز الصوت.'}`)
+        if (!response.ok) throw new Error('الكارد ' + (completed + 1) + ': ' + (data.error || 'تعذر تجهيز الصوت.'))
         completed++
         setAudioBatchProgress({ done: completed, total: deck.cards.length })
+        let timings: AudioWordTiming[] = Array.isArray(data.timings) ? data.timings : []
+        try {
+          const timingResponse = await fetch('/api/admin/card-audio/timings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deckId: deck.id, cardId: item.id }),
+          })
+          const timingData = await timingResponse.json()
+          if (timingResponse.ok) timings = Array.isArray(timingData.timings) ? timingData.timings : []
+          else timingIssues++
+        } catch {
+          timingIssues++
+        }
         if (item.id === card?.id && data.url) {
           setAudioUrl(data.url)
-          setAudioTimings(Array.isArray(data.timings) ? data.timings : [])
+          setAudioTimings(timings)
         }
       }
+      if (timingIssues) setAudioError('تم تجهيز صوت الديك، لكن ' + timingIssues + ' كارد يحتاج مراجعة مزامنة الكلمات.')
     } catch (error) {
       setAudioError(error instanceof Error ? error.message : 'توقف تجهيز أصوات الديك.')
     } finally {
