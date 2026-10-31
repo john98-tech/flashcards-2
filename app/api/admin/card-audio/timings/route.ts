@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     const aligned = expected.length > 0 && expected.length === actual.length
       && expected.every((word, index) => normalize(word) === normalize(actual[index]))
     const timings = aligned ? found : []
-    const status = aligned ? 'ready' : 'review'
+    const status = aligned ? 'ready' : 'needs_review'
     const { error: saveError } = await client.from('card_audio_assets').update({
       timings,
       status,
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       message: aligned ? undefined : 'الصوت محفوظ، لكن التفريغ لم يطابق نص الكارد بدقة؛ تم تعطيل التظليل الآلي لهذا الكارد لحين المراجعة.',
     })
   } catch (error) {
-    await client.from('card_audio_assets').update({ status: 'review', timings: [], updated_at: new Date().toISOString() }).eq('deck_id', deckId).eq('card_id', cardId)
+    await client.from('card_audio_assets').update({ status: 'needs_review', timings: [], updated_at: new Date().toISOString() }).eq('deck_id', deckId).eq('card_id', cardId)
     return NextResponse.json({ error: error instanceof Error ? error.message : 'تعذر تحليل توقيتات الصوت.' }, { status: 502 })
   }
 }
