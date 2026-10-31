@@ -568,45 +568,58 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
 
       {card ? (
         <article key={`${card.id}-${position}`} className="card-flip rounded-2xl border bg-card/95 p-4 shadow-lg backdrop-blur sm:p-6 md:p-8">
-          <div className="mb-5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => goTo(-1)}
-                disabled={position === 0}
-                aria-label="الكارت اللي فات"
-                className="flex size-7 items-center justify-center rounded-full border transition-colors hover:bg-accent disabled:opacity-40"
-              >
-                <ChevronRight className="size-4" aria-hidden />
-              </button>
-              <span className="px-1">
-                كارت {position + 1} من {queue.length}
-              </span>
-              <button
-                type="button"
-                onClick={() => goTo(1)}
-                aria-label="الكارت اللي بعده"
-                className="flex size-7 items-center justify-center rounded-full border transition-colors hover:bg-accent"
-              >
-                <ChevronLeft className="size-4" aria-hidden />
-              </button>
+          <div dir="rtl" className="mb-5 grid grid-cols-1 gap-3 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:order-2 sm:justify-end">
+              {isAdmin && (
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex-none">
+                  <label htmlFor="card-audio-model" className="shrink-0 font-medium">موديل الصوت</label>
+                  <select
+                    id="card-audio-model"
+                    value={audioModel}
+                    onChange={(event) => changeAudioModel(event.target.value)}
+                    disabled={audioBusy || audioBatchBusy}
+                    className="h-10 min-w-0 w-full rounded-lg border bg-background px-3 text-sm sm:w-[250px]"
+                  >
+                    <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS — أعلى جودة</option>
+                    <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS — أسرع</option>
+                  </select>
+                  <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>
+                    {audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
+                    {audioBusy ? 'جاري تجهيز الصوت...' : audioUrl ? 'إعادة تجهيز صوت الكارد' : 'تجهيز صوت الكارد'}
+                  </Button>
+                </div>
+              )}
+              {isAdmin && (
+                <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>
+                  {audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
+                  {audioBatchBusy ? `تجهيز الديك ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}
+                </Button>
+              )}
+              {audioUrl && (
+                <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" onClick={() => { const audio = audioRef.current; if (!audio) return; if (audio.paused) { if (audio.ended) audio.currentTime = 0; void audio.play() } else audio.pause() }}>
+                  <Volume2 className="size-4" /> {audioPlaying ? 'إيقاف مؤقت' : 'استمع للصوت'}
+                </Button>
+              )}
+              {known.has(card.id) && (
+                <span className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-success/10 px-3 font-medium text-success">
+                  <Check className="size-4" aria-hidden /> محفوظ
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              {isAdmin && <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="card-audio-model" className="text-xs text-muted-foreground">موديل الصوت</label>
-                <select id="card-audio-model" value={audioModel} onChange={(event) => changeAudioModel(event.target.value)} disabled={audioBusy || audioBatchBusy} className="h-9 max-w-[230px] rounded-md border bg-background px-2 text-xs">
-                  <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS — أعلى جودة</option>
-                  <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS — أسرع</option>
-                </select>
-                <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>
-              </div>}
-              {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>{audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBatchBusy ? `تجهيز ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}</Button>}
-              {audioUrl && <Button type="button" size="sm" variant="outline" onClick={() => { const audio = audioRef.current; if (!audio) return; if (audio.paused) { if (audio.ended) audio.currentTime = 0; void audio.play() } else audio.pause() }}><Volume2 className="size-4" /> {audioPlaying ? 'إيقاف مؤقت' : 'استمع'}</Button>}
-              {known.has(card.id) && <span className="flex items-center gap-1 text-success"><Check className="size-3.5" aria-hidden /> محفوظ</span>}
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:order-1 sm:justify-start">
+              <span className="whitespace-nowrap font-medium text-foreground/75">كارت {position + 1} من {queue.length}</span>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => goTo(-1)} disabled={position === 0} aria-label="الكارت اللي فات" title="الكارت السابق" className="flex size-9 items-center justify-center rounded-full border bg-background transition-colors hover:bg-accent disabled:opacity-40">
+                  <ChevronRight className="size-4" aria-hidden />
+                </button>
+                <button type="button" onClick={() => goTo(1)} aria-label="الكارت اللي بعده" title="الكارت التالي" className="flex size-9 items-center justify-center rounded-full border bg-background transition-colors hover:bg-accent">
+                  <ChevronLeft className="size-4" aria-hidden />
+                </button>
+              </div>
             </div>
           </div>
           <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onPlay={() => setAudioPlaying(true)} onPause={() => setAudioPlaying(false)} onEnded={() => setActiveAudioWord(-1)} />
-          {audioError && <p role="alert" className="mb-3 text-xs text-destructive">{audioError}</p>}
+          {audioError && <p role="alert" dir="rtl" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm leading-relaxed text-destructive">{audioError}</p>}
 
           {(() => {
             let offset = 0
