@@ -109,7 +109,7 @@ export function FeedbackWidget() {
 
   useEffect(() => {
     if (!ready) return
-    const baseTitle = 'كارت وكتاب | فلاش كاردز طبية وتسميع ذكي'
+    const baseTitle = 'kart w ketab'
     originalTitleRef.current = baseTitle
     originalFaviconRef.current = '/favicon.svg?v=2'
 
