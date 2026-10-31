@@ -312,7 +312,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       const response = await fetch('/api/admin/card-audio/deck-export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deckId: deck.id, cardIds: deck.cards.map((item) => item.id) }),
+        body: JSON.stringify({ groupId: deck.groupId }),
       })
       if (!response.ok) {
         const data = await response.json().catch(() => null)
@@ -347,7 +347,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || 'تعذر استخراج توقيتات الديك.')
-      setDeckTimingsResult(`اكتملت المزامنة: ${data.readyCards} كارد جاهز، و${data.reviewCards} يحتاج مراجعة.`)
+      setDeckTimingsResult(`اكتملت مزامنة الجروب: ${data.readyCards} كارد جاهز، و${data.reviewCards} يحتاج مراجعة.`)
       // Refresh the currently displayed card's saved timings after the batch update.
       if (card?.id) {
         const refresh = await fetch(`/api/card-audio?deckId=${encodeURIComponent(deck.id)}&cardId=${encodeURIComponent(card.id)}`)
@@ -660,7 +660,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                   </Button>}
                   {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckTimingsBusy || deckAudioExportBusy || audioBatchBusy} onClick={() => void synchronizeDeckTimings()}>
                     {deckTimingsBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
-                    {deckTimingsBusy ? 'تحليل الديك مرة واحدة...' : 'مزامنة كلمات الديك (طلب واحد)'}
+                    {deckTimingsBusy ? 'تحليل الجروب كله مرة واحدة...' : 'مزامنة كلمات الجروب كله (طلب واحد)'}
                   </Button>}
                 </>
               )}
