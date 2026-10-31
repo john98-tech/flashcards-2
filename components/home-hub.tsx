@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Layers } from 'lucide-react'
 import { GroupBrowser } from '@/components/group-browser'
 import { RedeemForm } from '@/components/redeem-form'
@@ -20,6 +20,12 @@ export function HomeHub({ groups, hasPaid }: Props) {
   const demo = useDemoState()
   const [showCards, setShowCards] = useState(false)
   const cardsVisible = showCards || demo.active
+
+  useEffect(() => {
+    if (window.location.hash === '#flashcards' || new URLSearchParams(window.location.search).has('group')) {
+      setShowCards(true)
+    }
+  }, [])
 
   const openCards = useCallback(() => {
     unlockAudio()
