@@ -363,11 +363,12 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     try {
       // The browser orchestrates short, sequential requests. Each server request
       // transcribes only one bounded part, so Vercel never holds the whole group job.
-      let nextCardIndex = Number(window.localStorage.getItem(cursorKey) || 0)
+      const savedCursor = JSON.parse(window.localStorage.getItem(cursorKey) || '0') as number | { nextCardIndex?: number; readyCards?: number; reviewCards?: number; partNumber?: number }
+      let nextCardIndex = typeof savedCursor === 'number' ? savedCursor : Number(savedCursor.nextCardIndex || 0)
       if (!Number.isInteger(nextCardIndex) || nextCardIndex < 0) nextCardIndex = 0
-      let readyCards = 0
-      let reviewCards = 0
-      let partNumber = 0
+      let readyCards = typeof savedCursor === 'object' ? Number(savedCursor.readyCards || 0) : 0
+      let reviewCards = typeof savedCursor === 'object' ? Number(savedCursor.reviewCards || 0) : 0
+      let partNumber = typeof savedCursor === 'object' ? Number(savedCursor.partNumber || 0) : 0
       while (true) {
         const response = await fetch('/api/admin/card-audio/deck-timings', {
           method: 'POST',
@@ -383,7 +384,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
         reviewCards += Number(data.reviewCards || 0)
         nextCardIndex = data.nextCardIndex
         partNumber++
-        window.localStorage.setItem(cursorKey, String(nextCardIndex))
+        window.localStorage.setItem(cursorKey, JSON.stringify({ nextCardIndex, readyCards, reviewCards, partNumber }))
         setDeckTimingsResult(`تمت مزامنة الجزء ${partNumber} — ${nextCardIndex} كارد من الجروب.`)
         if (data.done) break
       }
