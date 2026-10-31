@@ -587,7 +587,14 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               </button>
             </div>
             <div className="flex items-center gap-2">
-              {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>}
+              {isAdmin && <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="card-audio-model" className="text-xs text-muted-foreground">موديل الصوت</label>
+                <select id="card-audio-model" value={audioModel} onChange={(event) => changeAudioModel(event.target.value)} disabled={audioBusy || audioBatchBusy} className="h-9 max-w-[230px] rounded-md border bg-background px-2 text-xs">
+                  <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS — جودة أعلى</option>
+                  <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS — أسرع وأخف</option>
+                </select>
+                <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>
+              </div>}
               {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>{audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBatchBusy ? `تجهيز ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}</Button>}
               {audioUrl && <Button type="button" size="sm" variant="outline" onClick={() => { const audio = audioRef.current; if (!audio) return; if (audio.paused) { if (audio.ended) audio.currentTime = 0; void audio.play() } else audio.pause() }}><Volume2 className="size-4" /> {audioPlaying ? 'إيقاف مؤقت' : 'استمع'}</Button>}
               {known.has(card.id) && <span className="flex items-center gap-1 text-success"><Check className="size-3.5" aria-hidden /> محفوظ</span>}
