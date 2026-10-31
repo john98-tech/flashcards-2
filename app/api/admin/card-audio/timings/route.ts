@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         input: [{ type: 'audio', uri: fileUri, mime_type: 'audio/wav' }],
         generation_config: {
           transcription_config: {
-            language_codes: ['en-US'],
+            language_codes: ['ar-EG', 'en-US'],
             mode: { type: 'verbatim', timestamp_granularities: ['word'] },
           },
         },
