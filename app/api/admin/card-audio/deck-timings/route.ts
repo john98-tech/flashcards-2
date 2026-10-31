@@ -221,7 +221,7 @@ export async function POST(request: Request) {
       if (error) throw new Error('تعذر حفظ توقيتات أحد الكروت: ' + error.message)
       summaries.push({ cardId: item.id, status: ready ? 'ready' : 'needs_review', words: timings.length })
     }
-    return NextResponse.json({ ok: true, cards: summaries, transcribedWords: found.length, readyCards: summaries.filter(item => item.status === 'ready').length, reviewCards: summaries.filter(item => item.status !== 'ready').length })
+    return NextResponse.json({ ok: true, cards: summaries, parts: chunkRanges.length, totalDurationMs: cursorMs, chunkDurationsMs: chunkRanges.map(part => Math.round(part.endMs - part.startMs)), transcribedWords: found.length, readyCards: summaries.filter(item => item.status === 'ready').length, reviewCards: summaries.filter(item => item.status !== 'ready').length })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'تعذر تحليل صوت الجروب.'
     const rateLimited = /rate.?limit|quota|429|resource_exhausted/i.test(message)
