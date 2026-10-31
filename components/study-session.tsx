@@ -18,12 +18,12 @@ function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
   const ranges: { start: number; end: number; timingIndex: number }[] = []
   let offset = 0
   let timingIndex = 0
-  for (const line of source.split('\\n')) {
-    const crumb = /^\\s*>>/.test(line)
-    const bullet = line.match(/^\\s*\\d+[.)]\\s+/)
+  for (const line of source.split('\n')) {
+    const crumb = /^\s*>>/.test(line)
+    const bullet = line.match(/^\s*\d+[.)]\s+/)
     if (!crumb) {
       const from = bullet ? bullet[0].length : 0
-      const expression = /&|[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu
+      const expression = /&|[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu
       expression.lastIndex = from
       for (const match of line.matchAll(expression)) {
         if (timingIndex >= timings.length) break
@@ -142,6 +142,21 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const card = cardsById.get(queue[position])
   const segments = useMemo(() => (card ? parseCloze(card.cloze) : []), [card])
   const adminParsed = useMemo(() => card ? fromCloze(card.cloze) : null, [card])
+  const audioBlankByTiming = useMemo(() => {
+    const positioned = segments.map((seg, index) => {
+      const start = segments.slice(0, index).reduce((sum, item) => sum + item.value.length, 0)
+      return { seg, start, end: start + seg.value.length }
+    })
+    const fullText = positioned.map((item) => item.seg.value).join('')
+    const ranges = mapAudioWordRanges(fullText, audioTimings)
+    const result = new Map<number, number>()
+    for (const item of positioned) {
+      if (item.seg.type !== 'blank') continue
+      const range = ranges.find((candidate) => candidate.start >= item.start && candidate.end <= item.end)
+      if (range) result.set(range.timingIndex, item.seg.index)
+    }
+    return result
+  }, [segments, audioTimings])
 
   useEffect(() => {
     setAdminSelected(adminParsed?.selected ?? new Set())
@@ -520,12 +535,6 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
             })
             const fullText = positioned.map((item) => item.seg.value).join('')
             const audioWordRanges = mapAudioWordRanges(fullText, audioTimings)
-            const audioBlankByTiming = new Map<number, number>()
-            for (const item of positioned) {
-              if (item.seg.type !== 'blank') continue
-              const wordRange = audioWordRanges.find((range) => range.start >= item.start && range.end <= item.end)
-              if (wordRange) audioBlankByTiming.set(wordRange.timingIndex, item.seg.index)
-            }
             const lines: { value: string; start: number; end: number }[] = []
             let lineOffset = 0
             for (const value of fullText.split('\n')) {
