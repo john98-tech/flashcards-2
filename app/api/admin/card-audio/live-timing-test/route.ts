@@ -99,10 +99,11 @@ export async function GET(request: Request) {
     let settled = false
     let audioSent = false
     let transcript = ''
+    let timeout: ReturnType<typeof setTimeout> | undefined
     const finish = (resolve: (value: any) => void, reject: (error: Error) => void, error?: Error) => {
       if (settled) return
       settled = true
-      clearTimeout(timeout)
+      if (timeout) clearTimeout(timeout)
       try { socket.close() } catch {}
       if (error) reject(error)
       else {
@@ -127,7 +128,7 @@ export async function GET(request: Request) {
       }
     }
     return await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => finish(resolve, reject, new Error('انتهت مهلة اختبار Gemini Live.')), 45000)
+      timeout = setTimeout(() => finish(resolve, reject, new Error('انتهت مهلة اختبار Gemini Live.')), 45000)
       socket.addEventListener('open', () => {
         socket.send(JSON.stringify({
           setup: {
