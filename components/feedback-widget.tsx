@@ -109,26 +109,32 @@ export function FeedbackWidget() {
 
   useEffect(() => {
     if (!ready) return
-    if (!originalTitleRef.current) originalTitleRef.current = document.title
-    if (originalFaviconRef.current === null) {
-      originalFaviconRef.current = '/favicon.svg?v=2'
-    }
-    const icon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
-    if (unreadCount > 0) {
-      document.title = `(${unreadCount > 9 ? '9+' : unreadCount}) رسالة جديدة | ${originalTitleRef.current}`
-      if (icon) {
+    const baseTitle = 'كارت وكتاب | فلاش كاردز طبية وتسميع ذكي'
+    originalTitleRef.current = baseTitle
+    originalFaviconRef.current = '/favicon.svg?v=2'
+
+    const applyTitle = () => {
+      const nextTitle = unreadCount > 0
+        ? `(${unreadCount > 9 ? '9+' : unreadCount}) رسالة جديدة | ${baseTitle}`
+        : baseTitle
+      if (document.title !== nextTitle) document.title = nextTitle
+
+      const icon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
+      if (!icon) return
+      if (unreadCount > 0) {
         const badge = unreadCount > 9 ? '9+' : String(unreadCount)
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#075e54"/><path d="M14 18c7-3 13-2 18 2v27c-5-4-11-5-18-2z" fill="#fff"/><path d="M50 18c-7-3-13-2-18 2v27c5-4 11-5 18-2z" fill="#d9fdd3"/><path d="M32 20v27" stroke="#075e54" stroke-width="2"/><circle cx="49" cy="15" r="14" fill="#ef4444" stroke="#fff" stroke-width="3"/><text x="49" y="${badge.length > 1 ? 19 : 20}" font-size="${badge.length > 1 ? 10 : 14}" font-family="Arial,sans-serif" font-weight="bold" text-anchor="middle" fill="#fff">${badge}</text></svg>`
-        icon.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+        const nextHref = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+        if (icon.href !== nextHref) icon.href = nextHref
+      } else if (!icon.href.endsWith('/favicon.svg?v=2')) {
+        icon.href = '/favicon.svg?v=2'
       }
-    } else {
-      document.title = originalTitleRef.current
-      if (icon && originalFaviconRef.current) icon.href = originalFaviconRef.current
     }
-    return () => {
-      document.title = originalTitleRef.current || document.title
-      if (icon && originalFaviconRef.current) icon.href = originalFaviconRef.current
-    }
+
+    applyTitle()
+    const observer = new MutationObserver(applyTitle)
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
+    return () => observer.disconnect()
   }, [unreadCount, ready])
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
