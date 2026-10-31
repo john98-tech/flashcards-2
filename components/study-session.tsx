@@ -201,7 +201,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       const timingData = await timingResponse.json()
       if (!timingResponse.ok) throw new Error(timingData.error || 'الصوت اتحفظ لكن تعذر استخراج توقيتات الكلمات.')
       setAudioTimings(Array.isArray(timingData.timings) ? timingData.timings : [])
-      if (timingData.status === 'review') setAudioError(timingData.message || 'الصوت جاهز، لكن مزامنة الكلمات تحتاج مراجعة.')
+      if (timingData.status === 'needs_review') setAudioError(timingData.message || 'الصوت جاهز، لكن مزامنة الكلمات تحتاج مراجعة.')
     } catch (error) {
       setAudioError(error instanceof Error ? error.message : 'تعذر تجهيز الصوت.')
     } finally {
