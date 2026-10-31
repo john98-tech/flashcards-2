@@ -12,6 +12,31 @@ import { loadStudentDeckProgress, saveStudentDeckProgress } from '@/app/decks/pr
 
 type Mode = 'tap' | 'type'
 
+type AudioWordTiming = { word: string; startMs: number; endMs: number }
+
+function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
+  const ranges: { start: number; end: number; timingIndex: number }[] = []
+  let offset = 0
+  let timingIndex = 0
+  for (const line of source.split('\\n')) {
+    const crumb = /^\\s*>>/.test(line)
+    const bullet = line.match(/^\\s*\\d+[.)]\\s+/)
+    if (!crumb) {
+      const from = bullet ? bullet[0].length : 0
+      const expression = /[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu
+      expression.lastIndex = from
+      for (const match of line.matchAll(expression)) {
+        if (timingIndex >= timings.length) break
+        const start = offset + (match.index ?? 0)
+        ranges.push({ start, end: start + match[0].length, timingIndex })
+        timingIndex++
+      }
+    }
+    offset += line.length + 1
+  }
+  return ranges
+}
+
 function shuffle<T>(items: T[]) {
   const copy = [...items]
   for (let i = copy.length - 1; i > 0; i--) {
@@ -42,6 +67,10 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioBusy, setAudioBusy] = useState(false)
   const [audioError, setAudioError] = useState('')
+  const [audioTimings, setAudioTimings] = useState<AudioWordTiming[]>([])
+  const [activeAudioWord, setActiveAudioWord] = useState(-1)
+  const [audioBatchBusy, setAudioBatchBusy] = useState(false)
+  const [audioBatchProgress, setAudioBatchProgress] = useState({ done: 0, total: 0 })
   const audioRef = useRef<HTMLAudioElement>(null)
   const adminSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAdminSave = useRef<{ card: Deck['cards'][number]; cloze: string; position: number } | null>(null)
@@ -121,12 +150,14 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     const audio = audioRef.current
     if (audio) { audio.pause(); audio.currentTime = 0 }
     setAudioUrl(null)
+    setAudioTimings([])
+    setActiveAudioWord(-1)
     setAudioError('')
     if (!card) return
     let cancelled = false
     fetch(`/api/card-audio?deckId=${encodeURIComponent(deck.id)}&cardId=${encodeURIComponent(card.id)}`)
       .then(async response => response.ok ? response.json() : null)
-      .then(data => { if (!cancelled && data?.url) setAudioUrl(data.url) })
+      .then(data => { if (!cancelled && data?.url) { setAudioUrl(data.url); setAudioTimings(Array.isArray(data.timings) ? data.timings : []) } })
       .catch(() => {})
     return () => { cancelled = true; if (audio) { audio.pause(); audio.currentTime = 0 } }
   }, [card?.id, deck.id])
@@ -139,8 +170,38 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'تعذر تجهيز الصوت.')
       setAudioUrl(data.url)
+      setAudioTimings(Array.isArray(data.timings) ? data.timings : [])
     } catch (error) { setAudioError(error instanceof Error ? error.message : 'تعذر تجهيز الصوت.') }
     finally { setAudioBusy(false) }
+  }
+
+  const generateDeckAudio = async () => {
+    if (audioBatchBusy) return
+    setAudioBatchBusy(true)
+    setAudioError('')
+    setAudioBatchProgress({ done: 0, total: deck.cards.length })
+    let completed = 0
+    try {
+      for (const item of deck.cards) {
+        const response = await fetch('/api/admin/card-audio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deckId: deck.id, cardId: item.id }),
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(`الكارد ${completed + 1}: ${data.error || 'تعذر تجهيز الصوت.'}`)
+        completed++
+        setAudioBatchProgress({ done: completed, total: deck.cards.length })
+        if (item.id === card?.id && data.url) {
+          setAudioUrl(data.url)
+          setAudioTimings(Array.isArray(data.timings) ? data.timings : [])
+        }
+      }
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : 'توقف تجهيز أصوات الديك.')
+    } finally {
+      setAudioBatchBusy(false)
+    }
   }
 
   // Reset messages only when navigating to a different card, not on each
@@ -422,12 +483,13 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               </button>
             </div>
             <div className="flex items-center gap-2">
-              {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>}
+              {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>}
+              {isAdmin && <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>{audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBatchBusy ? `تجهيز ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}</Button>}
               {audioUrl && <Button type="button" size="sm" variant="outline" onClick={() => { const audio = audioRef.current; if (audio) { audio.currentTime = 0; void audio.play() } }}><Volume2 className="size-4" /> استمع</Button>}
               {known.has(card.id) && <span className="flex items-center gap-1 text-success"><Check className="size-3.5" aria-hidden /> محفوظ</span>}
             </div>
           </div>
-          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" />
+          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onTimeUpdate={(event) => { const now = event.currentTarget.currentTime * 1000; const index = audioTimings.findIndex((item) => now >= item.startMs && now <= item.endMs); if (index !== activeAudioWord) setActiveAudioWord(index) }} />
           {audioError && <p role="alert" className="mb-3 text-xs text-destructive">{audioError}</p>}
 
           {(() => {
@@ -438,6 +500,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               return item
             })
             const fullText = positioned.map((item) => item.seg.value).join('')
+            const audioWordRanges = mapAudioWordRanges(fullText, audioTimings)
             const lines: { value: string; start: number; end: number }[] = []
             let lineOffset = 0
             for (const value of fullText.split('\n')) {
@@ -464,7 +527,34 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                 }
                 const from = rangeStart - segStart
                 const to = rangeEnd - segStart
-                return <span key={'t-' + segStart + '-' + i}>{seg.value.slice(from, to)}</span>
+                const audioParts: React.ReactNode[] = []
+                let cursor = rangeStart
+                for (const wordRange of audioWordRanges) {
+                  if (wordRange.end <= rangeStart || wordRange.start >= rangeEnd) continue
+                  if (wordRange.start > cursor) audioParts.push(<span key={`plain-${cursor}`}>{fullText.slice(cursor, wordRange.start)}</span>)
+                  const timing = audioTimings[wordRange.timingIndex]
+                  audioParts.push(
+                    <button
+                      key={`audio-word-${wordRange.start}`}
+                      type="button"
+                      onClick={() => {
+                        const audio = audioRef.current
+                        if (audio && timing) {
+                          audio.currentTime = timing.startMs / 1000
+                          setActiveAudioWord(wordRange.timingIndex)
+                          void audio.play()
+                        }
+                      }}
+                      className={cn('rounded-sm transition-colors', activeAudioWord === wordRange.timingIndex && 'bg-primary/20 text-primary ring-1 ring-primary/30')}
+                      aria-label={`ابدأ القراءة من ${fullText.slice(wordRange.start, wordRange.end)}`}
+                    >{fullText.slice(wordRange.start, wordRange.end)}</button>,
+                  )
+                  cursor = wordRange.end
+                }
+                if (cursor < rangeEnd) audioParts.push(<span key={`plain-${cursor}`}>{fullText.slice(cursor, rangeEnd)}</span>)
+                return audioParts.length
+                  ? <span key={'t-' + segStart + '-' + i}>{audioParts}</span>
+                  : <span key={'t-' + segStart + '-' + i}>{seg.value.slice(from, to)}</span>
               }
               if (segStart < start || segEnd > end) return <span key={'b-' + seg.index}>{seg.value}</span>
               if (isAdmin && adminEditMode && adminParsed) {
