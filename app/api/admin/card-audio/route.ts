@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   const sourceHash = createHash('sha256').update(text).digest('hex')
   const { data: existing } = await client.from('card_audio_assets')
     .select('source_hash,audio_path,model,voice,timings,status').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
-  const assetModel = `${model}:ar-en-v3`
+  const assetModel = `${model}:ar-en-v4-clear-words`
   // Prefer Fyra/Fira if present; otherwise choose a clear female audiobook
   // voice from Google's catalog. Aoede is the stable fallback.
   let voice = 'Aoede'
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
           text,
           annotations: [{
             type: 'speech_metadata',
-            style: 'Use one clearly feminine, bright, confident studio audiobook narrator voice throughout. This card may contain Egyptian Arabic, Modern Standard Arabic, English, or a natural mixture of Arabic and English. Detect the language of each phrase and switch naturally at language boundaries: pronounce Arabic in fluent, natural Egyptian Arabic when colloquial, or clear Modern Standard Arabic when formal; pronounce English words and medical/scientific terms in accurate natural English, not with an Arabic accent. Keep the original language of every word: never translate, paraphrase, skip, or replace anything. In mixed sentences, preserve the natural code-switching exactly as written. Speak at a measured medium-slow pace with crisp articulation and precise medical terminology. Keep the voice full, strong, and consistently projected at an even loudness from the first word to the final word; do not fade, trail off, whisper, mumble, or swallow the ending. Use gentle emphasis and brief natural pauses at punctuation and between list items. Read every word exactly; do not add or omit anything.',
+            style: 'Use one clearly feminine, bright, confident studio audiobook narrator voice throughout. This card may contain Egyptian Arabic, Modern Standard Arabic, English, or a natural mixture of Arabic and English. Detect the language of each phrase and switch naturally at language boundaries: pronounce Arabic in fluent, natural Egyptian Arabic when colloquial, or clear Modern Standard Arabic when formal; pronounce English words and medical/scientific terms in accurate natural English, not with an Arabic accent. Keep the original language of every word: never translate, paraphrase, skip, or replace anything. In mixed sentences, preserve the natural code-switching exactly as written. Speak at a measured medium-slow pace with crisp articulation and precise medical terminology. Enunciate every individual word distinctly, including very short English function words such as “a”, “an”, “the”, “in”, “of”, “to”, “and”, and “is”. Do not swallow, rush, merge, or blur short words into neighboring words; give each its full audible pronunciation and a tiny natural separation from the next word, while keeping the sentence fluent rather than robotic. Keep consonants and word endings clear. Keep the voice full, strong, and consistently projected at an even loudness from the first word to the final word; do not fade, trail off, whisper, mumble, or swallow the ending. Use gentle emphasis and brief natural pauses at punctuation and between list items. Read every word exactly; do not add or omit anything.',
           }],
         }],
       }],
