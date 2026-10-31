@@ -27,11 +27,12 @@ function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
       expression.lastIndex = from
       for (const match of line.matchAll(expression)) {
         const sourceIndex = timingIndex
-        const mappedTiming = timings.findIndex((item) =>
-          typeof (item as AudioWordTiming & { sourceIndex?: number }).sourceIndex === 'number'
-            ? (item as AudioWordTiming & { sourceIndex?: number }).sourceIndex === sourceIndex
-            : timings.length > sourceIndex,
-        )
+        const mappedTiming = timings.findIndex((item, timingPosition) => {
+          const savedSourceIndex = (item as AudioWordTiming & { sourceIndex?: number }).sourceIndex
+          return typeof savedSourceIndex === 'number'
+            ? savedSourceIndex === sourceIndex
+            : timingPosition === sourceIndex
+        })
         const start = offset + (match.index ?? 0)
         if (mappedTiming >= 0) ranges.push({ start, end: start + match[0].length, timingIndex: mappedTiming })
         timingIndex++
