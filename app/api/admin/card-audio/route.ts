@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   const { data: existing } = await client.from('card_audio_assets')
     .select('source_hash,audio_path,model,voice,timings,status').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
   if (existing?.source_hash === sourceHash) {
-    return NextResponse.json({ url: await signedAudioUrl(existing.audio_path), reused: true, model: existing.model, voice: existing.voice, timings: existing.timings ?? [], timingStatus: existing.status ?? 'pending' })
+    return NextResponse.json({ url: await signedAudioUrl(existing.audio_path), reused: true, model: existing.model, voice: existing.voice, timings: existing.timings ?? [], timingStatus: existing.status ?? 'needs_review' })
   }
 
   const ttsResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
   const { error: saveError } = await client.from('card_audio_assets').upsert({
     deck_id: deckId, card_id: cardId, source_hash: sourceHash, audio_path: path,
     mime_type: 'audio/wav', model: 'gemini-3.8-flash-tts', voice: 'Kore',
-    timings: [], status: 'pending', updated_at: new Date().toISOString(),
+    timings: [], status: 'needs_review', updated_at: new Date().toISOString(),
   }, { onConflict: 'deck_id,card_id' })
   if (saveError) return NextResponse.json({ error: `تم إنشاء الصوت لكن تعذر حفظ بياناته: ${saveError.message}` }, { status: 500 })
 
