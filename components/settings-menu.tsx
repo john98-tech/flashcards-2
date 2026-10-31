@@ -10,7 +10,7 @@ const SHORTCUTS: [string, string][] = [
   ['A', 'اكشف كل الكلمات / الفراغات'],
   ['↑ / Enter / 2', 'حفظتها — بعد ظهور أزرار التقييم'],
   ['↓ / Backspace / 1', 'لسه — بعد ظهور أزرار التقييم فقط؛ السهم ↓ لا يكشف الفراغات'],
-  ['→ / ←', 'الكارت التالي / السابق (حسب اتجاه الصفحة)'],
+  ['← / →', 'الكارت التالي / السابق (الصفحة عربية: ← للتالي، → للسابق)'],
   ['N / P', 'التالي / السابق'],
   ['T', 'التبديل بين وضع الضغط ووضع الكتابة'],
   ['S', 'خلط ترتيب الكروت / استعادة الترتيب الأصلي'],
@@ -81,7 +81,7 @@ export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label="Settings"
+        aria-label="الإعدادات"
         data-tour="settings-trigger"
         data-tour-action="open-settings"
         className="relative flex size-9 items-center justify-center rounded-full border bg-card/70 text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
@@ -96,35 +96,35 @@ export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton
         <div
           id={panelId}
           role="dialog"
-          aria-label="Settings"
+          aria-label="الإعدادات"
           data-tour="settings-panel"
           style={{ position: 'fixed', top: panelPosition?.top ?? 8, left: panelPosition?.left ?? 8, width: 'min(18rem, calc(100vw - 1rem))', maxHeight: 'calc(100dvh - 1rem)', overflowY: 'auto', overscrollBehavior: 'contain' }}
           className="pop-in z-[100] rounded-2xl border bg-card/95 p-4 shadow-xl backdrop-blur-md"
         >
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sound</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">الصوت</p>
           <div className="flex flex-col gap-1">
             <ToggleRow
               icon={settings.muted ? VolumeX : Volume2}
-              label="Mute everything"
+              label="كتم الكل"
               checked={settings.muted}
               onChange={(v) => toggle({ muted: v })}
             />
             <ToggleRow
               icon={Music}
-              label="Background music"
+              label="موسيقى الخلفية"
               checked={settings.music}
               disabled={settings.muted}
               onChange={(v) => toggle({ music: v })}
             />
             <ToggleRow
               icon={Waves}
-              label="Sound effects"
+              label="المؤثرات الصوتية"
               checked={settings.sfx}
               disabled={settings.muted}
               onChange={(v) => toggle({ sfx: v })}
             />
             <label className="mt-2 flex items-center gap-3 px-2 text-sm">
-              <span className="w-14 text-muted-foreground">Volume</span>
+              <span className="w-14 text-muted-foreground">مستوى الصوت</span>
               <input
                 type="range"
                 min={0}
@@ -161,7 +161,7 @@ export function SettingsMenu({ showTutorialButton = true }: { showTutorialButton
               }}
               className="mt-4 w-full rounded-lg border px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-accent"
             >
-              Start guided tour again
+              ابدأ الجولة الإرشادية من أول
             </button>
           )}
         </div>
