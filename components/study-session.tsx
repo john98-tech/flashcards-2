@@ -23,7 +23,7 @@ function mapAudioWordRanges(source: string, timings: AudioWordTiming[]) {
     const bullet = line.match(/^\\s*\\d+[.)]\\s+/)
     if (!crumb) {
       const from = bullet ? bullet[0].length : 0
-      const expression = /[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu
+      const expression = /&|[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu
       expression.lastIndex = from
       for (const match of line.matchAll(expression)) {
         if (timingIndex >= timings.length) break
