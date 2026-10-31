@@ -669,7 +669,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                   </Button>
                   {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckAudioExportBusy || audioBatchBusy} onClick={() => void exportDeckAudio()}>
                     {deckAudioExportBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
-                    {deckAudioExportBusy ? 'تجميع الملف...' : 'تنزيل صوت الديك كاملًا'}
+                    {deckAudioExportBusy ? 'تجميع الملف...' : 'تنزيل صوت الديك الحالي'}
                   </Button>}
                   {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckTimingsBusy || deckAudioExportBusy || audioBatchBusy} onClick={() => void synchronizeDeckTimings()}>
                     {deckTimingsBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
