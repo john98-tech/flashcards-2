@@ -82,11 +82,11 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('card-audio-tts-model')
-      if (saved === 'gemini-3.8-flash-tts' || saved === 'gemini-3.8-flash-lite-tts') setAudioModel(saved)
+      if (['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'].includes(saved)) setAudioModel(saved)
     } catch {}
   }, [])
   const changeAudioModel = (value: string) => {
-    const next = value === 'gemini-3.8-flash-tts' ? value : 'gemini-3.8-flash-lite-tts'
+    const next = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'].includes(value) ? value : 'gemini-3.8-flash-lite-tts'
     setAudioModel(next)
     try { localStorage.setItem('card-audio-tts-model', next) } catch {}
   }
@@ -595,8 +595,11 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               {isAdmin && <div className="flex flex-wrap items-center gap-2">
                 <label htmlFor="card-audio-model" className="text-xs text-muted-foreground">موديل الصوت</label>
                 <select id="card-audio-model" value={audioModel} onChange={(event) => changeAudioModel(event.target.value)} disabled={audioBusy || audioBatchBusy} className="h-9 max-w-[230px] rounded-md border bg-background px-2 text-xs">
-                  <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS — جودة أعلى</option>
-                  <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS — أسرع وأخف</option>
+                  <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS — أعلى جودة</option>
+                  <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS — أسرع</option>
+                  <option value="gemini-3.1-flash-tts-preview">Gemini 3.1 Flash TTS — Preview</option>
+                  <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS</option>
+                  <option value="gemini-2.5-pro-preview-tts">Gemini 2.5 Pro TTS</option>
                 </select>
                 <Button type="button" size="sm" variant="outline" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>{audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />} {audioBusy ? 'جاري تجهيز الصوت' : audioUrl ? 'إعادة تجهيز الصوت' : 'تجهيز صوت الكارد'}</Button>
               </div>}
