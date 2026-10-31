@@ -18,12 +18,36 @@ const plex = IBM_Plex_Sans_Arabic({
   variable: '--font-plex',
 })
 
+const SITE_URL = 'https://kartwketab.com'
+
 export const metadata: Metadata = {
-  title: 'kart w ketab',
+  title: {
+    default: 'Kart w Ketab | فلاش كاردز طبية',
+    template: '%s | Kart w Ketab',
+  },
   description:
     'ذاكر المواد الطبية بذكاء مع الفلاش كاردز، والتسميع بالكتابة، والمراجعة اليومية، وتقارير تساعدك تثبّت المعلومات.',
   applicationName: 'Kart w Ketab',
   generator: 'Next.js',
+  keywords: ['فلاش كاردز', 'طب', 'مذاكرة', 'flashcards', 'medical', 'study', 'kart w ketab', 'كارت وكتاب'],
+  metadataBase: new URL(SITE_URL),
+  openGraph: {
+    title: 'Kart w Ketab | فلاش كاردز طبية',
+    description:
+      'ذاكر المواد الطبية بذكاء مع الفلاش كاردز، والتسميع بالكتابة، والمراجعة اليومية، وتقارير تساعدك تثبّت المعلومات.',
+    url: SITE_URL,
+    siteName: 'Kart w Ketab',
+    type: 'website',
+    locale: 'ar_EG',
+    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'Kart w Ketab logo' }],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Kart w Ketab | فلاش كاردز طبية',
+    description:
+      'ذاكر المواد الطبية بذكاء مع الفلاش كاردز، والتسميع بالكتابة، والمراجعة اليومية.',
+    images: ['/logo.png'],
+  },
   icons: {
     icon: [{ url: '/favicon.svg?v=2', type: 'image/svg+xml' }],
     shortcut: '/favicon.svg?v=2',
