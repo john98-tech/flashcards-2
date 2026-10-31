@@ -73,8 +73,10 @@ export async function POST(request: Request) {
   if (!session?.isAdmin) return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 })
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY غير موجود في إعدادات Vercel.' }, { status: 500 })
-  const body = await request.json().catch(() => null) as { groupId?: string } | null
+  const body = await request.json().catch(() => null) as { groupId?: string; cardIds?: string[] } | null
   const groupId = body?.groupId?.trim()
+  const requestedCardIds = Array.isArray(body?.cardIds) ? new Set(body.cardIds.filter((id): id is string => typeof id === 'string' && id.length > 0)) : null
+  if (requestedCardIds && (!requestedCardIds.size || requestedCardIds.size > 100)) return NextResponse.json({ error: 'عدد الكروت المطلوب مزامنتها غير صحيح.' }, { status: 400 })
   if (!groupId || groupId.length > 160) return NextResponse.json({ error: 'معرّف الجروب غير صحيح.' }, { status: 400 })
 
   const client = db()
@@ -85,7 +87,7 @@ export async function POST(request: Request) {
   for (const deckRow of decks) {
     const { data, error } = await client.from('cards').select('id,cloze').eq('deck_id', deckRow.id).order('position')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    for (const card of data ?? []) allCards.push({ id: card.id, deckId: deckRow.id, cloze: card.cloze })
+    for (const card of data ?? []) if (!requestedCardIds || requestedCardIds.has(card.id)) allCards.push({ id: card.id, deckId: deckRow.id, cloze: card.cloze })
   }
   if (!allCards.length) return NextResponse.json({ error: 'الجروب لا يحتوي على كروت.' }, { status: 404 })
   if (allCards.length > 2000) return NextResponse.json({ error: 'الجروب يحتوي على أكثر من 2000 كارد؛ قسّمه إلى مجموعتين للمزامنة.' }, { status: 413 })
