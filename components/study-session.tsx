@@ -77,7 +77,19 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [activeAudioWord, setActiveAudioWord] = useState(-1)
   const [audioPlaying, setAudioPlaying] = useState(false)
   const [audioBatchBusy, setAudioBatchBusy] = useState(false)
+  const [audioModel, setAudioModel] = useState('gemini-3.8-flash-lite-tts')
   const [audioBatchProgress, setAudioBatchProgress] = useState({ done: 0, total: 0 })
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('card-audio-tts-model')
+      if (saved === 'gemini-3.8-flash-tts' || saved === 'gemini-3.8-flash-lite-tts') setAudioModel(saved)
+    } catch {}
+  }, [])
+  const changeAudioModel = (value: string) => {
+    const next = value === 'gemini-3.8-flash-tts' ? value : 'gemini-3.8-flash-lite-tts'
+    setAudioModel(next)
+    try { localStorage.setItem('card-audio-tts-model', next) } catch {}
+  }
   const audioRef = useRef<HTMLAudioElement>(null)
   const pendingAudioBlankRef = useRef<number | null>(null)
   const adminSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -223,7 +235,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
       const response = await fetch('/api/admin/card-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deckId: deck.id, cardId: card.id }),
+        body: JSON.stringify({ deckId: deck.id, cardId: card.id, model: audioModel }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'تعذر تجهيز الصوت.')
@@ -256,7 +268,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
         const response = await fetch('/api/admin/card-audio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deckId: deck.id, cardId: item.id }),
+          body: JSON.stringify({ deckId: deck.id, cardId: item.id, model: audioModel }),
         })
         const data = await response.json()
         if (!response.ok) throw new Error('الكارد ' + (completed + 1) + ': ' + (data.error || 'تعذر تجهيز الصوت.'))
