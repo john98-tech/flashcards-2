@@ -620,14 +620,16 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                 </div>
               )}
               {isAdmin && (
-                <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>
-                  {audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
-                  {audioBatchBusy ? `تجهيز الديك ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}
-                </Button>
-                {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckAudioExportBusy || audioBatchBusy} onClick={() => void exportDeckAudio()}>
-                  {deckAudioExportBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
-                  {deckAudioExportBusy ? 'تجميع الملف...' : 'تنزيل صوت الديك كاملًا'}
-                </Button>}
+                <>
+                  <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>
+                    {audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
+                    {audioBatchBusy ? `تجهيز الديك ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}
+                  </Button>
+                  {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckAudioExportBusy || audioBatchBusy} onClick={() => void exportDeckAudio()}>
+                    {deckAudioExportBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
+                    {deckAudioExportBusy ? 'تجميع الملف...' : 'تنزيل صوت الديك كاملًا'}
+                  </Button>}
+                </>
               )}
               {audioUrl && (
                 <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" onClick={() => { const audio = audioRef.current; if (!audio) return; if (audio.paused) { if (audio.ended) audio.currentTime = 0; void audio.play() } else audio.pause() }}>
