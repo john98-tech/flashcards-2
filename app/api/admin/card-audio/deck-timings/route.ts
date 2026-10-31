@@ -75,6 +75,7 @@ export async function POST(request: Request) {
   if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY غير موجود في إعدادات Vercel.' }, { status: 500 })
   const body = await request.json().catch(() => null) as { groupId?: string; startCardIndex?: number } | null
   const groupId = body?.groupId?.trim()
+  const startCardIndex = Number.isInteger(body?.startCardIndex) ? Math.max(0, Number(body?.startCardIndex)) : 0
   if (!groupId || groupId.length > 160) return NextResponse.json({ error: 'معرّف الجروب غير صحيح.' }, { status: 400 })
 
   const client = db()
@@ -90,8 +91,6 @@ export async function POST(request: Request) {
   if (!allCards.length) return NextResponse.json({ error: 'الجروب لا يحتوي على كروت.' }, { status: 404 })
   if (allCards.length > 2000) return NextResponse.json({ error: 'الجروب يحتوي على أكثر من 2000 كارد؛ قسّمه إلى مجموعتين للمزامنة.' }, { status: 413 })
 
-  const body = await request.clone().json().catch(() => null) as { groupId?: string; startCardIndex?: number } | null
-  const startCardIndex = Number.isInteger(body?.startCardIndex) ? Math.max(0, Number(body?.startCardIndex)) : 0
   if (startCardIndex >= allCards.length) return NextResponse.json({ error: 'موضع الجزء غير صحيح.' }, { status: 400 })
 
   try {
