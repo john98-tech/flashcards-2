@@ -82,7 +82,8 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('card-audio-tts-model')
-      if (['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-native-audio-preview-12-2025', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking'].includes(saved)) setAudioModel(saved)
+      const allowed = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-native-audio-preview-12-2025', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking']
+      if (saved && allowed.includes(saved)) setAudioModel(saved)
     } catch {}
   }, [])
   const changeAudioModel = (value: string) => {
