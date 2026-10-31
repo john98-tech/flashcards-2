@@ -117,46 +117,91 @@ export async function POST(request: Request) {
       const silence = Buffer.alloc(Math.round(sampleRate * silenceMs / 1000) * 2)
       pieces.push(silence); totalBytes += silence.length; cursorMs += silenceMs
     }
-    if (totalBytes > 45 * 1024 * 1024) return NextResponse.json({ error: 'حجم صوت الجروب أكبر من الحد الآمن للرفع. قسّم الجروب إلى مجموعتين أصغر.' }, { status: 413 })
   }
-
-  if (cursorMs > 30 * 60 * 1000) return NextResponse.json({ error: 'مدة صوت الجروب تتجاوز 30 دقيقة، وهو الحد المدعوم لتوقيتات الكلمات. قسّم الجروب إلى جزأين.' }, { status: 413 })
 
   try {
     const pcm = Buffer.concat(pieces, totalBytes)
-    const wav = Buffer.alloc(44 + pcm.length)
-    wav.write('RIFF', 0); wav.writeUInt32LE(36 + pcm.length, 4); wav.write('WAVE', 8); wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sampleRate, 24); wav.writeUInt32LE(sampleRate * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(pcm.length, 40); pcm.copy(wav, 44)
-
-    const startUpload = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
-      method: 'POST',
-      headers: { 'x-goog-api-key': apiKey, 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(wav.length), 'X-Goog-Upload-Header-Content-Type': 'audio/wav', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file: { display_name: 'group-' + groupId + '-full-audio' } }),
-      signal: AbortSignal.timeout(20000),
-    })
-    const uploadUrl = startUpload.headers.get('x-goog-upload-url')
-    if (!startUpload.ok || !uploadUrl) throw new Error('تعذر بدء رفع ملف الديك إلى Gemini.')
-    const uploaded = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Length': String(wav.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), signal: AbortSignal.timeout(60000) })
-    const fileData = await uploaded.json().catch(() => null)
-    const fileUri = fileData?.file?.uri
-    if (!uploaded.ok || typeof fileUri !== 'string') throw new Error('فشل رفع ملف الديك إلى Gemini.')
-    const transcription = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST', headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gemini-3.5-transcribe', input: [{ type: 'audio', uri: fileUri, mime_type: 'audio/wav' }], generation_config: { transcription_config: { language_codes: [], mode: { type: 'verbatim', timestamp_granularities: ['word'] } } } }),
-      signal: AbortSignal.timeout(180000),
-    })
-    const transcriptData = await transcription.json().catch(() => null)
-    if (!transcription.ok) throw new Error(transcriptData?.error?.message || 'Gemini Transcribe لم يتمكن من تحليل صوت الجروب.')
-    const found: { word: string; startMs: number; endMs: number }[] = []
-    const visit = (value: any) => {
-      if (!value || typeof value !== 'object') return
-      if (Array.isArray(value)) { value.forEach(visit); return }
-      if (value.type === 'word_info' && typeof value.text === 'string') {
-        const startMs = offsetMs(value.start_offset), endMs = offsetMs(value.end_offset)
-        if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) found.push({ word: value.text, startMs, endMs })
+    // Keep each upload comfortably below both Gemini's ~30-minute audio limit
+    // and the practical file-size ceiling. 40 MiB leaves room for the WAV header.
+    const maxChunkMs = 27 * 60 * 1000
+    const maxChunkBytes = 40 * 1024 * 1024
+    const bytesPerMs = sampleRate * 2 / 1000
+    const maxChunkSamples = Math.floor(Math.min(maxChunkMs * bytesPerMs, maxChunkBytes) / 2)
+    const cardBoundaries = cardRanges.slice(0, -1).map(card => Math.round(card.endMs * sampleRate / 1000))
+    const chunkRanges: { startSample: number; endSample: number; startMs: number; endMs: number }[] = []
+    const findQuietBoundary = (desired: number, minimum: number, maximum: number) => {
+      // Search around the ideal boundary for a quiet 100 ms window so we avoid
+      // cutting through spoken words whenever the audio contains a pause.
+      const frameSamples = Math.max(1, Math.round(sampleRate * 0.01))
+      const windowFrames = 10
+      const radius = Math.round(sampleRate * 30)
+      const from = Math.max(minimum, desired - radius)
+      const to = Math.min(maximum, desired + radius)
+      let best = desired, bestEnergy = Number.POSITIVE_INFINITY
+      for (let sample = Math.ceil(from / frameSamples) * frameSamples; sample + frameSamples * windowFrames <= to; sample += frameSamples) {
+        let energy = 0, count = 0
+        for (let s = sample; s < sample + frameSamples * windowFrames; s += 1) {
+          const value = pcm.readInt16LE(s * 2)
+          energy += value * value
+          count++
+        }
+        const rms = Math.sqrt(energy / Math.max(1, count))
+        if (rms < bestEnergy) { bestEnergy = rms; best = sample + Math.floor(frameSamples * windowFrames / 2) }
+        if (rms < 260) return sample + Math.floor(frameSamples * windowFrames / 2)
       }
-      Object.values(value).forEach(visit)
+      // Prefer a card boundary near the target if no clear silence was found.
+      const nearbyCardBoundary = cardBoundaries.find(value => value >= minimum && value <= maximum && Math.abs(value - desired) < Math.abs(best - desired))
+      return nearbyCardBoundary ?? best
     }
-    visit(transcriptData)
+    let startSample = 0
+    const totalSamples = pcm.length / 2
+    while (totalSamples - startSample > maxChunkSamples) {
+      const desired = startSample + maxChunkSamples
+      const minimum = startSample + Math.floor(maxChunkSamples * 0.82)
+      const maximum = Math.min(totalSamples, startSample + Math.floor(maxChunkSamples * 1.08))
+      const endSample = Math.max(minimum, Math.min(maximum, findQuietBoundary(desired, minimum, maximum)))
+      chunkRanges.push({ startSample, endSample, startMs: startSample / sampleRate * 1000, endMs: endSample / sampleRate * 1000 })
+      startSample = endSample
+    }
+    chunkRanges.push({ startSample, endSample: totalSamples, startMs: startSample / sampleRate * 1000, endMs: totalSamples / sampleRate * 1000 })
+
+    const found: { word: string; startMs: number; endMs: number }[] = []
+    for (let partIndex = 0; partIndex < chunkRanges.length; partIndex++) {
+      const part = chunkRanges[partIndex]
+      const partPcm = pcm.subarray(part.startSample * 2, part.endSample * 2)
+      const wav = Buffer.alloc(44 + partPcm.length)
+      wav.write('RIFF', 0); wav.writeUInt32LE(36 + partPcm.length, 4); wav.write('WAVE', 8); wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sampleRate, 24); wav.writeUInt32LE(sampleRate * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(partPcm.length, 40); partPcm.copy(wav, 44)
+
+      const startUpload = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
+        method: 'POST',
+        headers: { 'x-goog-api-key': apiKey, 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(wav.length), 'X-Goog-Upload-Header-Content-Type': 'audio/wav', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: { display_name: 'group-' + groupId + '-part-' + (partIndex + 1) } }),
+        signal: AbortSignal.timeout(20000),
+      })
+      const uploadUrl = startUpload.headers.get('x-goog-upload-url')
+      if (!startUpload.ok || !uploadUrl) throw new Error('تعذر بدء رفع الجزء ' + (partIndex + 1) + ' إلى Gemini.')
+      const uploaded = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Length': String(wav.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), signal: AbortSignal.timeout(60000) })
+      const fileData = await uploaded.json().catch(() => null)
+      const fileUri = fileData?.file?.uri
+      if (!uploaded.ok || typeof fileUri !== 'string') throw new Error('فشل رفع الجزء ' + (partIndex + 1) + ' إلى Gemini.')
+      const transcription = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST', headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gemini-3.5-transcribe', input: [{ type: 'audio', uri: fileUri, mime_type: 'audio/wav' }], generation_config: { transcription_config: { language_codes: [], mode: { type: 'verbatim', timestamp_granularities: ['word'] } } } }),
+        signal: AbortSignal.timeout(150000),
+      })
+      const transcriptData = await transcription.json().catch(() => null)
+      if (!transcription.ok) throw new Error(transcriptData?.error?.message || 'Gemini Transcribe فشل في تحليل الجزء ' + (partIndex + 1) + '.')
+      const visit = (value: any) => {
+        if (!value || typeof value !== 'object') return
+        if (Array.isArray(value)) { value.forEach(visit); return }
+        if (value.type === 'word_info' && typeof value.text === 'string') {
+          const startMs = offsetMs(value.start_offset), endMs = offsetMs(value.end_offset)
+          if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) found.push({ word: value.text, startMs: startMs + part.startMs, endMs: endMs + part.startMs })
+        }
+        Object.values(value).forEach(visit)
+      }
+      visit(transcriptData)
+    }
     if (!found.length) throw new Error('Gemini لم يرجع توقيتات كلمات. لم يتم تعديل توقيتات الكروت المحفوظة.')
     const summaries: { cardId: string; status: string; words: number }[] = []
     for (const item of cardRanges) {
