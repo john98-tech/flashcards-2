@@ -82,11 +82,12 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('card-audio-tts-model')
-      if (saved === 'gemini-3.8-flash-tts' || saved === 'gemini-3.8-flash-lite-tts') setAudioModel(saved)
+      if (['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-native-audio-preview-12-2025', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking'].includes(saved)) setAudioModel(saved)
     } catch {}
   }, [])
   const changeAudioModel = (value: string) => {
-    const next = value === 'gemini-3.8-flash-tts' ? value : 'gemini-3.8-flash-lite-tts'
+    const allowed = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-native-audio-preview-12-2025', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking']
+    const next = allowed.includes(value) ? value : 'gemini-3.8-flash-lite-tts'
     setAudioModel(next)
     try { localStorage.setItem('card-audio-tts-model', next) } catch {}
   }
@@ -582,6 +583,9 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                   >
                     <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS — أعلى جودة</option>
                     <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS — أسرع</option>
+                    <option value="gemini-2.5-flash-native-audio-preview-12-2025">Gemini 2.5 Flash Native Audio — Live (تجريبي)</option>
+                    <option value="gemini-3.8-live">Gemini 3.8 Live — Live (تجريبي)</option>
+                    <option value="gemini-3.8-live-extended-thinking">Gemini 3.8 Live Extended Thinking — Live (تجريبي)</option>
                   </select>
                   <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateCardAudio()}>
                     {audioBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
