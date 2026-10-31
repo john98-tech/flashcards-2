@@ -150,7 +150,6 @@ export async function POST(request: Request) {
     wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36)
     wav.writeUInt32LE(pcm.length, 40); pcm.copy(wav, 44)
 
-    const partNumber = Math.floor(startCardIndex / Math.max(1, cardRanges.length)) + 1
     const startUpload = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
       method: 'POST',
       headers: { 'x-goog-api-key': apiKey, 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(wav.length), 'X-Goog-Upload-Header-Content-Type': 'audio/wav', 'Content-Type': 'application/json' },
@@ -187,10 +186,10 @@ export async function POST(request: Request) {
     const summaries: { cardId: string; status: string; words: number }[] = []
     for (const item of cardRanges) {
       const segment = found.filter(word => word.startMs >= item.startMs - 100 && word.endMs <= item.endMs + 150)
-      const expected = item.text.match(/[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu) ?? []
+      const expected = item.text.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []
       const matched = alignWords(expected, segment)
-      const blankWords = [...item.cloze.matchAll(/\\{\\{([\\s\\S]+?)\\}\\}/g)]
-        .flatMap(match => match[1].match(/[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu) ?? []).map(normalize).filter(Boolean)
+      const blankWords = [...item.cloze.matchAll(/\{\{([\\s\\S]+?)\}\}/g)]
+        .flatMap(match => match[1].match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu) ?? []).map(normalize).filter(Boolean)
       const matchedCounts = new Map<string, number>()
       for (const word of matched) { const key = normalize(expected[word.sourceIndex]); matchedCounts.set(key, (matchedCounts.get(key) ?? 0) + 1) }
       const required = new Map<string, number>()
