@@ -145,7 +145,7 @@ export async function POST(request: Request) {
   const deckId = body?.deckId?.trim()
   const cardId = body?.cardId?.trim()
   const allowedModels = new Set(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-native-audio-preview-12-2025', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking'])
-  const model = body?.model && allowedModels.has(body.model) ? body.model : 'gemini-3.8-flash-lite-tts'
+  const model = body?.model && allowedModels.has(body.model) ? body.model : 'gemini-3.8-live'
   const isLiveModel = model === 'gemini-2.5-flash-native-audio-preview-12-2025' || model === 'gemini-3.8-live' || model === 'gemini-3.8-live-extended-thinking'
   if (!deckId || !cardId || deckId.length > 160 || cardId.length > 160) {
     return NextResponse.json({ error: 'بيانات الكارد غير صحيحة.' }, { status: 400 })
