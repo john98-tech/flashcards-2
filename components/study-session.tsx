@@ -72,6 +72,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
   const [audioBatchBusy, setAudioBatchBusy] = useState(false)
   const [audioBatchProgress, setAudioBatchProgress] = useState({ done: 0, total: 0 })
   const audioRef = useRef<HTMLAudioElement>(null)
+  const pendingAudioBlankRef = useRef<number | null>(null)
   const adminSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAdminSave = useRef<{ card: Deck['cards'][number]; cloze: string; position: number } | null>(null)
   const validCardIds = useMemo(() => new Set(deck.cards.map((item) => item.id)), [deck.cards])
@@ -152,6 +153,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     setAudioUrl(null)
     setAudioTimings([])
     setActiveAudioWord(-1)
+    pendingAudioBlankRef.current = null
     setAudioError('')
     if (!card) return
     let cancelled = false
@@ -303,6 +305,10 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     if (revealed.has(index)) return
     sfx.reveal(index)
     setRevealed((r) => new Set(r).add(index))
+    if (pendingAudioBlankRef.current === index) {
+      pendingAudioBlankRef.current = null
+      void audioRef.current?.play()
+    }
   }
 
   const revealNext = () => {
@@ -313,6 +319,10 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     if (allRevealed) return
     sfx.revealAll()
     setRevealed(new Set(Array.from({ length: blankCount }, (_, i) => i)))
+    if (pendingAudioBlankRef.current !== null) {
+      pendingAudioBlankRef.current = null
+      void audioRef.current?.play()
+    }
   }
 
   const startSession = (ids: string[], shuffled = false) => {
@@ -489,7 +499,16 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               {known.has(card.id) && <span className="flex items-center gap-1 text-success"><Check className="size-3.5" aria-hidden /> محفوظ</span>}
             </div>
           </div>
-          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onTimeUpdate={(event) => { const now = event.currentTarget.currentTime * 1000; const index = audioTimings.findIndex((item) => now >= item.startMs && now <= item.endMs); if (index !== activeAudioWord) setActiveAudioWord(index) }} />
+          <audio ref={audioRef} src={audioUrl ?? undefined} preload="none" className="hidden" onTimeUpdate={(event) => {
+            const now = event.currentTarget.currentTime * 1000
+            const index = audioTimings.findIndex((item) => now >= item.startMs && now <= item.endMs)
+            if (index !== activeAudioWord) setActiveAudioWord(index)
+            const blankIndex = index >= 0 ? audioBlankByTiming.get(index) : undefined
+            if (blankIndex !== undefined && !revealed.has(blankIndex)) {
+              pendingAudioBlankRef.current = blankIndex
+              event.currentTarget.pause()
+            }
+          }} />
           {audioError && <p role="alert" className="mb-3 text-xs text-destructive">{audioError}</p>}
 
           {(() => {
@@ -501,6 +520,12 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
             })
             const fullText = positioned.map((item) => item.seg.value).join('')
             const audioWordRanges = mapAudioWordRanges(fullText, audioTimings)
+            const audioBlankByTiming = new Map<number, number>()
+            for (const item of positioned) {
+              if (item.seg.type !== 'blank') continue
+              const wordRange = audioWordRanges.find((range) => range.start >= item.start && range.end <= item.end)
+              if (wordRange) audioBlankByTiming.set(wordRange.timingIndex, item.seg.index)
+            }
             const lines: { value: string; start: number; end: number }[] = []
             let lineOffset = 0
             for (const value of fullText.split('\n')) {
