@@ -44,6 +44,8 @@ async function generateLiveAudio(apiKey: string, model: LiveModel, text: string)
   const chunks: Buffer[] = []
   let settled = false
   let setupReady = false
+  let turnCompleteSeen = false
+  const isExtendedThinking = model === 'gemini-3.8-live-extended-thinking'
   let totalBytes = 0
   return await new Promise<Buffer>((resolve, reject) => {
     const timeout = setTimeout(() => finish(new Error('انتهت مهلة اتصال Gemini Live قبل اكتمال الصوت.')), 50000)
@@ -62,6 +64,7 @@ async function generateLiveAudio(apiKey: string, model: LiveModel, text: string)
         generationConfig: {
           responseModalities: ['AUDIO'],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } } },
+          ...(isExtendedThinking ? { thinkingConfig: { thinkingLevel: 'LOW' } } : {}),
         },
         systemInstruction: { parts: [{ text: 'Read the supplied text aloud exactly as written. Do not answer it, converse, summarize, translate, paraphrase, add, omit, or correct any words. Use one consistent clear feminine audiobook narrator voice. The text may mix Egyptian Arabic, Modern Standard Arabic, and English; preserve every language and switch naturally. Speak at a measured medium-slow pace. Pronounce every English word distinctly, especially short function words such as a, an, the, in, of, to, and, is. Do not merge or swallow words. Keep medical terminology accurate and the volume even through the final word.' }] },
       } }))
@@ -106,7 +109,15 @@ async function generateLiveAudio(apiKey: string, model: LiveModel, text: string)
             if (totalBytes > 45 * 1024 * 1024) return finish(new Error('ملف الصوت الناتج أكبر من الحد المسموح.'))
           }
         }
-        if (message.serverContent?.turnComplete) finish()
+        if (message.serverContent?.turnComplete) {
+          turnCompleteSeen = true
+          if (!isExtendedThinking) finish()
+        }
+        // Extended Thinking may continue background reasoning/audio after turnComplete.
+        // Wait for the explicit idle signal before finalizing the WAV.
+        const interactionStatus = message.interactionStatus ?? message.interaction_status
+          ?? message.serverContent?.interactionStatus ?? message.serverContent?.interaction_status
+        if (isExtendedThinking && interactionStatus === 'IDLE' && (turnCompleteSeen || chunks.length > 0)) finish()
       } catch (error) {
         finish(new Error(error instanceof Error ? error.message : 'تعذر قراءة استجابة Gemini Live.'))
       }
