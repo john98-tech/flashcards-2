@@ -359,16 +359,36 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     setDeckTimingsBusy(true)
     setDeckTimingsResult('')
     setAudioError('')
+    const cursorKey = `sammaa-audio-sync-cursor-${deck.groupId}`
     try {
-      // One request for the entire group: Gemini receives one merged audio file.
-      const response = await fetch('/api/admin/card-audio/deck-timings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: deck.groupId }),
-      })
-      const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || 'تعذر استخراج توقيتات الديك.')
-      setDeckTimingsResult(`اكتملت مزامنة الجروب: ${data.readyCards} كارد جاهز، و${data.reviewCards} يحتاج مراجعة.`)
+      // The browser orchestrates short, sequential requests. Each server request
+      // transcribes only one bounded part, so Vercel never holds the whole group job.
+      let nextCardIndex = Number(window.localStorage.getItem(cursorKey) || 0)
+      if (!Number.isInteger(nextCardIndex) || nextCardIndex < 0) nextCardIndex = 0
+      let readyCards = 0
+      let reviewCards = 0
+      let partNumber = 0
+      while (true) {
+        const response = await fetch('/api/admin/card-audio/deck-timings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId: deck.groupId, startCardIndex: nextCardIndex }),
+        })
+        const data = await response.json().catch(() => null)
+        if (!response.ok) throw new Error(data?.error || `فشل الجزء رقم ${partNumber + 1}. اضغط استكمال لإعادة المحاولة من نفس الجزء.`)
+        if (!data || !Number.isInteger(data.nextCardIndex) || data.nextCardIndex <= nextCardIndex) {
+          throw new Error('استجابة الجزء الصوتي غير مكتملة؛ لم يتم تجاوز الجزء الحالي.')
+        }
+        readyCards += Number(data.readyCards || 0)
+        reviewCards += Number(data.reviewCards || 0)
+        nextCardIndex = data.nextCardIndex
+        partNumber++
+        window.localStorage.setItem(cursorKey, String(nextCardIndex))
+        setDeckTimingsResult(`تمت مزامنة الجزء ${partNumber} — ${nextCardIndex} كارد من الجروب.`)
+        if (data.done) break
+      }
+      window.localStorage.removeItem(cursorKey)
+      setDeckTimingsResult(`اكتملت مزامنة الجروب: ${readyCards} كارد جاهز، و${reviewCards} يحتاج مراجعة.`)
       if (card?.id) {
         const refresh = await fetch(`/api/card-audio?deckId=${encodeURIComponent(deck.id)}&cardId=${encodeURIComponent(card.id)}`)
         const refreshed = refresh.ok ? await refresh.json().catch(() => null) : null
