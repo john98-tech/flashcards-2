@@ -271,34 +271,47 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
     }
   }
 
-  const generateDeckAudio = async () => {
+  const generateGroupAudio = async () => {
     if (audioBatchBusy) return
     setAudioBatchBusy(true)
     setDeckAudioGenerated(false)
+    setDeckTimingsResult('')
     setAudioError('')
-    setAudioBatchProgress({ done: 0, total: deck.cards.length })
+    setAudioBatchProgress({ done: 0, total: 0 })
     let completed = 0
+    let currentDeckTitle = ''
     try {
-      // Generate and persist each card's audio in deck order. Timing extraction
-      // is intentionally deferred so this workflow never consumes Transcribe quota.
-      for (const item of deck.cards) {
+      // Fetch every deck/card in this group, preserving deck creation order
+      // and card position order, then generate and persist audio sequentially.
+      const manifestResponse = await fetch('/api/admin/card-audio/group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: deck.groupId }),
+      })
+      const manifest = await manifestResponse.json().catch(() => null)
+      if (!manifestResponse.ok) throw new Error(manifest?.error || 'تعذر تحميل كروت الجروب.')
+      const items: { deckId: string; deckTitle: string; cardId: string }[] = manifest.items ?? []
+      if (!items.length) throw new Error('الجروب لا يحتوي على كروت.')
+      setAudioBatchProgress({ done: 0, total: items.length })
+      for (const item of items) {
+        currentDeckTitle = item.deckTitle
         const response = await fetch('/api/admin/card-audio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deckId: deck.id, cardId: item.id, model: audioModel }),
+          body: JSON.stringify({ deckId: item.deckId, cardId: item.cardId, model: audioModel }),
         })
-        const data = await response.json()
-        if (!response.ok) throw new Error('الكارد ' + (completed + 1) + ': ' + (data.error || 'تعذر تجهيز الصوت.'))
+        const data = await response.json().catch(() => null)
+        if (!response.ok) throw new Error('ديك "' + currentDeckTitle + '" — كارد ' + (completed + 1) + ' من ' + items.length + ': ' + (data?.error || 'تعذر تجهيز الصوت.'))
         completed++
-        setAudioBatchProgress({ done: completed, total: deck.cards.length })
-        if (item.id === card?.id && data.url) {
+        setAudioBatchProgress({ done: completed, total: items.length })
+        if (item.cardId === card?.id && item.deckId === deck.id && data?.url) {
           setAudioUrl(data.url)
           setAudioTimings(Array.isArray(data.timings) ? data.timings : [])
         }
       }
       setDeckAudioGenerated(true)
     } catch (error) {
-      setAudioError(error instanceof Error ? error.message : 'توقف تجهيز أصوات الديك.')
+      setAudioError(error instanceof Error ? error.message : 'توقف تجهيز أصوات الجروب.')
     } finally {
       setAudioBatchBusy(false)
     }
@@ -650,9 +663,9 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
               )}
               {isAdmin && (
                 <>
-                  <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateDeckAudio()}>
+                  <Button type="button" size="sm" variant="outline" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={audioBusy || audioBatchBusy} onClick={() => void generateGroupAudio()}>
                     {audioBatchBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
-                    {audioBatchBusy ? `تجهيز الديك ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الديك كله'}
+                    {audioBatchBusy ? `تجهيز الجروب ${audioBatchProgress.done}/${audioBatchProgress.total}` : 'تجهيز صوت الجروب كله'}
                   </Button>
                   {deckAudioGenerated && <Button type="button" size="sm" variant="default" className="h-10 whitespace-nowrap rounded-lg px-3" disabled={deckAudioExportBusy || audioBatchBusy} onClick={() => void exportDeckAudio()}>
                     {deckAudioExportBusy ? <Loader2 className="size-4 animate-spin" /> : <Volume2 className="size-4" />}
