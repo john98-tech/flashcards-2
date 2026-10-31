@@ -568,17 +568,17 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
 
       {card ? (
         <article key={`${card.id}-${position}`} className="card-flip rounded-2xl border bg-card/95 p-4 shadow-lg backdrop-blur sm:p-6 md:p-8">
-          <div dir="rtl" className="mb-5 grid grid-cols-1 gap-3 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:order-2 sm:justify-end">
+          <div dir="rtl" className="mb-5 flex flex-col gap-3 text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {isAdmin && (
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex-none">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                   <label htmlFor="card-audio-model" className="shrink-0 font-medium">موديل الصوت</label>
                   <select
                     id="card-audio-model"
                     value={audioModel}
                     onChange={(event) => changeAudioModel(event.target.value)}
                     disabled={audioBusy || audioBatchBusy}
-                    className="h-10 min-w-0 w-full rounded-lg border bg-background px-3 text-sm sm:w-[250px]"
+                    className="h-10 min-w-0 w-full max-w-full rounded-lg border bg-background px-3 text-sm sm:w-[250px]"
                   >
                     <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS — أعلى جودة</option>
                     <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS — أسرع</option>
@@ -606,7 +606,7 @@ export function StudySession({ deck, isAdmin = false }: { deck: Deck; isAdmin?: 
                 </span>
               )}
             </div>
-            <div className="flex shrink-0 items-center justify-between gap-3 sm:order-1 sm:justify-start">
+            <div className="flex w-full shrink-0 items-center justify-between gap-3 border-t pt-2 sm:justify-start">
               <span className="whitespace-nowrap font-medium text-foreground/75">كارت {position + 1} من {queue.length}</span>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => goTo(-1)} disabled={position === 0} aria-label="الكارت اللي فات" title="الكارت السابق" className="flex size-9 items-center justify-center rounded-full border bg-background transition-colors hover:bg-accent disabled:opacity-40">
