@@ -164,7 +164,7 @@ export async function POST(request: Request) {
         sum += value * value
       }
       const rms = Math.sqrt(sum / Math.max(1, end - base))
-      const wanted = rms < 0.0018 ? 1 : Math.min(2.4, Math.max(0.82, targetRms / rms))
+      const wanted = rms < 0.00045 ? 1 : Math.min(3.5, Math.max(0.82, targetRms / rms))
       const smoothing = wanted < gain ? 0.55 : 0.22
       gain += (wanted - gain) * smoothing
       for (let i = base; i < end; i++) {
