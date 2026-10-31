@@ -48,7 +48,31 @@ export async function POST(request: Request) {
   const sourceHash = createHash('sha256').update(text).digest('hex')
   const { data: existing } = await client.from('card_audio_assets')
     .select('source_hash,audio_path,model,voice,timings,status').eq('deck_id', deckId).eq('card_id', cardId).maybeSingle()
-  const voice = 'Sulafat'
+  // Prefer the user's requested female voice if Google exposes an exact
+  // Fyra/Fira match in the Extended Voice Library; otherwise use Sulafat.
+  let voice = 'Sulafat'
+  for (const requestedName of ['Fyra', 'Fira']) {
+    try {
+      const params = new URLSearchParams({ search: requestedName, type: 'prebuilt', gender: 'female', page_size: '100' })
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/voices?${params.toString()}`, {
+        headers: { 'x-goog-api-key': apiKey },
+        signal: AbortSignal.timeout(5000),
+        cache: 'no-store',
+      })
+      if (!response.ok) continue
+      const catalog = await response.json().catch(() => null)
+      const match = Array.isArray(catalog?.voices)
+        ? catalog.voices.find((item: any) =>
+            String(item.display_name ?? '').trim().toLowerCase() === requestedName.toLowerCase() &&
+            String(item.gender ?? '').toLowerCase() === 'female' &&
+            typeof item.id === 'string' && item.id.length > 0,
+          )
+        : null
+      if (match?.id) { voice = match.id; break }
+    } catch {
+      // Catalog lookup is optional; preserve the known-good fallback voice.
+    }
+  }
   if (existing?.source_hash === sourceHash && existing.voice === voice) {
     return NextResponse.json({ url: await signedAudioUrl(existing.audio_path), reused: true, model: existing.model, voice: existing.voice, timings: existing.timings ?? [], timingStatus: existing.status ?? 'needs_review' })
   }
